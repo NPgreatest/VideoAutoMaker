@@ -28,22 +28,26 @@ with gr.Blocks() as demo:
 
     with gr.Tab("Stage 2: Generate Media"):
         project_selector = gr.Dropdown(label="Select Project", choices=os.listdir(projects_dir))
-        reGen_checkbox = gr.Checkbox(label="Regenerate Media (audio/video)", value=True)
+        reGen_AU_checkbox = gr.Checkbox(label="Regenerate Media (audio)", value=True)
+        reGen_VI_checkbox = gr.Checkbox(label="Regenerate Media (video)", value=True)
+        video_title = gr.Textbox(label="Video Title")
+
         generate_btn = gr.Button("Generate Audio & Video")
         gen_status = gr.Textbox(label="Generation Status")
 
 
-        def generate_media(project_name, reGen):
+        def generate_media(project_name, reGen_AU_checkbox,reGen_VI_checkbox):
             project_path = os.path.join(projects_dir, project_name)
             input_path = os.path.join(project_path, "input.json")
             data = load_json(input_path)
-            generate_video_clip(data, project_path, reGen=reGen)
-            generate_tts_audio(data, project_path, reGen=reGen)
+            generate_video_clip(data, project_path, reGen=reGen_VI_checkbox,theme=video_title)
+            generate_tts_audio(data, project_path, reGen=reGen_AU_checkbox)
+
             save_json(data, os.path.join(project_path, "processed.json"))
-            return f"Media generated for project: {project_name} (Regenerate: {reGen})"
+            return f"Media generated for project: {project_name} (Regenerate: {reGen_AU_checkbox}/{reGen_VI_checkbox})"
 
 
-        generate_btn.click(generate_media, inputs=[project_selector, reGen_checkbox], outputs=[gen_status])
+        generate_btn.click(generate_media, inputs=[project_selector, reGen_AU_checkbox,reGen_VI_checkbox], outputs=[gen_status])
 
     with gr.Tab("Stage 3: Compose Video"):
         final_selector = gr.Dropdown(label="Select Project", choices=os.listdir(projects_dir))

@@ -16,14 +16,18 @@ LLM_API_HEADERS = {
 
 
 
-def get_video_query_from_llm(script_text):
+def get_video_query_from_llm(script_text,theme):
     prompt = (
         "Given a text script clip, I want to search the corresponding video clip "
         "that can match the script, for presentation, give me the video searching sentence in pexels api.\n"
+        "directly give me the script english words, within 10 words\n"
+        "only output within 10 words, and stop, do not output explanation\n"
         f"Script:\n{script_text}"
+        f"The Entire video's title is {theme}"
+        f"The keywords do not need to describe the entire script clip, The top priority is to search the top match video clip that can describe the audio."
     )
     payload = {
-        "model": "Qwen/QwQ-32B",
+        "model": "deepseek-ai/DeepSeek-R1 ",
         "messages": [{"role": "user", "content": prompt}],
         "stream": False,
         "max_tokens": 512,
@@ -50,16 +54,26 @@ def get_pexels_video_url(query):
         response = requests.get(url, headers=headers)
         response.raise_for_status()
         video_data = response.json()
-        video_files = video_data.get("videos", [])[0].get("video_files", [])
-        # Prefer highest quality HD video
-        video_url = sorted(video_files, key=lambda x: x["width"], reverse=True)[0]["link"]
-        return video_url
+        video_files = []
+
+        for video in video_data.get("videos", []):
+            if video["width"] > video["height"]:  # landscape check
+                video_files.extend(video["video_files"])
+
+        if not video_files:
+            print("❌ No landscape video files found.")
+            return None
+
+        # Pick the highest resolution landscape video
+        best_video_file = sorted(video_files, key=lambda x: x["width"], reverse=True)[0]
+        return best_video_file["link"]
     except Exception as e:
         print(f"❌ Pexels API Error: {e}")
         return None
 
 
-def generate_video_clip(data, project_path, reGen=True):
+
+def generate_video_clip(data, project_path, reGen=True, theme = ""):
     output_name = os.path.basename(project_path)
     output_video = os.path.join(project_path, "video")
     os.makedirs(output_video, exist_ok=True)
@@ -75,7 +89,7 @@ def generate_video_clip(data, project_path, reGen=True):
             continue
 
         print(f"[LLM] Getting query for script: {script}")
-        query = get_video_query_from_llm(script)
+        query = get_video_query_from_llm(script,theme)
         print(f"[Pexels] Searching video with query: {query}")
         video_url = get_pexels_video_url(query)
 
