@@ -21,6 +21,34 @@ load_dotenv()
 PROJECT_NAME = os.getenv("PROJECT_NAME")
 
 
+def _wait_for_video_completion(workdir: Path) -> None:
+    """Wait for all video downloads to complete."""
+    try:
+        from videogen.methods.text_video_silicon.worker_manager import get_worker_manager
+        from videogen.methods.text_video_silicon.store import TaskCSV
+        from videogen.methods.text_video_silicon.constants import DB_PATH
+        
+        # Get the worker manager
+        db_path = Path(DB_PATH).resolve()
+        store = TaskCSV(db_path)
+        worker_manager = get_worker_manager(store, workdir / "log")
+        
+        print("\n⏳ Waiting for all video downloads to complete...")
+        print("   → Background worker is processing videos...")
+        
+        # Wait for completion with a reasonable timeout (30 minutes)
+        success = worker_manager.wait_for_all_completion(timeout_seconds=1800)
+        
+        if success:
+            print("✅ All video downloads completed successfully!")
+        else:
+            print("⚠️  Some videos may still be processing. Check logs for details.")
+            
+    except Exception as e:
+        print(f"⚠️  Error waiting for video completion: {e}")
+        print("   → Videos may still be processing in background")
+
+
 def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio = False, genPrompt = False, genMedia = False) -> None:
     print(f"🚀 Starting pipeline for: {input_path}")
     raw = read_json(input_path)
@@ -126,7 +154,12 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
                     meta=result.get("meta", {}),
                     error=result.get("error"),
                 )
-                block.status = "done" if block.generation.ok else "error"
+                
+                # For text_video_silicon, mark as "submitted" if successful submission
+                if block.decision.method == "text_video_silicon" and block.generation.ok:
+                    block.status = "submitted"  # Will be updated to "done" by worker
+                else:
+                    block.status = "done" if block.generation.ok else "error"
 
         except Exception as e:
             block.generation = GenerationResult(
@@ -155,7 +188,11 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
             time.sleep(delay)
 
     print("\n✅ Pipeline finished.")
+    
+    # Wait for all video downloads to complete if any were submitted
+    if genMedia:
+        _wait_for_video_completion(workdir)
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,False   ,True , True)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , False)

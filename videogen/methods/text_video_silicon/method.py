@@ -12,7 +12,7 @@ from videogen.methods.text_video_silicon.constants import (
 )
 from .sf_api import submit_video
 from .store import TaskCSV
-from .worker import start_background_worker
+from .worker_manager import start_global_worker
 from ...llm_engine import get_engine
 from ...pipeline.schema import ScriptBlock
 
@@ -33,7 +33,8 @@ class TextVideoSilicon(BaseMethod):
             db_path.parent.mkdir(parents=True, exist_ok=True)
             store = TaskCSV(db_path)
             self._stores[key] = store
-            start_background_worker(store)
+            # Start global worker manager
+            start_global_worker(store, workdir / "log")
         return self._stores[key]
 
     def run(
@@ -50,14 +51,23 @@ class TextVideoSilicon(BaseMethod):
         if not SILICONFLOW_API_TOKEN:
             return {"ok": False, "artifacts": [], "meta": {}, "error": "Missing SILICONFLOW_API_TOKEN."}
 
-        # 提交任务
+        # Check if already completed
         if block and block.generation and block.generation.ok and 'request_id' in block.generation.meta and os.path.exists(block.generation.meta['output_path']):
             request_id = block.generation.meta['request_id']
-        else:
-            request_id = submit_video(prompt)
+            print(f"→ Using existing completed video for {target_name}")
+            return {
+                "ok": True,
+                "artifacts": [block.generation.meta['output_path']],
+                "meta": block.generation.meta,
+                "error": None,
+            }
+
+        # Submit new task
+        request_id = submit_video(prompt)
         if not request_id:
             return {"ok": False, "artifacts": [], "meta": {}, "error": "Submit failed (no requestId)."}
 
+        # Store task in database
         store = self._get_store(workdir)
         now = time.time()
         row = {
@@ -78,55 +88,29 @@ class TextVideoSilicon(BaseMethod):
         }
         store.upsert(row)
 
-        # Always wait for completion for text_video_silicon method
-        print(f"⏳ Waiting for video generation to complete for {target_name}...")
-        completed_task = store.wait_for_completion(request_id, timeout_seconds=300)
+        # Register task with worker manager for tracking
+        from .worker_manager import get_worker_manager
+        worker_manager = get_worker_manager(store, workdir / "log")
+        worker_manager.submit_task(request_id)
+
+        print(f"📤 Video generation submitted for {target_name} (ID: {request_id})")
+        print(f"   → Task will be processed in background")
         
-        if completed_task:
-            status = completed_task.get("status", "")
-            output_path = completed_task.get("output_path", "")
-            error = completed_task.get("error", "")
-            
-            if status == "succeed" and output_path and os.path.exists(output_path):
-                return {
-                    "ok": True,
-                    "artifacts": [output_path],
-                    "meta": {
-                        "request_id": request_id,
-                        "project": project,
-                        "target_name": target_name,
-                        "status": status,
-                        "output_path": output_path,
-                        "source_url": completed_task.get("source_url", ""),
-                    },
-                    "error": None,
-                }
-            else:
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {
-                        "request_id": request_id,
-                        "project": project,
-                        "target_name": target_name,
-                        "status": status,
-                        "output_path": output_path,
-                    },
-                    "error": error or f"Task failed with status: {status}",
-                }
-        else:
-            return {
-                "ok": False,
-                "artifacts": [],
-                "meta": {
-                    "request_id": request_id,
-                    "project": project,
-                    "target_name": target_name,
-                    "status": "timeout",
-                    "output_path": "",
-                },
-                "error": f"Timeout waiting for task completion (300s)",
-            }
+        # Return immediately with submitted status
+        return {
+            "ok": True,  # Submission was successful
+            "artifacts": [],
+            "meta": {
+                "request_id": request_id,
+                "project": project,
+                "target_name": target_name,
+                "status": STATUS_SUBMITTED,
+                "output_path": "",  # Will be filled by worker
+                "source_url": "",
+                "submitted_at": str(now),
+            },
+            "error": None,
+        }
 
     def generate_prompt(self, text: str) -> str:
         """

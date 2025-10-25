@@ -31,6 +31,7 @@ class ScriptBlock:
     prompt: str = ""
     context: str = ""
     voice: str = ""
+    character: str = ""
     decision: Optional[Decision] = None
     generation: Optional[GenerationResult] = None
     audioGeneration: Optional[GenerationResult] = None
