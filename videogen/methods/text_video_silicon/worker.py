@@ -5,7 +5,7 @@ from typing import Dict
 
 from videogen.methods.text_video_silicon.constants import (
     POLL_INTERVAL_SEC, MAX_POLLS_PER_TASK,
-    STATUS_SUCCEED, STATUS_ERROR, NON_TERMINAL, TERMINAL,
+    STATUS_SUCCEED, STATUS_ERROR, NON_TERMINAL, TERMINAL, ERRORS,
 )
 from videogen.methods.text_video_silicon.sf_api import check_status, download_to
 from videogen.methods.text_video_silicon.store import TaskCSV
@@ -15,15 +15,6 @@ _worker_started: Dict[str, bool] = {}
 _worker_guard = threading.Lock()
 
 
-def start_background_worker(store: TaskCSV) -> None:
-    """每个 CSV（以绝对路径为 key）只启动一次线程"""
-    key = str(store.db_path.resolve())
-    with _worker_guard:
-        if _worker_started.get(key):
-            return
-        th = threading.Thread(target=_loop, args=(store,), daemon=True, name=f"sf-poller:{key}")
-        th.start()
-        _worker_started[key] = True
 
 
 # =====================================================
@@ -46,8 +37,9 @@ def check_and_resize_missing_final_videos(store: TaskCSV) -> None:
 
         workdir = Path(row["workdir"])
         project_dir = workdir / "project" / project
-        raw_mp4 = project_dir / f"{target_name}_raw.mp4"
-        final_mp4 = project_dir / f"{target_name}.mp4"
+        video_dir = project_dir / "video"
+        raw_mp4 = video_dir / f"{target_name}_raw.mp4"
+        final_mp4 = video_dir / f"{target_name}.mp4"
 
         if raw_mp4.exists() and not final_mp4.exists():
             target_dur = float(row.get("duration") or 5.0)
@@ -162,8 +154,10 @@ def _loop(store: TaskCSV) -> None:
                 print(f"  [✓] Task {rid} succeeded, downloading video from {url}")
                 workdir = Path(row["workdir"])
                 project_dir = workdir / "project" / row["project"]
-                final_mp4 = project_dir / f"{row['target_name']}.mp4"
-                raw_mp4 = project_dir / f"{row['target_name']}_raw.mp4"
+                video_dir = project_dir / "video"
+                video_dir.mkdir(parents=True, exist_ok=True)
+                final_mp4 = video_dir / f"{row['target_name']}.mp4"
+                raw_mp4 = video_dir / f"{row['target_name']}_raw.mp4"
 
                 try:
                     # Download raw (always keep this)
@@ -236,6 +230,19 @@ def _loop(store: TaskCSV) -> None:
 
 
 # =====================================================
+# 🚀 Worker startup function
+# =====================================================
+
+def start_worker_loop(store: TaskCSV) -> None:
+    """Start the worker loop for the given store."""
+    print(f"[Worker] Starting worker loop for {store.db_path}")
+    try:
+        _loop(store)
+    except KeyboardInterrupt:
+        print("\n[Worker] Stopped manually.")
+
+
+# =====================================================
 # 🧠 Manual entry
 # =====================================================
 
@@ -256,6 +263,8 @@ def main() -> None:
             _loop(store)
         except KeyboardInterrupt:
             print("\n[Worker] Stopped manually.")
+
+
 
 
 if __name__ == "__main__":

@@ -189,6 +189,12 @@ class ReactRenderMethod(BaseMethod):
     DEFAULT_W = 1920
     DEFAULT_H = 1080
     DEFAULT_SEC = 10.0
+    
+    # Video format configurations
+    FORMATS = {
+        "landscape": {"width": 1280, "height": 720},
+        "tiktok": {"width": 720, "height": 1280}
+    }
 
     def run(
         self,
@@ -206,11 +212,34 @@ class ReactRenderMethod(BaseMethod):
 
         out_dir = workdir / "project" / project
         out_dir.mkdir(parents=True, exist_ok=True)
+        video_dir = out_dir / "video"
+        video_dir.mkdir(parents=True, exist_ok=True)
         out_html = out_dir / f"{target_name}.html"
-        out_video = out_dir / f"{target_name}.mp4"
+        out_video = video_dir / f"{target_name}.mp4"
 
-        width = self.DEFAULT_W
-        height = self.DEFAULT_H
+        # Read project configuration to determine video format
+        project_config_path = workdir / "project" / project / f"{project}.json"
+        video_format = "landscape"  # default
+        
+        if project_config_path.exists():
+            try:
+                import json
+                with open(project_config_path, 'r', encoding='utf-8') as f:
+                    project_config = json.load(f)
+                    video_format = project_config.get("size", "landscape")
+            except Exception as e:
+                print(f"[ReactRender] Warning: Could not read project config: {e}")
+        
+        # Get dimensions based on format
+        if video_format in self.FORMATS:
+            format_config = self.FORMATS[video_format]
+            width = format_config["width"]
+            height = format_config["height"]
+        else:
+            # Fallback to default
+            width = self.DEFAULT_W
+            height = self.DEFAULT_H
+            
         duration_sec = (duration_ms / 1000.0) if duration_ms else self.DEFAULT_SEC
         duration_ms_final = int(duration_sec * 1000)
 

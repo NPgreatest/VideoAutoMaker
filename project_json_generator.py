@@ -8,6 +8,19 @@ def main():
     # 询问全局角色设置
     global_character = input("请输入全局角色名 (例如 narrator, host, guest，留空则跳过): ").strip()
     
+    # 询问视频尺寸设置
+    print("\n请选择视频格式:")
+    print("1. landscape (1280x720) - 横屏格式")
+    print("2. tiktok (720x1280) - 竖屏格式")
+    size_choice = input("请输入选择 (1 或 2，默认为 1): ").strip()
+    
+    if size_choice == "2":
+        size = "tiktok"
+        print("✅ 已选择 TikTok 格式 (720x1280)")
+    else:
+        size = "landscape"
+        print("✅ 已选择横屏格式 (1280x720)")
+    
     script = []
     line_num = 1
 
@@ -45,6 +58,7 @@ def main():
 
     data = {
         "project": project,
+        "size": size,
         "script": script
     }
 

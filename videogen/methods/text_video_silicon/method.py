@@ -12,7 +12,6 @@ from videogen.methods.text_video_silicon.constants import (
 )
 from .sf_api import submit_video
 from .store import TaskCSV
-from .worker_manager import start_global_worker
 from ...llm_engine import get_engine
 from ...pipeline.schema import ScriptBlock
 
@@ -33,8 +32,6 @@ class TextVideoSilicon(BaseMethod):
             db_path.parent.mkdir(parents=True, exist_ok=True)
             store = TaskCSV(db_path)
             self._stores[key] = store
-            # Start global worker manager
-            start_global_worker(store, workdir / "log")
         return self._stores[key]
 
     def run(
@@ -62,8 +59,25 @@ class TextVideoSilicon(BaseMethod):
                 "error": None,
             }
 
+        # Get project configuration to determine video format
+        project_config_path = workdir / "project" / project / f"{project}.json"
+        video_format = "landscape"  # default
+        image_size = "1280x720"  # default
+        
+        if project_config_path.exists():
+            try:
+                import json
+                with open(project_config_path, 'r', encoding='utf-8') as f:
+                    project_config = json.load(f)
+                    video_format = project_config.get("size", "landscape")
+                    # Map format to image size
+                    from .constants import FORMATS
+                    image_size = FORMATS.get(video_format, "1280x720")
+            except Exception as e:
+                print(f"[TextVideoSilicon] Warning: Could not read project config: {e}")
+
         # Submit new task
-        request_id = submit_video(prompt)
+        request_id = submit_video(prompt, image_size)
         if not request_id:
             return {"ok": False, "artifacts": [], "meta": {}, "error": "Submit failed (no requestId)."}
 
@@ -88,10 +102,6 @@ class TextVideoSilicon(BaseMethod):
         }
         store.upsert(row)
 
-        # Register task with worker manager for tracking
-        from .worker_manager import get_worker_manager
-        worker_manager = get_worker_manager(store, workdir / "log")
-        worker_manager.submit_task(request_id)
 
         print(f"📤 Video generation submitted for {target_name} (ID: {request_id})")
         print(f"   → Task will be processed in background")

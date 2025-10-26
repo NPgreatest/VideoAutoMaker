@@ -56,8 +56,14 @@ def get_clip_info(p: Path) -> ClipInfo:
 def ensure_muxed(project_dir: Path, idx: int) -> Optional[Path]:
     mux = project_dir / f"L{idx}_muxed.mp4"
     if mux.exists(): return mux
-    video = project_dir / f"L{idx}.mp4"
+    
+    # Check in video/ subdirectory first, then project root
+    video = project_dir / "video" / f"L{idx}.mp4"
+    if not video.exists():
+        video = project_dir / f"L{idx}.mp4"
+    
     audio = project_dir / f"audio/L{idx}.wav"
+    
     if video.exists() and audio.exists():
         print(f"[mux] Generating L{idx}_muxed.mp4 ...")
         ok = run([
@@ -69,7 +75,18 @@ def ensure_muxed(project_dir: Path, idx: int) -> Optional[Path]:
     return None
 
 # ========== 阶段 2：选择统一规格 ==========
-def choose_target(infos: List[ClipInfo]) -> Tuple[int,int,int]:
+def choose_target(infos: List[ClipInfo], project_config: Dict = None) -> Tuple[int,int,int]:
+    # Check if project has specific format requirements
+    if project_config and "size" in project_config:
+        size = project_config["size"]
+        if size == "tiktok":
+            # TikTok format: 720x1280
+            return 720, 1280, 30  # Default to 30fps for TikTok
+        elif size == "landscape":
+            # Landscape format: 1280x720
+            return 1280, 720, 30  # Default to 30fps for landscape
+    
+    # Fallback to original logic
     max_w = max(i.w for i in infos)
     max_h = max(i.h for i in infos)
     counter = Counter(int(round(i.fps)) for i in infos)
@@ -152,7 +169,7 @@ def concat_pipeline(project_name:str):
     if not clips: raise SystemExit("❌ no muxed clips found")
 
     infos=[get_clip_info(p) for p in clips]
-    w,h,fps=choose_target(infos)
+    w,h,fps=choose_target(infos, raw)
     print(f"[spec] Target {w}x{h}@{fps}fps")
 
     norm=[]

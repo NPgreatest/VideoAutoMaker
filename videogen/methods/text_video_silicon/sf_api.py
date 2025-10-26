@@ -8,19 +8,22 @@ import random
 from .constants import (
     SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL,
     SILICONFLOW_SUBMIT_URL, SILICONFLOW_STATUS_URL,
-    DEFAULT_HEADERS, REQUEST_TIMEOUT, IMAGE_SIZE
+    DEFAULT_HEADERS, REQUEST_TIMEOUT, IMAGE_SIZE, FORMATS
 )
 
-def submit_video(prompt: str, max_retries: int = 3, base_delay: float = 1.0) -> Optional[str]:
+def submit_video(prompt: str, image_size: str = None, max_retries: int = 3, base_delay: float = 1.0) -> Optional[str]:
     if not SILICONFLOW_API_TOKEN:
         return None
     
     for attempt in range(max_retries):
         try:
+            # Use provided image_size or default
+            size_to_use = image_size if image_size else IMAGE_SIZE
+            
             r = requests.post(
                 SILICONFLOW_SUBMIT_URL,
                 headers=DEFAULT_HEADERS,
-                json={"model": TEXT_TO_VIDEO_MODEL, "prompt": prompt, "image_size" : IMAGE_SIZE},
+                json={"model": TEXT_TO_VIDEO_MODEL, "prompt": prompt, "image_size" : size_to_use},
                 timeout=REQUEST_TIMEOUT,
             )
             
@@ -72,8 +75,8 @@ def check_status(request_id: str) -> Dict[str, Any]:
         
         # Check HTTP status code
         if r.status_code != 200:
-            return {"status": "Error", "error": f"HTTP {r.status_code}: {r.text}"}
-        
+            raise Exception('response status code is not 200')
+
         response_data = r.json()
         return response_data
         

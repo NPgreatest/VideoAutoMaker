@@ -32,10 +32,19 @@ NON_TERMINAL = {
 }
 TERMINAL = {STATUS_SUCCEED, STATUS_FAILED, STATUS_ERROR, STATUS_CANCELED}
 
+ERRORS = {STATUS_FAILED, STATUS_ERROR}
+
 DEFAULT_HEADERS = {
     "Authorization": f"Bearer {SILICONFLOW_API_TOKEN}" if SILICONFLOW_API_TOKEN else "",
     "Content-Type": "application/json",
     "Accept": "application/json",
 }
 
+# Default image size - will be overridden based on project config
 IMAGE_SIZE = '1280x720'
+
+# Video format configurations
+FORMATS = {
+    "landscape": "1280x720",
+    "tiktok": "720x1280"
+}

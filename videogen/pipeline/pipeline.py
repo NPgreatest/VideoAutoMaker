@@ -24,29 +24,25 @@ PROJECT_NAME = os.getenv("PROJECT_NAME")
 def _wait_for_video_completion(workdir: Path) -> None:
     """Wait for all video downloads to complete."""
     try:
-        from videogen.methods.text_video_silicon.worker_manager import get_worker_manager
+        from videogen.methods.text_video_silicon.worker import start_worker_loop
         from videogen.methods.text_video_silicon.store import TaskCSV
         from videogen.methods.text_video_silicon.constants import DB_PATH
         
-        # Get the worker manager
+        # Get the store and start worker loop
         db_path = Path(DB_PATH).resolve()
         store = TaskCSV(db_path)
-        worker_manager = get_worker_manager(store, workdir / "log")
         
-        print("\n⏳ Waiting for all video downloads to complete...")
-        print("   → Background worker is processing videos...")
+        print("\n⏳ Starting worker to process video downloads...")
+        print("   → Worker will poll and download videos...")
         
-        # Wait for completion with a reasonable timeout (30 minutes)
-        success = worker_manager.wait_for_all_completion(timeout_seconds=1800)
+        # Start the worker loop (this will run until all tasks are complete)
+        start_worker_loop(store)
         
-        if success:
-            print("✅ All video downloads completed successfully!")
-        else:
-            print("⚠️  Some videos may still be processing. Check logs for details.")
+        print("✅ All video downloads completed!")
             
     except Exception as e:
-        print(f"⚠️  Error waiting for video completion: {e}")
-        print("   → Videos may still be processing in background")
+        print(f"⚠️  Error in worker: {e}")
+        print("   → Check logs for details")
 
 
 def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio = False, genPrompt = False, genMedia = False) -> None:
@@ -58,8 +54,6 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
     for block in blocks:
         print(f"\n🎞️  Processing {block.id} | status={block.status}")
-
-
 
         # --- 决策阶段 ---
         if genDecision and (not block.decision or block.status == "regenerate"):
