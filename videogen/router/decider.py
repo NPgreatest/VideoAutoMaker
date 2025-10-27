@@ -53,8 +53,8 @@ def decide_generation_method(
 
     method = res["content"].strip().lower()
     # normalize output
-    if "react" in method:
-        return "react_animation"
+    if "remotion" in method:
+        return "remotion_picture"
     elif "image" in method or "picture" or "video" in method:
         return "text_video"
     else:

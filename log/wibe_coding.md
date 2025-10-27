@@ -253,7 +253,15 @@ class ReactRenderMethod(BaseMethod):
 After finished the method.py, add a new python file in the same folder called try_remotion.py, list some example
 of using it, output into `./_test_out` folder.
 
-## 
+## Refactor the project based on the new schema
+I refactor the schema in /videogen/dao, help me refactor the entire codebase based on the new schema.
+and deprecate the schema in /videogen/pipeline/schema.py
+
+Help me setup the MySQL, including connecting function, ORM interation function and insert SQL file.
+
+In the /videogen/pipeline/methods/text_video_silicon/worker.py, instead of using csv to store the info,
+using MySQL.
+
 
 # test
 ## test pipeline
@@ -265,3 +273,9 @@ test the worker's function.
 create a folder for testing, in the future we may add lots of test file. 
 then create a json file folder and put the json into that.
 Abstract the mock api things into another python file, decouple the entire testing logic.
+
+## Exception hanlder
+In this project, We will encounter lots of error during the pipeline, help me create a folder that 
+specifily store All custom Exceptions(e.g AudioNotFound, RateLimitExceed, LLMGenerateFormatError ...)
+how to construct this model in this project, help me do that.
+You just need to help me construct the Exception model, I'll use leverage these exceptions in my project

@@ -11,31 +11,8 @@ import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-
-class BaseMethod(abc.ABC):
-    NAME: str = "Base"        # Override
-    OUTPUT_KIND: str = "any"  # "audio" | "video" | "other"
-
-    def __init__(self) -> None:
-        super().__init__()
-
-    @abc.abstractmethod
-    def run(self, *, prompt: str, project: str, target_name: str, text: str, workdir: Path, duration_ms: int | None = None, block) -> Dict[str, Any]:
-        """Execute the method and return a dict:
-        {
-          "ok": bool,
-          "artifacts": [<paths>],
-          "meta": {...},
-          "error": <str or None>
-        }
-        """
-        raise NotImplementedError
-
-    def generate_prompt(self, text: str) -> str:
-        """Execute the method and return a str:
-        prompt...
-        """
-        raise NotImplementedError
+from videogen.methods.base import BaseMethod
+from videogen.pipeline.schema import ScriptBlock
 
 
 def register_method(cls):
@@ -45,7 +22,7 @@ def register_method(cls):
 
 @register_method
 class RemotionMethod(BaseMethod):
-    NAME = "remotion_video"
+    NAME = "remotion_picture"
     OUTPUT_KIND = "video"
 
     # Available templates and their configurations
@@ -75,7 +52,7 @@ class RemotionMethod(BaseMethod):
         text: str,
         workdir: Path,
         duration_ms: int | None = None,
-        block: Any | None = None,
+        block: Optional[ScriptBlock] = None,
     ) -> Dict[str, Any]:
         """
         Generate video using Remotion templates

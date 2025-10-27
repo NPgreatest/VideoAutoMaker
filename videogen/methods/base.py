@@ -10,7 +10,7 @@ class BaseMethod(abc.ABC):
         super().__init__()
 
     @abc.abstractmethod
-    def run(self, *, prompt: str, project: str, target_name: str, text: str, workdir: Path, duration_ms: int | None = None, block) -> Dict[str, Any]:
+    def run(self, *, project: str, target_name: str, text: str, workdir: Path, duration_ms: int | None = None, block) -> Dict[str, Any]:
         """Execute the method and return a dict:
         {{
           "ok": bool,
@@ -22,7 +22,7 @@ class BaseMethod(abc.ABC):
         raise NotImplementedError
 
 
-    def generate_prompt(self, text: str) -> str:
+    def generate_prompt(self, text: str, context: str = None) -> str:
         """Execute the method and return a str:
         prompt...
         """
