@@ -1,7 +1,6 @@
 import abc
 from pathlib import Path
 from typing import Dict, Any
-from ..registry import register_method
 
 class BaseMethod(abc.ABC):
     NAME: str = "Base"        # Override
