@@ -8,7 +8,7 @@ from typing import Dict, Any, Optional
 from dotenv import load_dotenv
 from ..base import BaseMethod
 from ..registry import register_method
-from ...pipeline.schema import ScriptBlock
+from ...dao import ScriptBlock
 
 from .config import ensure_voice_uri, get_default_character, list_cached_voices
 
