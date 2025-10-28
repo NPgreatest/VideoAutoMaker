@@ -254,13 +254,12 @@ After finished the method.py, add a new python file in the same folder called tr
 of using it, output into `./_test_out` folder.
 
 ## Refactor the project based on the new schema
-I refactor the schema in /videogen/dao, help me refactor the entire codebase based on the new schema.
-and deprecate the schema in /videogen/pipeline/schema.py
+I refactor the schema.py, update some fields, the WorkingBlock will store in SQLite, instead of 
+using db/video_download.csv, create a SQLite file, and store the working block in it.
+So you need to refactor the worker.py. abstract the worker into a global feature, the remotion and text_video_silicon
+will use the same Global worker, method->run function only create the WorkingBlock and push into the SQLite. at the end 
+of the pipeline, start the worker and keep waiting for the result.
 
-Help me setup the MySQL, including connecting function, ORM interation function and insert SQL file.
-
-In the /videogen/pipeline/methods/text_video_silicon/worker.py, instead of using csv to store the info,
-using MySQL.
 
 
 # test

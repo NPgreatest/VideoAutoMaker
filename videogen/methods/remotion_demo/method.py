@@ -4,15 +4,14 @@ Remotion Method - Video Generation using Remotion templates
 Follows the BaseMethod API for video generation
 """
 
-import abc
 import json
+import shutil
 import subprocess
-import os
 from pathlib import Path
 from typing import Dict, Any, Optional
 
 from videogen.methods.base import BaseMethod
-from videogen.pipeline.schema import ScriptBlock
+from videogen.pipeline.schema import WorkingBlock, ScriptBlock
 
 
 def register_method(cls):
@@ -43,6 +42,198 @@ class RemotionMethod(BaseMethod):
     DEFAULT_IMAGE = "openai.png"
     DEFAULT_SOUND_EFFECT = "dong_effect.wav"
 
+    def supports_background_processing(self) -> bool:
+        """Remotion method supports background processing."""
+        return True
+    
+    def process_working_block(self, working_block: WorkingBlock) -> bool:
+        """
+        Process a WorkingBlock using Remotion method.
+        
+        Args:
+            working_block: The WorkingBlock to process
+            
+        Returns:
+            bool: True if successful, False otherwise
+        """
+        if not working_block.block:
+            print(f"[RemotionMethod] WorkingBlock {working_block.working_id} has no block data")
+            return False
+        
+        block = working_block.block
+        
+        # Determine template from block parameter
+        template_name = None
+        if hasattr(block, 'extra_info') and block.extra_info:
+            template_name = block.extra_info.get("template")
+        
+        # If no template specified, default to desktop
+        if not template_name:
+            template_name = "FilterDesktopSlide"
+        
+        # Validate template
+        if template_name not in self.TEMPLATES:
+            print(f"[RemotionMethod] Invalid template '{template_name}'")
+            return False
+        
+        # Calculate duration
+        duration_ms = None
+        if hasattr(block, 'audio_generation') and block.audio_generation and block.audio_generation.ok:
+            duration_ms = block.audio_generation.meta.get('total_duration')
+        
+        # Create output directories
+        output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
+        project_dir = output_folder / "project" / working_block.project_id
+        project_dir.mkdir(parents=True, exist_ok=True)
+        video_dir = project_dir / "video"
+        video_dir.mkdir(parents=True, exist_ok=True)
+        
+        # Generate output filename
+        output_filename = f"{block.id}.mp4"
+        output_path = video_dir / output_filename
+        
+        # Parse text to extract title and description
+        if "|" in block.text:
+            parts = block.text.split("|", 1)
+            title = parts[0].strip()
+            description = parts[1].strip()
+        else:
+            title = block.text.strip()
+            description = ""
+        
+        # Calculate duration
+        duration_sec = (duration_ms / 1000.0) if duration_ms else self.DEFAULT_DURATION_SEC
+        
+        # Ensure duration is within reasonable bounds
+        if duration_sec < 3:
+            duration_sec = 3
+        elif duration_sec > 10:
+            duration_sec = 10
+        
+        # Create props for Remotion
+        props = {
+            "title": title,
+            "description": description,
+            "duration": duration_sec,
+            "imagePath": self.DEFAULT_IMAGE,
+            "titleStartTime": int(duration_sec * 0.5 * 1000),  # Start at 50% of duration
+            "soundEffect": self.DEFAULT_SOUND_EFFECT
+        }
+        
+        # Save props to JSON file for debugging
+        props_path = project_dir / f"{block.id}_props.json"
+        with open(props_path, 'w', encoding='utf-8') as f:
+            json.dump(props, f, indent=2)
+        
+        try:
+            # Find the remotion_project directory relative to output_folder
+            remotion_project_path = output_folder.parent / "remotion_project"
+            if not remotion_project_path.exists():
+                # If not found, try relative to the current working directory
+                remotion_project_path = Path("remotion_project")
+            
+            # Use a temporary filename in remotion's output directory
+            temp_output_filename = f"temp_{block.id}.mp4"
+            temp_output_path = remotion_project_path / "output" / temp_output_filename
+            # For the command, use a relative path from the remotion_project directory
+            temp_output_path_for_cmd = Path("output") / temp_output_filename
+            
+            # Render video using Remotion
+            cmd = [
+                "npx", "remotion", "render",
+                template_name,
+                str(temp_output_path_for_cmd),
+                "--props", json.dumps(props)
+            ]
+            
+            print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {block.id}...")
+            print(f"[RemotionMethod] 📊 Props: {json.dumps(props, indent=2)}")
+            print(f"[RemotionMethod] 📁 Output: {output_path}")
+            
+            result = subprocess.run(
+                cmd, 
+                cwd=remotion_project_path, 
+                capture_output=True, 
+                text=True,
+                timeout=300  # 5 minute timeout
+            )
+            
+            if result.returncode == 0:
+                # Move the video from temp location to final destination
+                if temp_output_path.exists():
+                    shutil.move(str(temp_output_path), str(output_path))
+                    print(f"[RemotionMethod] ✅ Video generated and moved successfully!")
+                    
+                    # Update the block's video generation result
+                    from videogen.pipeline.schema import GenerationResult
+                    block.video_generation = GenerationResult(
+                        ok=True,
+                        artifacts=[str(output_path), str(props_path)],
+                        meta={
+                            "template": template_name,
+                            "template_config": self.TEMPLATES[template_name],
+                            "duration_sec": duration_sec,
+                            "title": title,
+                            "description": description,
+                            "props": props,
+                            "output_path": str(output_path),
+                            "props_path": str(props_path)
+                        },
+                        error=None,
+                    )
+                    block.status = "done"
+                    
+                    return True
+                else:
+                    print(f"[RemotionMethod] ❌ Video file not found at {temp_output_path}")
+                    return False
+            else:
+                error_msg = f"Remotion rendering failed: {result.stderr}"
+                print(f"[RemotionMethod] ❌ {error_msg}")
+                
+                # Update the block's video generation result with error
+                from videogen.pipeline.schema import GenerationResult
+                block.video_generation = GenerationResult(
+                    ok=False,
+                    artifacts=[str(props_path)],
+                    meta={},
+                    error=error_msg,
+                )
+                block.status = "error"
+                
+                return False
+                
+        except subprocess.TimeoutExpired:
+            error_msg = "Remotion rendering timed out (5 minutes)"
+            print(f"[RemotionMethod] ❌ {error_msg}")
+            
+            # Update the block's video generation result with error
+            from videogen.pipeline.schema import GenerationResult
+            block.video_generation = GenerationResult(
+                ok=False,
+                artifacts=[str(props_path)],
+                meta={},
+                error=error_msg,
+            )
+            block.status = "error"
+            
+            return False
+        except Exception as e:
+            error_msg = f"Error generating video: {str(e)}"
+            print(f"[RemotionMethod] ❌ {error_msg}")
+            
+            # Update the block's video generation result with error
+            from videogen.pipeline.schema import GenerationResult
+            block.video_generation = GenerationResult(
+                ok=False,
+                artifacts=[str(props_path)],
+                meta={},
+                error=error_msg,
+            )
+            block.status = "error"
+            
+            return False
+
     def run(
         self,
         *,
@@ -55,7 +246,8 @@ class RemotionMethod(BaseMethod):
         block: Optional[ScriptBlock] = None,
     ) -> Dict[str, Any]:
         """
-        Generate video using Remotion templates
+        Create a WorkingBlock for video generation using Remotion templates.
+        The actual processing will be done by the global worker.
         
         Args:
             prompt: The prompt for video generation
@@ -89,136 +281,37 @@ class RemotionMethod(BaseMethod):
                 "error": f"Invalid template '{template_name}'. Available templates: {available_templates}"
             }
 
-        # Calculate duration
-        duration_sec = (duration_ms / 1000.0) if duration_ms else self.DEFAULT_DURATION_SEC
+        # Update block with template info
+        if block:
+            if not hasattr(block, 'extra_info') or block.extra_info is None:
+                block.extra_info = {}
+            block.extra_info["template"] = template_name
+
+        # Create WorkingBlock using base method
+        working_id = self.create_working_block(project, target_name, workdir, block)
         
-        # Ensure duration is within reasonable bounds
-        if duration_sec < 3:
-            duration_sec = 3
-        elif duration_sec > 10:
-            duration_sec = 10
-
-        # Create output directories
-        out_dir = workdir / "project" / project
-        out_dir.mkdir(parents=True, exist_ok=True)
-        video_dir = out_dir / "video"
-        video_dir.mkdir(parents=True, exist_ok=True)
+        if not working_id:
+            return {
+                "ok": False,
+                "error": f"Failed to create WorkingBlock for {target_name}"
+            }
         
-        # Generate output filename
-        output_filename = f"{target_name}.mp4"
-        output_path = video_dir / output_filename
-
-        # Parse text to extract title and description
-        # Simple parsing: if text contains "|", split on it; otherwise use as title
-        if "|" in text:
-            parts = text.split("|", 1)
-            title = parts[0].strip()
-            description = parts[1].strip()
-        else:
-            title = text.strip()
-            description = ""
-
-        # Create props for Remotion
-        props = {
-            "title": title,
-            "description": description,
-            "duration": duration_sec,
-            "imagePath": self.DEFAULT_IMAGE,
-            "titleStartTime": int(duration_sec * 0.5 * 1000),  # Start at 50% of duration
-            "soundEffect": self.DEFAULT_SOUND_EFFECT
+        print(f"📤 Remotion video generation queued for {target_name} (ID: {working_id})")
+        print(f"   → Task will be processed by global worker")
+        
+        # Return immediately with submitted status
+        return {
+            "ok": True,  # Submission was successful
+            "artifacts": [],
+            "meta": {
+                "working_id": working_id,
+                "project": project,
+                "target_name": target_name,
+                "template": template_name,
+                "status": "submitted",
+            },
+            "error": None,
         }
-
-        # Save props to JSON file for debugging
-        props_path = out_dir / f"{target_name}_props.json"
-        with open(props_path, 'w', encoding='utf-8') as f:
-            json.dump(props, f, indent=2)
-
-        try:
-            # Find the remotion_project directory relative to workdir
-            remotion_project_path = workdir.parent / "remotion_project"
-            if not remotion_project_path.exists():
-                # If not found, try relative to current working directory
-                remotion_project_path = Path("remotion_project")
-            
-            # Use a temporary filename in remotion's output directory
-            temp_output_filename = f"temp_{target_name}.mp4"
-            temp_output_path = remotion_project_path / "output" / temp_output_filename
-            # For the command, use relative path from remotion_project directory
-            temp_output_path_for_cmd = Path("output") / temp_output_filename
-            
-            # Render video using Remotion
-            cmd = [
-                "npx", "remotion", "render",
-                template_name,
-                str(temp_output_path_for_cmd),
-                "--props", json.dumps(props)
-            ]
-            
-            print(f"🎬 Rendering {template_name} video...")
-            print(f"📊 Props: {json.dumps(props, indent=2)}")
-            print(f"📁 Output: {output_path}")
-            
-            result = subprocess.run(
-                cmd, 
-                cwd=remotion_project_path, 
-                capture_output=True, 
-                text=True,
-                timeout=300  # 5 minute timeout
-            )
-            
-            if result.returncode == 0:
-                # Move the video from temp location to final destination
-                if temp_output_path.exists():
-                    import shutil
-                    shutil.move(str(temp_output_path), str(output_path))
-                    print(f"✅ Video generated and moved successfully!")
-                else:
-                    return {
-                        "ok": False,
-                        "artifacts": [str(props_path)],
-                        "error": f"Video file not found at {temp_output_path}"
-                    }
-                
-                return {
-                    "ok": True,
-                    "artifacts": [str(output_path), str(props_path)],
-                    "meta": {
-                        "template": template_name,
-                        "template_config": self.TEMPLATES[template_name],
-                        "duration_sec": duration_sec,
-                        "title": title,
-                        "description": description,
-                        "props": props,
-                        "output_path": str(output_path),
-                        "props_path": str(props_path)
-                    },
-                    "error": None,
-                }
-            else:
-                error_msg = f"Remotion rendering failed: {result.stderr}"
-                print(f"❌ {error_msg}")
-                return {
-                    "ok": False,
-                    "artifacts": [str(props_path)],
-                    "error": error_msg
-                }
-                
-        except subprocess.TimeoutExpired:
-            error_msg = "Remotion rendering timed out (5 minutes)"
-            print(f"❌ {error_msg}")
-            return {
-                "ok": False,
-                "artifacts": [str(props_path)],
-                "error": error_msg
-            }
-        except Exception as e:
-            error_msg = f"Error generating video: {str(e)}"
-            print(f"❌ {error_msg}")
-            return {
-                "ok": False,
-                "artifacts": [str(props_path)],
-                "error": error_msg
-            }
 
     def generate_prompt(self, text: str) -> str:
         """

@@ -7,7 +7,7 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
 from dotenv import load_dotenv
-from videogen.pipeline.schema import ScriptBlock
+from videogen.dao import ScriptBlock
 from videogen.pipeline.utils import read_json, write_json
 
 # ========== 配置项 ==========

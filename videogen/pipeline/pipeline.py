@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from videogen.methods.audio_engine.utils import get_total_audio_duration_ms
 from videogen.methods.registry import create_method
 import videogen.methods  # This ensures all methods are registered
-from videogen.pipeline.schema import ScriptBlock, Decision, GenerationResult
+from videogen.dao import ScriptBlock, GenerationResult
 from videogen.pipeline.utils import read_json, write_json
 from videogen.router.decider import decide_generation_method
 
@@ -21,27 +21,34 @@ load_dotenv()
 PROJECT_NAME = os.getenv("PROJECT_NAME")
 
 
-def _wait_for_video_completion(workdir: Path) -> None:
-    """Wait for all video downloads to complete."""
+def _wait_for_video_completion(workdir: Path, project: str) -> None:
+    """Wait for all video downloads to complete using global worker."""
     try:
-        from videogen.methods.text_video_silicon.worker import start_worker_loop
-        from videogen.methods.text_video_silicon.store import TaskCSV
-        from videogen.methods.text_video_silicon.constants import DB_PATH
+        from videogen.worker.global_worker import get_global_worker, start_global_worker, wait_for_global_worker_completion
+        from videogen.worker.processors.remotion_processor import process_remotion_working_block
+        from videogen.worker.processors.text_video_silicon_processor import process_text_video_silicon_working_block
         
-        # Get the store and start worker loop
-        db_path = Path(DB_PATH).resolve()
-        store = TaskCSV(db_path)
+        # Get the global worker and register processors
+        worker = get_global_worker()
+        worker.register_method_processor("remotion_picture", process_remotion_working_block)
+        worker.register_method_processor("text_video", process_text_video_silicon_working_block)
         
-        print("\n⏳ Starting worker to process video downloads...")
-        print("   → Worker will poll and download videos...")
+        print("\n⏳ Starting global worker to process video generation...")
+        print("   → Worker will process WorkingBlocks from SQLite database...")
         
-        # Start the worker loop (this will run until all tasks are complete)
-        start_worker_loop(store)
+        # Start the global worker
+        start_global_worker()
         
-        print("✅ All video downloads completed!")
+        # Wait for completion
+        success = wait_for_global_worker_completion(project, timeout_seconds=600)  # 10 minutes timeout
+        
+        if success:
+            print("✅ All video generation completed!")
+        else:
+            print("⚠️  Some video generation tasks may not have completed within timeout")
             
     except Exception as e:
-        print(f"⚠️  Error in worker: {e}")
+        print(f"⚠️  Error in global worker: {e}")
         print("   → Check logs for details")
 
 
@@ -91,7 +98,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
             else:
                 raise Exception(f"⚠️  Audio generation failed or missing total_duration for {block.id}")
 
-        if block.status == "done" and (block.generation and 'output_path' in block.generation.meta and os.path.exists(block.generation.meta['output_path'])):
+        if block.status == "done" and (block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(block.video_generation.meta['output_path'])):
             print("→ Skipped (already done).")
             continue
 
@@ -142,21 +149,21 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
                             print(f"❌ Non-retryable error for {block.id}: {e}")
                             raise e
 
-                block.generation = GenerationResult(
+                block.video_generation = GenerationResult(
                     ok=result.get("ok", False),
                     artifacts=result.get("artifacts", []),
                     meta=result.get("meta", {}),
                     error=result.get("error"),
                 )
                 
-                # For text_video_silicon, mark as "submitted" if successful submission
-                if block.decision.method == "text_video_silicon" and block.generation.ok:
+                # For both methods, mark as "submitted" if successful submission
+                if block.video_generation.ok:
                     block.status = "submitted"  # Will be updated to "done" by worker
                 else:
-                    block.status = "done" if block.generation.ok else "error"
+                    block.status = "error"
 
         except Exception as e:
-            block.generation = GenerationResult(
+            block.video_generation = GenerationResult(
                 ok=False,
                 artifacts=[],
                 meta={},
@@ -176,7 +183,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
         print(f"→ Updated JSON ({block.status})")
         
         # Small delay between video generation requests to prevent rate limiting
-        if genMedia and block.decision.method == "text_video_silicon":
+        if genMedia and block.decision.method == "text_video":
             delay = random.uniform(1.0, 3.0)
             print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
             time.sleep(delay)
@@ -185,7 +192,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
     
     # Wait for all video downloads to complete if any were submitted
     if genMedia:
-        _wait_for_video_completion(workdir)
+        _wait_for_video_completion(workdir, project)
 
 
 if __name__ == "__main__":
