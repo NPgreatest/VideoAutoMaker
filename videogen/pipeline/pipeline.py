@@ -13,7 +13,7 @@ from dotenv import load_dotenv
 from videogen.methods.audio_engine.utils import get_total_audio_duration_ms
 from videogen.methods.registry import create_method
 import videogen.methods  # This ensures all methods are registered
-from videogen.dao import ScriptBlock, GenerationResult
+from videogen.pipeline.schema import ScriptBlock, GenerationResult
 from videogen.pipeline.utils import read_json, write_json
 from videogen.router.decider import decide_generation_method
 
@@ -65,14 +65,14 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
         # --- 决策阶段 ---
         if genDecision and (not block.decision or block.status == "regenerate"):
             method_name = decide_generation_method(block.text, project)
-            block.decision = Decision(method=method_name, confidence=1.0, decided_by="llm")
+            block.decision = method_name
             print(f"→ Decided method: {method_name}")
 
 
         # process Audio part
         totalDuration = None # duration is based from audio
-        if block.audioGeneration and block.audioGeneration.ok:
-            audioPath = block.audioGeneration.meta['audio_path']
+        if block.audio_generation and block.audio_generation.ok:
+            audioPath = block.audio_generation.meta['audio_path']
             project_dir = workdir / "project" / project
             fullPath = project_dir / audioPath
             totalDuration = get_total_audio_duration_ms(fullPath)
@@ -87,14 +87,14 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
                     workdir=workdir,
                     block=block,
                 )
-            block.audioGeneration = GenerationResult(
+            block.audio_generation = GenerationResult(
                 ok=result.get("ok", False),
                 artifacts=result.get("artifacts", []),
                 meta=result.get("meta", {}),
                 error=result.get("error"),
             )
-            if block.audioGeneration.ok and 'total_duration' in block.audioGeneration.meta:
-                totalDuration = block.audioGeneration.meta['total_duration']
+            if block.audio_generation.ok and 'total_duration' in block.audio_generation.meta:
+                totalDuration = block.audio_generation.meta['total_duration']
             else:
                 raise Exception(f"⚠️  Audio generation failed or missing total_duration for {block.id}")
 
@@ -104,7 +104,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
         # --- Video Part ---
         try:
-            method = create_method(block.decision.method)
+            method = create_method(block.decision)
 
             if not block.prompt:
                 block.prompt = method.generate_prompt(block.text)
@@ -183,7 +183,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
         print(f"→ Updated JSON ({block.status})")
         
         # Small delay between video generation requests to prevent rate limiting
-        if genMedia and block.decision.method == "text_video":
+        if genMedia and block.decision == "text_video":
             delay = random.uniform(1.0, 3.0)
             print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
             time.sleep(delay)

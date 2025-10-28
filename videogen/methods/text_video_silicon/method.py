@@ -9,10 +9,9 @@ from typing import Dict, Any, Optional
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
 from videogen.methods.text_video_silicon.constants import (
-    SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL, DB_PATH, STATUS_SUBMITTED, NON_TERMINAL, STATUS_ERROR, STATUS_SUCCEED
+    SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL, STATUS_SUBMITTED, NON_TERMINAL, STATUS_ERROR, STATUS_SUCCEED
 )
 from .sf_api import submit_video, download_to, check_status
-from .store import TaskCSV
 from .utils import resize_video_duration
 from videogen.llm_engine import get_engine
 from videogen.pipeline.schema import WorkingBlock, ScriptBlock
@@ -24,16 +23,6 @@ class TextVideoSilicon(BaseMethod):
 
     def __init__(self) -> None:
         super().__init__()
-        self._stores = {}
-
-    def _get_store(self, workdir: Path) -> TaskCSV:
-        key = "global_db"
-        if key not in self._stores:
-            db_path = Path(DB_PATH).resolve()
-            db_path.parent.mkdir(parents=True, exist_ok=True)
-            store = TaskCSV(db_path)
-            self._stores[key] = store
-        return self._stores[key]
 
     def supports_background_processing(self) -> bool:
         """Text Video Silicon method supports background processing."""
@@ -60,17 +49,38 @@ class TextVideoSilicon(BaseMethod):
             return False
         
         # Check if already completed
-        if (block.video_generation and block.video_generation.ok and 
-            'request_id' in block.video_generation.meta and 
-            os.path.exists(block.video_generation.meta['output_path'])):
-            print(f"[TextVideoSilicon] Using existing completed video for {block.id}")
-            return True
+        video_gen = block.video_generation
+        if video_gen:
+            # Handle both GenerationResult object and dict cases
+            if hasattr(video_gen, 'ok'):
+                # It's a GenerationResult object
+                is_ok = video_gen.ok
+                meta = video_gen.meta
+            else:
+                # It's a dictionary
+                is_ok = video_gen.get('ok', False)
+                meta = video_gen.get('meta', {})
+            
+            if (is_ok and 'request_id' in meta and 
+                os.path.exists(meta.get('output_path', ''))):
+                print(f"[TextVideoSilicon] Using existing completed video for {block.id}")
+                return True
         
         # Get request_id from block's video generation meta
         request_id = None
-        if block.video_generation and 'request_id' in block.video_generation.meta:
-            request_id = block.video_generation.meta['request_id']
-        else:
+        if block.video_generation:
+            video_gen = block.video_generation
+            if hasattr(video_gen, 'meta'):
+                # It's a GenerationResult object
+                meta = video_gen.meta
+            else:
+                # It's a dictionary
+                meta = video_gen.get('meta', {})
+            
+            if 'request_id' in meta:
+                request_id = meta['request_id']
+        
+        if not request_id:
             print(f"[TextVideoSilicon] No request_id found in block {block.id}")
             return False
         
@@ -108,8 +118,16 @@ class TextVideoSilicon(BaseMethod):
                     
                     # Resize to target duration, but keep raw
                     target_dur = None
-                    if block.audio_generation and block.audio_generation.ok:
-                        target_dur = block.audio_generation.meta.get('total_duration', 5.0) / 1000.0
+                    if block.audio_generation:
+                        audio_gen = block.audio_generation
+                        if hasattr(audio_gen, 'ok') and audio_gen.ok:
+                            # It's a GenerationResult object
+                            target_dur = audio_gen.meta.get('total_duration', 5.0) / 1000.0
+                        elif isinstance(audio_gen, dict) and audio_gen.get('ok', False):
+                            # It's a dictionary
+                            target_dur = audio_gen.get('meta', {}).get('total_duration', 5.0) / 1000.0
+                        else:
+                            target_dur = 5.0
                     else:
                         target_dur = 5.0
                     
@@ -266,12 +284,12 @@ class TextVideoSilicon(BaseMethod):
                 ok=True,  # Submission was successful
                 artifacts=[],
                 meta={
-                    "request_id": request_id,
-                    "project": project,
-                    "target_name": target_name,
-                    "status": STATUS_SUBMITTED,
+            "request_id": request_id,
+            "project": project,
+            "target_name": target_name,
+            "status": STATUS_SUBMITTED,
                     "output_path": "",  # Will be filled by worker
-                    "source_url": "",
+            "source_url": "",
                     "submitted_at": str(time.time()),
                 },
                 error=None,

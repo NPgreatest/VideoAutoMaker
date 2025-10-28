@@ -12,11 +12,7 @@ from typing import Dict, Any, Optional
 
 from videogen.methods.base import BaseMethod
 from videogen.pipeline.schema import WorkingBlock, ScriptBlock
-
-
-def register_method(cls):
-    """Decorator to register a method class"""
-    return cls
+from videogen.methods.registry import register_method
 
 
 @register_method
@@ -126,8 +122,9 @@ class RemotionMethod(BaseMethod):
             json.dump(props, f, indent=2)
         
         try:
-            # Find the remotion_project directory relative to output_folder
-            remotion_project_path = output_folder.parent / "remotion_project"
+            # Find the remotion_project directory - it's located in the same directory as this method
+            method_dir = Path(__file__).parent
+            remotion_project_path = method_dir / "remotion_project"
             if not remotion_project_path.exists():
                 # If not found, try relative to the current working directory
                 remotion_project_path = Path("remotion_project")
@@ -268,6 +265,8 @@ class RemotionMethod(BaseMethod):
             template_name = block.get("template")
         elif block and isinstance(block, str):
             template_name = block
+        elif block and hasattr(block, 'extra_info') and block.extra_info:
+            template_name = block.extra_info.get("template")
         
         # If no template specified, default to desktop
         if not template_name:

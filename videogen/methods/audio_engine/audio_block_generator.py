@@ -13,7 +13,7 @@ from pydub.utils import mediainfo
 from .utils import get_total_audio_duration_ms
 from ..base import BaseMethod
 from ..registry import register_method
-from ...dao import ScriptBlock
+from ...pipeline.schema import ScriptBlock
 
 # ----------------- 环境 & 常量 -----------------
 load_dotenv()

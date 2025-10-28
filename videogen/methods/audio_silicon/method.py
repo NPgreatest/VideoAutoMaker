@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import json
+
 import os
-import requests
 from pathlib import Path
 from typing import Dict, Any, Optional
-from dotenv import load_dotenv
-from ..base import BaseMethod
-from ..registry import register_method
-from ...dao import ScriptBlock
 
-from .config import ensure_voice_uri, get_default_character, list_cached_voices
+import requests
+from dotenv import load_dotenv
+
+from videogen.methods.audio_silicon.config import ensure_voice_uri, get_default_character, list_cached_voices
+from videogen.methods.base import BaseMethod
+from videogen.methods.registry import register_method
+from videogen.pipeline.schema import ScriptBlock
 
 load_dotenv()
 SILICON_API_KEY = os.getenv("SILICONFLOW_API_TOKEN")

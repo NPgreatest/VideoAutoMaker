@@ -260,6 +260,11 @@ So you need to refactor the worker.py. abstract the worker into a global feature
 will use the same Global worker, method->run function only create the WorkingBlock and push into the SQLite. at the end 
 of the pipeline, start the worker and keep waiting for the result.
 
+## Add the feature of integrate image file to single block
+The new method remotion need integrate image file into that single block, picture will stay in the project
+folder, and will named {id}.jpg, the ScriptBlock `extra_info` will contains `single_picture` field and the value is the 
+image file name. `remotion_animation/method.py` will read the image file and inject into the `remotion_animation/remotion_project/public/assets` 
+folder, and the method.py will inject that image file into the video, delete the image file inside `public/assets` the video is rendered.
 
 
 # test
