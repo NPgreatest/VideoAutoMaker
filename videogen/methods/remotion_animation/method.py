@@ -72,6 +72,15 @@ class RemotionMethod(BaseMethod):
             print(f"[RemotionMethod] Invalid template '{template_name}'")
             return False
         
+        # Handle image file integration
+        image_filename = None
+        injected_image_path = None
+        if hasattr(block, 'extra_info') and block.extra_info:
+            single_picture = block.extra_info.get("single_picture")
+            if single_picture:
+                image_filename = single_picture
+                print(f"[RemotionMethod] Found single_picture: {image_filename}")
+        
         # Calculate duration
         duration_ms = None
         if hasattr(block, 'audio_generation') and block.audio_generation and block.audio_generation.ok:
@@ -87,6 +96,36 @@ class RemotionMethod(BaseMethod):
         # Generate output filename
         output_filename = f"{block.id}.mp4"
         output_path = video_dir / output_filename
+        
+        # Handle image file injection if single_picture is specified
+        if image_filename:
+            # Find the remotion_project directory
+            method_dir = Path(__file__).parent
+            remotion_project_path = method_dir / "remotion_project"
+            if not remotion_project_path.exists():
+                remotion_project_path = Path("remotion_project")
+            
+            # Create assets directory if it doesn't exist
+            assets_dir = remotion_project_path / "public" / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Source image path in project folder
+            source_image_path = project_dir / image_filename
+            
+            # Destination image path in remotion assets
+            injected_image_path = assets_dir / image_filename
+            
+            if source_image_path.exists():
+                try:
+                    # Copy image to remotion assets folder
+                    shutil.copy2(str(source_image_path), str(injected_image_path))
+                    print(f"[RemotionMethod] ✅ Copied image {image_filename} to remotion assets")
+                except Exception as e:
+                    print(f"[RemotionMethod] ❌ Failed to copy image {image_filename}: {str(e)}")
+                    image_filename = None  # Fall back to default image
+            else:
+                print(f"[RemotionMethod] ❌ Image file not found: {source_image_path}")
+                image_filename = None  # Fall back to default image
         
         # Parse text to extract title and description
         if "|" in block.text:
@@ -111,7 +150,7 @@ class RemotionMethod(BaseMethod):
             "title": title,
             "description": description,
             "duration": duration_sec,
-            "imagePath": self.DEFAULT_IMAGE,
+            "imagePath": image_filename if image_filename else self.DEFAULT_IMAGE,
             "titleStartTime": int(duration_sec * 0.5 * 1000),  # Start at 50% of duration
             "soundEffect": self.DEFAULT_SOUND_EFFECT
         }
@@ -161,6 +200,14 @@ class RemotionMethod(BaseMethod):
                     shutil.move(str(temp_output_path), str(output_path))
                     print(f"[RemotionMethod] ✅ Video generated and moved successfully!")
                     
+                    # Clean up injected image file if it exists
+                    if injected_image_path and injected_image_path.exists():
+                        try:
+                            injected_image_path.unlink()
+                            print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
+                        except Exception as e:
+                            print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
+                    
                     # Update the block's video generation result
                     from videogen.pipeline.schema import GenerationResult
                     block.video_generation = GenerationResult(
@@ -183,10 +230,25 @@ class RemotionMethod(BaseMethod):
                     return True
                 else:
                     print(f"[RemotionMethod] ❌ Video file not found at {temp_output_path}")
+                    # Clean up injected image file if it exists
+                    if injected_image_path and injected_image_path.exists():
+                        try:
+                            injected_image_path.unlink()
+                            print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
+                        except Exception as e:
+                            print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
                     return False
             else:
                 error_msg = f"Remotion rendering failed: {result.stderr}"
                 print(f"[RemotionMethod] ❌ {error_msg}")
+                
+                # Clean up injected image file if it exists
+                if injected_image_path and injected_image_path.exists():
+                    try:
+                        injected_image_path.unlink()
+                        print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
+                    except Exception as e:
+                        print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
                 
                 # Update the block's video generation result with error
                 from videogen.pipeline.schema import GenerationResult
@@ -204,6 +266,14 @@ class RemotionMethod(BaseMethod):
             error_msg = "Remotion rendering timed out (5 minutes)"
             print(f"[RemotionMethod] ❌ {error_msg}")
             
+            # Clean up injected image file if it exists
+            if injected_image_path and injected_image_path.exists():
+                try:
+                    injected_image_path.unlink()
+                    print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
+                except Exception as e:
+                    print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
+            
             # Update the block's video generation result with error
             from videogen.pipeline.schema import GenerationResult
             block.video_generation = GenerationResult(
@@ -218,6 +288,14 @@ class RemotionMethod(BaseMethod):
         except Exception as e:
             error_msg = f"Error generating video: {str(e)}"
             print(f"[RemotionMethod] ❌ {error_msg}")
+            
+            # Clean up injected image file if it exists
+            if injected_image_path and injected_image_path.exists():
+                try:
+                    injected_image_path.unlink()
+                    print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
+                except Exception as cleanup_e:
+                    print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(cleanup_e)}")
             
             # Update the block's video generation result with error
             from videogen.pipeline.schema import GenerationResult
