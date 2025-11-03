@@ -23,7 +23,7 @@ def decide_generation_method(
         "You must always choose one of the following options:\n"
         "1. react_animation — use this when the line contains numbers, quantities, statistics, comparisons, or structured information "
         "(e.g., counts of people, timelines, lists, flight paths, or any data that can be visualized with charts, icons, or infographics using react front-end).\n"
-        "2. text_to_video — use this when the line describes a vivid scene, action, or environment that can be represented visually, "
+        "2. text_video — use this when the line describes a vivid scene, action, or environment that can be represented visually, "
         "such as locations, objects, weather, or cinematic imagery.\n"
         # "3. subtitle_only — use this when the line focuses mainly on narration, thoughts, quotes, or emotional commentary, "
         # "where no specific visual representation is required.\n"
@@ -58,4 +58,4 @@ def decide_generation_method(
     elif "image" in method or "picture" or "video" in method:
         return "text_video"
     else:
-        return "subtitle_only"
+        return "text_video"

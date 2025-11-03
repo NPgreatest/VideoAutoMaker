@@ -358,7 +358,7 @@ class RemotionMethod(BaseMethod):
                 "error": f"Invalid template '{template_name}'. Available templates: {available_templates}"
             }
 
-        # Update block with template info
+        # Update the block with template info
         if block:
             if not hasattr(block, 'extra_info') or block.extra_info is None:
                 block.extra_info = {}
@@ -384,7 +384,6 @@ class RemotionMethod(BaseMethod):
                 "working_id": working_id,
                 "project": project,
                 "target_name": target_name,
-                "template": template_name,
                 "status": "submitted",
             },
             "error": None,

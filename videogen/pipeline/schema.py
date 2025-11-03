@@ -38,7 +38,7 @@ class ScriptBlock:
     context: str = ""
     voice: str = ""
     character: str = ""
-    decision: str = "subtitle_only"
+    decision: str = "text_video" # or layer_compose
     working_id: str = ""
     extra_info: Dict[str, Any] = field(default_factory=dict)
     video_generation: Optional[GenerationResult] = None

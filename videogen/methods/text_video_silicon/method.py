@@ -15,6 +15,8 @@ from .sf_api import submit_video, download_to, check_status
 from .utils import resize_video_duration
 from videogen.llm_engine import get_engine
 from videogen.pipeline.schema import WorkingBlock, ScriptBlock
+from videogen.pipeline.utils import read_json, write_json
+from datetime import datetime, timezone
 
 @register_method
 class TextVideoSilicon(BaseMethod):
@@ -28,7 +30,7 @@ class TextVideoSilicon(BaseMethod):
         """Text Video Silicon method supports background processing."""
         return True
     
-    def process_working_block(self, working_block: WorkingBlock) -> bool:
+    def process_working_block(self, working_block: WorkingBlock) -> Optional[bool]:
         """
         Process a WorkingBlock using Text Video Silicon method.
         
@@ -36,7 +38,9 @@ class TextVideoSilicon(BaseMethod):
             working_block: The WorkingBlock to process
             
         Returns:
-            bool: True if successful, False otherwise
+            bool: True if successful
+            False: if failed with error
+            None: if still processing (non-terminal state)
         """
         if not working_block.block:
             print(f"[TextVideoSilicon] WorkingBlock {working_block.working_id} has no block data")
@@ -64,6 +68,7 @@ class TextVideoSilicon(BaseMethod):
             if (is_ok and 'request_id' in meta and 
                 os.path.exists(meta.get('output_path', ''))):
                 print(f"[TextVideoSilicon] Using existing completed video for {block.id}")
+                self._save_block_to_json(working_block, block) # still save back
                 return True
         
         # Get request_id from block's video generation meta
@@ -163,6 +168,7 @@ class TextVideoSilicon(BaseMethod):
                         "prompt": block.prompt,
                         "source_url": url,
                         "duration": str(target_dur),
+                        "output_path": str(final_mp4 if final_mp4.exists() else raw_mp4),
                         "created": time.time(),
                         "finished": time.time(),
                     }
@@ -171,39 +177,101 @@ class TextVideoSilicon(BaseMethod):
                         json.dump(meta, f, ensure_ascii=False, indent=2)
                     print(f"[TextVideoSilicon] Meta saved: {meta_path}")
                     
+                    # Save block back to JSON file
+                    self._save_block_to_json(working_block, block)
+                    
                     return True
                     
                 except Exception as e:
                     print(f"[TextVideoSilicon] Download or resize error for {request_id}: {e}")
+                    
+                    # Preserve existing meta, especially request_id
+                    existing_meta = {}
+                    if block.video_generation:
+                        video_gen = block.video_generation
+                        if hasattr(video_gen, 'meta'):
+                            existing_meta = dict(video_gen.meta) if isinstance(video_gen.meta, dict) else {}
+                        elif isinstance(video_gen, dict):
+                            existing_meta = dict(video_gen.get('meta', {})) if isinstance(video_gen.get('meta'), dict) else {}
+                    
+                    # Ensure request_id is preserved
+                    if 'request_id' not in existing_meta and request_id:
+                        existing_meta['request_id'] = request_id
                     
                     # Update the block's video generation result with an error
                     from videogen.pipeline.schema import GenerationResult
                     block.video_generation = GenerationResult(
                         ok=False,
                         artifacts=[],
-                        meta={},
+                        meta=existing_meta,  # Preserve existing meta including request_id
                         error=f"Download/Resize error: {e}",
                     )
                     block.status = "error"
                     
+                    # Save block back to JSON file (with error state)
+                    self._save_block_to_json(working_block, block)
+                    
                     return False
             
             elif new_status in NON_TERMINAL:
-                # Still processing, not an error yet
+                # Still processing, not an error yet - keep as PENDING
                 print(f"[TextVideoSilicon] Task {request_id} still processing: {new_status}")
-                return False
+                # Update status in meta to reflect current status
+                from videogen.pipeline.schema import GenerationResult
+                
+                # Preserve existing meta, especially request_id
+                meta = {}
+                if block.video_generation:
+                    video_gen = block.video_generation
+                    if hasattr(video_gen, 'meta'):
+                        meta = dict(video_gen.meta) if isinstance(video_gen.meta, dict) else {}
+                    elif isinstance(video_gen, dict):
+                        meta = dict(video_gen.get('meta', {})) if isinstance(video_gen.get('meta'), dict) else {}
+                
+                # Ensure request_id is always set
+                if 'request_id' not in meta and request_id:
+                    meta['request_id'] = request_id
+                
+                # Update status and timestamp
+                meta['status'] = new_status
+                meta['last_checked'] = time.time()
+                
+                block.video_generation = GenerationResult(
+                    ok=True,  # Still in progress, submission was successful
+                    artifacts=[],
+                    meta=meta,  # Preserve existing meta including request_id
+                    error=None,
+                )
+                return None  # Return None to indicate still processing
             
             else:
                 # Error or other terminal state
                 error_msg = resp.get("error", f"Unknown error: {new_status}")
                 print(f"[TextVideoSilicon] Task {request_id} failed: {error_msg}")
                 
+                # Preserve existing meta, especially request_id
+                existing_meta = {}
+                if block.video_generation:
+                    video_gen = block.video_generation
+                    if hasattr(video_gen, 'meta'):
+                        existing_meta = dict(video_gen.meta) if isinstance(video_gen.meta, dict) else {}
+                    elif isinstance(video_gen, dict):
+                        existing_meta = dict(video_gen.get('meta', {})) if isinstance(video_gen.get('meta'), dict) else {}
+                
+                # Ensure request_id is preserved
+                if 'request_id' not in existing_meta and request_id:
+                    existing_meta['request_id'] = request_id
+                
+                # Update status in meta
+                existing_meta['status'] = new_status
+                existing_meta['error_time'] = time.time()
+                
                 # Update the block's video generation result with error
                 from videogen.pipeline.schema import GenerationResult
                 block.video_generation = GenerationResult(
                     ok=False,
                     artifacts=[],
-                    meta={},
+                    meta=existing_meta,  # Preserve existing meta including request_id
                     error=error_msg,
                 )
                 block.status = "error"
@@ -213,18 +281,82 @@ class TextVideoSilicon(BaseMethod):
         except Exception as e:
             print(f"[TextVideoSilicon] Error checking status for {request_id}: {e}")
             
+            # Preserve existing meta, especially request_id
+            existing_meta = {}
+            if block.video_generation:
+                video_gen = block.video_generation
+                if hasattr(video_gen, 'meta'):
+                    existing_meta = dict(video_gen.meta) if isinstance(video_gen.meta, dict) else {}
+                elif isinstance(video_gen, dict):
+                    existing_meta = dict(video_gen.get('meta', {})) if isinstance(video_gen.get('meta'), dict) else {}
+            
+            # Ensure request_id is preserved (use the request_id variable if available)
+            if 'request_id' not in existing_meta:
+                if request_id:
+                    existing_meta['request_id'] = request_id
+                elif block.video_generation:
+                    # Try to get from block if request_id variable is None
+                    video_gen = block.video_generation
+                    if hasattr(video_gen, 'meta') and isinstance(video_gen.meta, dict):
+                        existing_meta['request_id'] = video_gen.meta.get('request_id')
+                    elif isinstance(video_gen, dict):
+                        existing_meta['request_id'] = video_gen.get('meta', {}).get('request_id')
+            
             # Update the block's video generation result with error
             from videogen.pipeline.schema import GenerationResult
             block.video_generation = GenerationResult(
                 ok=False,
                 artifacts=[],
-                meta={},
+                meta=existing_meta,  # Preserve existing meta including request_id
                 error=f"Status check error: {e}",
             )
             block.status = "error"
             
             return False
 
+    def _save_block_to_json(self, working_block: WorkingBlock, block: ScriptBlock) -> None:
+        """
+        Save the updated block back to the JSON file.
+        
+        Args:
+            working_block: The WorkingBlock containing output_folder and project_id
+            block: The updated ScriptBlock to save
+        """
+        try:
+            # Construct JSON file path: workdir / "project" / project_id / f"{project_id}.json"
+            output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
+            json_path = output_folder / "project" / working_block.project_id / f"{working_block.project_id}.json"
+            
+            if not json_path.exists():
+                print(f"[TextVideoSilicon] ⚠️ JSON file not found: {json_path}, skipping save")
+                return
+            
+            # Read existing JSON
+            raw = read_json(json_path)
+            
+            # Find and update the block
+            updated = False
+            for i, b in enumerate(raw.get("script", [])):
+                if b.get("id") == block.id:
+                    raw["script"][i] = block.to_dict()
+                    updated = True
+                    break
+            
+            if not updated:
+                print(f"[TextVideoSilicon] ⚠️ Block {block.id} not found in JSON file, skipping save")
+                return
+            
+            # Update timestamp
+            raw["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
+            
+            # Write back to JSON file
+            write_json(json_path, raw)
+            print(f"[TextVideoSilicon] ✅ Saved block {block.id} to JSON: {json_path}")
+            
+        except Exception as e:
+            print(f"[TextVideoSilicon] ⚠️ Error saving block to JSON: {e}")
+            # Don't raise - this is a non-critical operation
+    
     def run(
         self,
         *,

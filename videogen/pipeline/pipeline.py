@@ -25,30 +25,36 @@ def _wait_for_video_completion(workdir: Path, project: str) -> None:
     """Wait for all video downloads to complete using global worker."""
     try:
         from videogen.worker.global_worker import get_global_worker, start_global_worker, wait_for_global_worker_completion
-        from videogen.worker.processors.remotion_processor import process_remotion_working_block
-        from videogen.worker.processors.text_video_silicon_processor import process_text_video_silicon_working_block
-        
-        # Get the global worker and register processors
-        worker = get_global_worker()
-        worker.register_method_processor("remotion_picture", process_remotion_working_block)
-        worker.register_method_processor("text_video", process_text_video_silicon_working_block)
         
         print("\n⏳ Starting global worker to process video generation...")
         print("   → Worker will process WorkingBlocks from SQLite database...")
+        print("   → Worker uses method registry to process tasks automatically...")
         
-        # Start the global worker
-        start_global_worker()
+        # Get the global worker instance
+        worker = get_global_worker()
+        
+        # Check if worker is already running
+        if worker.is_running:
+            print("   → Worker is already running, will wait for completion...")
+        else:
+            # Start the global worker
+            start_global_worker()
+            print("   → Worker started successfully")
         
         # Wait for completion
+        print(f"   → Waiting for all tasks in project '{project}' to complete...")
         success = wait_for_global_worker_completion(project, timeout_seconds=600)  # 10 minutes timeout
         
         if success:
             print("✅ All video generation completed!")
         else:
             print("⚠️  Some video generation tasks may not have completed within timeout")
+            print("   → Check worker status or run worker manually to continue processing")
             
     except Exception as e:
         print(f"⚠️  Error in global worker: {e}")
+        import traceback
+        traceback.print_exc()
         print("   → Check logs for details")
 
 
@@ -196,4 +202,4 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , False)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,False   ,True , True)

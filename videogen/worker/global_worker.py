@@ -51,16 +51,26 @@ class GlobalWorker:
             # Delegate processing to the method
             result = method.process_working_block(working_block)
             
-            if result:
+            if result is True:
                 working_block.status = WorkingBlockStatus.SUCCESS
                 print(f"[GlobalWorker] ✅ Successfully processed {working_block.working_id}")
-            else:
+                working_block.modify_time = datetime.utcnow().isoformat() + "Z"
+                self.dao.update_working_block(working_block)
+                return True
+            elif result is False:
+                # Actual error - mark as ERROR
                 working_block.status = WorkingBlockStatus.ERROR
                 print(f"[GlobalWorker] ❌ Failed to process {working_block.working_id}")
-            
-            working_block.modify_time = datetime.utcnow().isoformat() + "Z"
-            self.dao.update_working_block(working_block)
-            return result
+                working_block.modify_time = datetime.utcnow().isoformat() + "Z"
+                self.dao.update_working_block(working_block)
+                return False
+            else:
+                # result is None - still processing, keep as PENDING
+                print(f"[GlobalWorker] ⏳ Task {working_block.working_id} still processing...")
+                # Update working block with latest block data but keep status as PENDING
+                working_block.modify_time = datetime.utcnow().isoformat() + "Z"
+                self.dao.update_working_block(working_block)
+                return None  # Indicate still processing
             
         except Exception as e:
             print(f"[GlobalWorker] ❌ Error processing {working_block.working_id}: {e}")
