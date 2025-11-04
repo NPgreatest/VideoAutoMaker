@@ -169,7 +169,7 @@ class GlobalWorker:
                 return True
             
             print(f"[GlobalWorker] {len(pending_blocks)} tasks still pending...")
-            time.sleep(2)
+            time.sleep(20)
         
         print(f"[GlobalWorker] ⏰ Timeout waiting for completion")
         return False
@@ -223,7 +223,7 @@ def stop_global_worker():
         _global_worker.stop()
 
 
-def wait_for_global_worker_completion(project_id: str = None, timeout_seconds: int = 300) -> bool:
+def wait_for_global_worker_completion(project_id: str = None, timeout_seconds: int = 3000) -> bool:
     """Wait for the global worker to complete all tasks."""
     worker = get_global_worker()
     return worker.wait_for_completion(project_id, timeout_seconds)

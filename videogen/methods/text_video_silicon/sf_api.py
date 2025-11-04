@@ -9,7 +9,8 @@ import backoff
 from .constants import (
     SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL,
     SILICONFLOW_SUBMIT_URL, SILICONFLOW_STATUS_URL,
-    DEFAULT_HEADERS, REQUEST_TIMEOUT, IMAGE_SIZE, FORMATS
+    DEFAULT_HEADERS, REQUEST_TIMEOUT, IMAGE_SIZE, FORMATS,
+    BACKOFF_MAX_TRIES, BACKOFF_MAX_TIME
 )
 
 def submit_video(prompt: str, image_size: str = None, max_retries: int = 3, base_delay: float = 1.0) -> Optional[str]:
@@ -66,8 +67,8 @@ def submit_video(prompt: str, image_size: str = None, max_retries: int = 3, base
 @backoff.on_exception(
     backoff.expo,
     (requests.exceptions.RequestException, Exception),
-    max_tries=5,
-    max_time=60,
+    max_tries=BACKOFF_MAX_TRIES,
+    max_time=BACKOFF_MAX_TIME,
     jitter=backoff.random_jitter
 )
 def _check_status_request(request_id: str) -> Dict[str, Any]:

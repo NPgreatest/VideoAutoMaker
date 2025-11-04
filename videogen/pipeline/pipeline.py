@@ -1,24 +1,28 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os.path
-import time
+import os
 import random
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 
+import backoff
 from dacite import from_dict
 from dotenv import load_dotenv
 
 from videogen.methods.audio_engine.utils import get_total_audio_duration_ms
 from videogen.methods.registry import create_method
-import videogen.methods  # This ensures all methods are registered
 from videogen.pipeline.schema import ScriptBlock, GenerationResult
 from videogen.pipeline.utils import read_json, write_json
 from videogen.router.decider import decide_generation_method
 
 load_dotenv()
 PROJECT_NAME = os.getenv("PROJECT_NAME")
+
+# Backoff retry configuration from .env
+BACKOFF_MAX_TRIES = int(os.getenv("BACKOFF_MAX_TRIES", "5"))
+BACKOFF_MAX_TIME = int(os.getenv("BACKOFF_MAX_TIME", "120"))
 
 
 def _wait_for_video_completion(workdir: Path, project: str) -> None:
@@ -43,7 +47,7 @@ def _wait_for_video_completion(workdir: Path, project: str) -> None:
         
         # Wait for completion
         print(f"   → Waiting for all tasks in project '{project}' to complete...")
-        success = wait_for_global_worker_completion(project, timeout_seconds=600)  # 10 minutes timeout
+        success = wait_for_global_worker_completion(project, timeout_seconds=6000)  # 100 minutes timeout
         
         if success:
             print("✅ All video generation completed!")
@@ -84,7 +88,12 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
             totalDuration = get_total_audio_duration_ms(fullPath)
 
         if genAudio:
-            audioMethod = create_method('silicon_audio')
+            if block.status == "done" and (
+                    block.audio_generation and 'audio_path' in block.audio_generation.meta and os.path.exists(
+                block.audio_generation.meta['audio_path'])):
+                print("→ Skipped Audio (already done).")
+                continue
+            audioMethod = create_method('audio_engine')
             result = audioMethod.run(
                     prompt=block.prompt,
                     project=project,
@@ -114,50 +123,37 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
                 block.prompt = method.generate_prompt(block.text)
 
             if genMedia:
-
                 if block.status == "done" and (
                         block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(
                         block.video_generation.meta['output_path'])):
                     print("→ Skipped (already done).")
                     continue
-                # Retry logic for API rate limits
-                max_retries = 3
-                base_delay = 2.0
                 
-                for attempt in range(max_retries):
-                    try:
-                        result = method.run(
-                            prompt=block.prompt,
-                            project=project,
-                            target_name=block.id,
-                            text=block.text,
-                            workdir=workdir,
-                            duration_ms=totalDuration,
-                            block=block,
-                        )
-                        break  # Success, exit retry loop
-                    except Exception as e:
-                        if attempt == max_retries - 1:
-                            # Last attempt failed, re-raise the exception
-                            raise e
-                        
-                        # Check if it's a retryable error
-                        error_msg = str(e).lower()
-                        retryable_keywords = [
-                            'rate limit', 'too many requests', '429', 'throttle',
-                            'timeout', 'connection', 'network', 'temporary',
-                            'service unavailable', '502', '503', '504'
-                        ]
-                        
-                        if any(keyword in error_msg for keyword in retryable_keywords):
-                            delay = base_delay * (2 ** attempt) + random.uniform(0, 2)
-                            print(f"⚠️  Retryable error for {block.id}: {e}")
-                            print(f"    Retrying in {delay:.2f}s... (attempt {attempt + 1}/{max_retries})")
-                            time.sleep(delay)
-                        else:
-                            # Not a retryable error, re-raise immediately
-                            print(f"❌ Non-retryable error for {block.id}: {e}")
-                            raise e
+                # Retry logic with backoff for API errors
+                @backoff.on_exception(
+                    backoff.expo,
+                    Exception,
+                    max_tries=BACKOFF_MAX_TRIES,
+                    max_time=BACKOFF_MAX_TIME,
+                    jitter=backoff.random_jitter
+                )
+                def _run_method_with_retry():
+                    """Internal function that runs the method with retry logic."""
+                    return method.run(
+                        prompt=block.prompt,
+                        project=project,
+                        target_name=block.id,
+                        text=block.text,
+                        workdir=workdir,
+                        duration_ms=totalDuration,
+                        block=block,
+                    )
+                
+                try:
+                    result = _run_method_with_retry()
+                except Exception as e:
+                    print(f"❌ Error for {block.id} after all retries: {e}")
+                    raise e
 
                 block.video_generation = GenerationResult(
                     ok=result.get("ok", False),
@@ -194,7 +190,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
         
         # Small delay between video generation requests to prevent rate limiting
         if genMedia and block.decision == "text_video":
-            delay = random.uniform(1.0, 3.0)
+            delay = random.uniform(5.0, 10.0)
             print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
             time.sleep(delay)
 
@@ -206,4 +202,4 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , True)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , False)

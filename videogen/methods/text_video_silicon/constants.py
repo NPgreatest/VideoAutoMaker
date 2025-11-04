@@ -10,6 +10,10 @@ SILICONFLOW_STATUS_URL = "https://api.siliconflow.cn/v1/video/status"
 TEXT_TO_VIDEO_MODEL = "Wan-AI/Wan2.2-T2V-A14B"
 
 REQUEST_TIMEOUT = 30
+
+# Backoff retry configuration from .env
+BACKOFF_MAX_TRIES = int(os.getenv("BACKOFF_MAX_TRIES", "5"))
+BACKOFF_MAX_TIME = int(os.getenv("BACKOFF_MAX_TIME", "120"))
 POLL_INTERVAL_SEC = 8
 MAX_POLLS_PER_TASK = 120
 CSV_FILENAME = "tasks.csv"

@@ -26,15 +26,17 @@ TTS_URL = f"http://{TTS_SERVER_IP}:{TTS_PORT}/tts"
 DEFAULT_TTS_PARAMS = {
     "text_lang": "zh",
     "cut_punc": "。，？",
-    "speed": "1.4",
-    "ref_audio_path": "output/reference.wav",
-    "prompt_text": "就是跟他这个成长的外部环境有关系，和本身的素质也有关系，他是一个",
+    "speed": "1.2",
+    "ref_audio_path": "output/hu/nanguo.wav",
+    "prompt_text": "此为系统自动扣除，不可能不交，我的税后总收入为三万两千两百九十五元",
     "prompt_lang": "zh",
     "text_split_method": "cut5",
     "batch_size": 1,
     "media_type": "wav",
-    "streaming_mode": "true",
+    # "streaming_mode": "true",
     "speed_factor" : 1.2,
+    "top_k" : 15,
+    "temperature" : 0.7,
 }
 
 # ----------------- 工具函数 -----------------
@@ -103,13 +105,6 @@ def _get_voice_content(block: Optional[ScriptBlock]) -> str:
     # 如果没有 voice，则使用 text 字段
     text_content = block.text
     return text_content
-
-def _format_time(seconds: float) -> str:
-    mins, secs = divmod(seconds, 60.0)
-    hours, mins = divmod(int(mins), 60)
-    ms = int(round((seconds - int(seconds)) * 1000))
-    return f"{int(hours):02}:{int(mins):02}:{int(secs)%60:02},{ms:03}"
-
 
 def _has_ffmpeg() -> bool:
     from shutil import which
@@ -197,22 +192,19 @@ def _gen_block_audio(
     character: str = "default",
     emotion: str = "neutral",
     regen: bool = True,
-) -> Tuple[List[Path], str, int]:
+) -> Tuple[Optional[Path], int]:
     """
     为单个 block 生成音频，返回：
-      - wav 文件路径列表（单个文件）
-      - srt 文本
+      - wav 文件路径
       - 总时长（毫秒）
     """
     # 获取 voice 内容，如果没有则使用 text
     voice_content = _get_voice_content(block)
     if not voice_content:
-        return [], "", 0
+        return None, 0
     
     audio_dir = project_dir / "audio"
-    subs_dir = project_dir / "subtitles"
     audio_dir.mkdir(parents=True, exist_ok=True)
-    subs_dir.mkdir(parents=True, exist_ok=True)
 
     overrides = _switch_character_model(cfg, character, emotion)
 
@@ -233,13 +225,7 @@ def _gen_block_audio(
     # duration in ms
     dur_ms = get_total_audio_duration_ms(wav_path)
     
-    # 生成 SRT 内容
-    srt_lines = [
-        f"1\n{_format_time(0)} --> {_format_time(dur_ms / 1000)}\n{voice_content}\n\n"
-    ]
-    srt_text = "".join(srt_lines)
-    
-    return [wav_path], srt_text, dur_ms
+    return wav_path, dur_ms
 
 
 @register_method
@@ -249,9 +235,8 @@ class AudioEngineMethod(BaseMethod):
     - 输入：block（包含 voice 或 text 字段）、prompt（可选）、text（脚本文本；若空则用 prompt）
     - 输出：
         单个 wav：{workdir}/project/{project}/audio/{target_name}.wav
-        字幕 srt：{workdir}/project/{project}/subtitles/{target_name}.srt
     meta:
-        {"total_duration": float, "clips": [<rel paths>], "merged": <rel path>}
+        {"project": str, "target_name": str, "audio_path": str, "total_duration": float}
     """
     NAME = "audio_engine"
     OUTPUT_KIND = "audio"
@@ -295,8 +280,8 @@ class AudioEngineMethod(BaseMethod):
             # 加载配置（如果存在）
             cfg = _load_audio_config(workdir)
 
-            # 生成音频 + srt
-            clips, srt_text, total_sec = _gen_block_audio(
+            # 生成音频
+            wav_path, total_duration_ms = _gen_block_audio(
                 block=block,
                 project_dir=project_dir,
                 base_name=target_name,
@@ -306,38 +291,23 @@ class AudioEngineMethod(BaseMethod):
                 regen=True,   # 如需跳过已存在可改为 False
             )
 
-            if not clips:
+            if not wav_path:
                 return {
                     "ok": False,
                     "artifacts": [],
                     "meta": {},
-                    "error": "Failed to generate audio clips.",
+                    "error": "Failed to generate audio.",
                 }
 
-            # 写入 srt
-            subs_dir = project_dir / "subtitles"
-            srt_path = subs_dir / f"{target_name}.srt"
-            srt_path.write_text(srt_text, encoding="utf-8")
-
-            # 对于单个文件，merged 就是原文件
-            merged_path = clips[0]  # 只有一个文件
-            merged_rel = str(merged_path.relative_to(project_dir))
-
-            # 工件 & meta
-            artifacts: List[str] = [str(srt_path)]
-            artifacts.extend([str(p) for p in clips])
-
+            # 返回格式与 audio_silicon/method.py 保持一致
             meta = {
                 "project": project,
                 "target_name": target_name,
-                "total_duration": total_sec,
-                "clips": [str(p.relative_to(project_dir)) for p in clips],
-                "srt": str(srt_path.relative_to(project_dir)),
-                "merged": merged_rel,
-                "tts_url": TTS_URL,
+                "audio_path": str(wav_path),
+                "total_duration": total_duration_ms,
             }
 
-            return {"ok": True, "artifacts": artifacts, "meta": meta, "error": None}
+            return {"ok": True, "artifacts": [], "meta": meta, "error": None}
 
         except Exception as e:
             return {"ok": False, "artifacts": [], "meta": {}, "error": str(e)}

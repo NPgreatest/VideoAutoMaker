@@ -53,8 +53,9 @@ def get_clip_info(p: Path) -> ClipInfo:
     return ClipInfo(p,w,h,fps,bool(a))
 
 # ========== 阶段 1：收集并补齐 muxed ==========
-def ensure_muxed(project_dir: Path, idx: int, block: Optional[ScriptBlock] = None) -> Optional[Path]:
-    mux = project_dir / f"L{idx}_muxed.mp4"
+def ensure_muxed(project_dir: Path, idx: int, muxed_dir: Path, block: Optional[ScriptBlock] = None) -> Optional[Path]:
+    # Check and generate in muxed_dir
+    mux = muxed_dir / f"L{idx}_muxed.mp4"
     if mux.exists(): return mux
     
     # Check in video/ subdirectory first, then project root
@@ -83,9 +84,10 @@ def ensure_muxed(project_dir: Path, idx: int, block: Optional[ScriptBlock] = Non
                 # Import resize function
                 from videogen.methods.text_video_silicon.utils import resize_video_duration
                 
-                # Resize video to target duration
-                resized_path = project_dir / "_work" / f"L{idx}_resized.mp4"
-                resized_path.parent.mkdir(parents=True, exist_ok=True)
+                # Resize video to target duration (store in _work/resized)
+                resized_dir = project_dir / "_work" / "resized"
+                resized_dir.mkdir(parents=True, exist_ok=True)
+                resized_path = resized_dir / f"L{idx}_resized.mp4"
                 
                 print(f"[resize] Resizing L{idx} to match audio duration ({target_dur_sec:.2f}s)...")
                 new_dur = resize_video_duration(video, resized_path, target_dur_sec)
@@ -198,7 +200,7 @@ def concat_pipeline(project_name:str):
     
     clips=[]
     for i, block in enumerate(blocks, start=1):
-        p=ensure_muxed(project_dir, i, block)
+        p=ensure_muxed(project_dir, i, muxed_dir, block)
         if p: clips.append(p)
     if not clips: raise SystemExit("❌ no muxed clips found")
 
@@ -218,16 +220,28 @@ def concat_pipeline(project_name:str):
 
     out_srt = work / "full.srt"
     generate_srt_from_json(raw, norm, out_srt)
+    # Beautify and refine SRT -> project_name.srt
+    try:
+        from videogen.pipeline.beautify_srt import beautify_srt_at_path
+        refined_srt = work / f"{project_name}.srt"
+        beautify_srt_at_path(out_srt, refined_srt)
+        print(f"[srt] ✅ refined -> {refined_srt}")
+    except Exception as e:
+        print(f"[srt] ⚠️ refine failed: {e}")
     print("✅ pipeline complete!")
 
     # ====== 阶段 6：字幕硬烧录 ======
     burn_out = work / f"{project_name}_burn.mp4"
     font_path = Path("./assets/microhei.ttc").resolve()  # 你已有的字体路径，可替换
 
-    if not out_srt.exists():
+    # Prefer refined SRT if exists
+    refined = work / f"{project_name}.srt"
+    chosen_srt = refined if refined.exists() else out_srt
+
+    if not chosen_srt.exists():
         print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
     else:
-        subtitles_filter = f"subtitles='{out_srt}':force_style='FontName={font_path.stem},FontSize=22," \
+        subtitles_filter = f"subtitles='{chosen_srt}':force_style='FontName={font_path.stem},FontSize=22," \
                            f"PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=1," \
                            f"Outline=2,Shadow=0,MarginV=50,Alignment=2'"
         cmd = [

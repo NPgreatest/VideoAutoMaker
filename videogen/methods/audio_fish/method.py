@@ -15,22 +15,18 @@ from videogen.methods.registry import register_method
 from videogen.pipeline.schema import ScriptBlock
 
 load_dotenv()
-SILICON_API_KEY = os.getenv("SILICONFLOW_API_TOKEN")
-SILICON_TTS_URL = "https://api.siliconflow.cn/v1/audio/speech"
+AUDIO_FISH_API_KEY = os.getenv("AUDIO_FISH_API_KEY")
+AUDIO_FISH_MODEL_ID = os.getenv("AUDIO_FISH_MODEL_ID")
+from fish_audio_sdk import Session, TTSRequest
 
-# Backoff retry configuration from .env
-BACKOFF_MAX_TRIES = int(os.getenv("BACKOFF_MAX_TRIES", "5"))
-BACKOFF_MAX_TIME = int(os.getenv("BACKOFF_MAX_TIME", "120"))
+session = Session(AUDIO_FISH_API_KEY)
 
-# =============== 默认参数 ===============
-DEFAULT_SILICON_PARAMS = {
-    "model": "FunAudioLLM/CosyVoice2-0.5B",
-    "response_format": "wav",
-    "sample_rate": 44100,
-    "speed": 1.0,
-    "gain": 0.0,
-}
 
+"""
+refactor the file, the model id is
+
+
+"""
 
 def _get_voice_content(block: Optional[ScriptBlock], text: str = "", prompt: str = "") -> str:
     """优先从 block 中取 voice/text，其次用 text 或 prompt"""
@@ -50,11 +46,6 @@ def _get_voice_content(block: Optional[ScriptBlock], text: str = "", prompt: str
     jitter=backoff.random_jitter
 )
 def _tts_silicon_request_internal(text: str, out_path: Path, params: Dict[str, Any]) -> None:
-    """Internal function that makes the actual TTS request with retry logic."""
-    headers = {
-        "Authorization": f"Bearer {SILICON_API_KEY}",
-        "Content-Type": "application/json",
-    }
 
     resp = requests.post(SILICON_TTS_URL, headers=headers, json=params, timeout=120)
     
@@ -63,23 +54,23 @@ def _tts_silicon_request_internal(text: str, out_path: Path, params: Dict[str, A
         raise requests.exceptions.HTTPError(
             f'HTTP {resp.status_code}: {resp.text[:200]}'
         )
-    
+
     # Save the audio file
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_bytes(resp.content)
-    print(f"[SiliconTTS] ✅ Audio saved to {out_path}")
+    print(f"[FishTTS] ✅ Audio saved to {out_path}")
 
 
-def _tts_silicon_request(text: str, out_path: Path, params: Dict[str, Any]) -> bool:
+def _tts_silicon_request(text: str, out_path: Path) -> bool:
     """调用 SiliconFlow TTS API 并保存音频，带重试逻辑"""
     try:
-        _tts_silicon_request_internal(text, out_path, params)
+        _tts_silicon_request_internal(text, out_path)
         return True
     except requests.exceptions.RequestException as e:
-        print(f"[SiliconTTS] ❌ Request failed after retries: {e}")
+        print(f"[FishTTS] ❌ Request failed after retries: {e}")
         return False
     except Exception as e:
-        print(f"[SiliconTTS] ❌ Unexpected error after retries: {e}")
+        print(f"[FishTTS] ❌ Unexpected error after retries: {e}")
         return False
 
 
@@ -111,24 +102,11 @@ class SiliconAudioMethod(BaseMethod):
             if not voice_content:
                 return {"ok": False, "artifacts": [], "meta": {}, "error": "No input text provided."}
 
-            # 2️⃣ 获取角色（从 block 或默认）
-            character = getattr(block, "character", None)
-            cached = list_cached_voices()
-            if not character or character not in cached:
-                character = get_default_character()
-                print(f"[SiliconTTS] Using default character: {character}")
-
-            voice_uri = ensure_voice_uri(character)
-
-            # 4️⃣ 构造 payload
-            params = {**DEFAULT_SILICON_PARAMS, "input": voice_content}
-            if voice_uri:
-                params["voice"] = voice_uri
 
             # 5️⃣ 生成音频
             project_dir = workdir / "project" / project
             wav_path = project_dir / "audio" / f"{target_name}.wav"
-            ok = _tts_silicon_request(voice_content, wav_path, params)
+            ok = _tts_silicon_request(voice_content, wav_path)
 
             if not ok:
                 return {"ok": False, "artifacts": [], "meta": {}, "error": "TTS generation failed."}
