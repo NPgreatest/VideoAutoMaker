@@ -1,0 +1,434 @@
+[
+  {
+    "line": 1,
+    "narration": "Today we’ll master the LRU Cache—the classic interview staple and a super useful real-world tool.",
+    "visual": {
+      "type": "image",
+      "content": "DALLE3 prompt: 'Clean, minimal title card: LRU Cache — Least Recently Used. Monochrome tech style, subtle linked-list + hashmap icons, 16:9 layout.'"
+    }
+  },
+  {
+    "line": 2,
+    "narration": "LRU stands for Least Recently Used. When the cache is full, it evicts the item you used the longest time ago.",
+    "visual": {
+      "type": "react",
+      "content": "Show a horizontal row of cards A, B, C fading right; rightmost card labeled 'Least Recent'. A faint clock icon drifts right."
+    }
+  },
+  {
+    "line": 3,
+    "narration": "Mental model: a VIP line where new or recently seen guests move to the front, and the last in line gets kicked out.",
+    "visual": {
+      "type": "image",
+      "content": "DALLE3 prompt: 'Queue outside a minimalist club; guests move to front when called; the last guest is leaving; friendly, schematic style.'"
+    }
+  },
+  {
+    "line": 4,
+    "narration": "The standard LRU design uses two data structures: a hash map and a doubly linked list.",
+    "visual": {
+      "type": "react",
+      "content": "Split screen: left shows HashMap {key→node}; right shows Doubly Linked List Head ⇄ ... ⇄ Tail. Highlight both."
+    }
+  },
+  {
+    "line": 5,
+    "narration": "The hash map gives O(1) access by key. The linked list tracks usage order.",
+    "visual": {
+      "type": "react",
+      "content": "Animate a pointer from map['A'] to node A in the list; show 'O(1)' badge on the map; list has Head on left, Tail on right."
+    }
+  },
+  {
+    "line": 6,
+    "narration": "Most-recently-used sits at the head; least-recently-used sits at the tail.",
+    "visual": {
+      "type": "react",
+      "content": "Add labels: 'MRU (Head)' on the left node and 'LRU (Tail)' on the right node. Subtle glow on head and a gray fade on tail."
+    }
+  },
+  {
+    "line": 7,
+    "narration": "On every access, we move that node to the head to mark it as fresh.",
+    "visual": {
+      "type": "react",
+      "content": "Drag node B from middle to the head with a smooth slide; other nodes shift right."
+    }
+  },
+  {
+    "line": 8,
+    "narration": "When we insert and the cache is full, we pop the tail and remove it from the map.",
+    "visual": {
+      "type": "react",
+      "content": "Tail node slides down and fades; map entry for that key shrinks and disappears with a 'remove' tick."
+    }
+  },
+  {
+    "line": 9,
+    "narration": "Two operations matter: get(key) and put(key, value). Both must run in O(1) time.",
+    "visual": {
+      "type": "react",
+      "content": "Show two buttons 'get' and 'put' with a small 'O(1)' chip above each."
+    }
+  },
+  {
+    "line": 10,
+    "narration": "Let’s detail get: if the key is missing, return -1; otherwise, return value and move the node to head.",
+    "visual": {
+      "type": "react",
+      "content": "Animate search: map miss flashes red → '-1'. Then map hit flashes green → node moves to head."
+    }
+  },
+  {
+    "line": 11,
+    "narration": "Let’s detail put: if the key exists, update value and move to head; if it doesn’t, insert a new node and maybe evict tail.",
+    "visual": {
+      "type": "react",
+      "content": "Two branches: existing key path highlighted; new key path shows creating node, insert at head, then eviction if size > cap."
+    }
+  },
+  {
+    "line": 12,
+    "narration": "We’ll walk through a concrete example soon. First, a quick look at the code shape.",
+    "visual": {
+      "type": "react",
+      "content": "Reveal a CodeSnippet block placeholder with function names: class LRUCache, get, put, moveToHead, removeNode, addNode, popTail."
+    }
+  },
+  {
+    "line": 13,
+    "narration": "Internally, we use helper methods: addNode at head, removeNode anywhere, moveToHead, and popTail.",
+    "visual": {
+      "type": "react",
+      "content": "Highlight four small function cards stacked; each lights up with a quick icon: ➕head, ✂, ⤴, ⬇."
+    }
+  },
+  {
+    "line": 14,
+    "narration": "For fast operations, each list node stores key and value, plus prev and next pointers.",
+    "visual": {
+      "type": "react",
+      "content": "Zoom into a node card: fields {key, value, prev, next}. Arrows connect to neighboring nodes."
+    }
+  },
+  {
+    "line": 15,
+    "narration": "Sentinel nodes make edge cases easy: a dummy head and a dummy tail.",
+    "visual": {
+      "type": "react",
+      "content": "Show 'HEAD' and 'TAIL' sentinels with no key; insertion happens between HEAD and first real node."
+    }
+  },
+  {
+    "line": 16,
+    "narration": "Time for a demo with capacity 3 and requests: A, B, C, A, D, B, E, B.",
+    "visual": {
+      "type": "react",
+      "content": "Top banner shows sequence chips [A,B,C,A,D,B,E,B]; active chip is highlighted."
+    }
+  },
+  {
+    "line": 17,
+    "narration": "Start empty. Put A.",
+    "visual": {
+      "type": "react",
+      "content": "Insert node A at head; map['A'] → node A; list: HEAD ⇄ A ⇄ TAIL."
+    }
+  },
+  {
+    "line": 18,
+    "narration": "Put B.",
+    "visual": {
+      "type": "react",
+      "content": "Insert node B at head; list becomes HEAD ⇄ B ⇄ A ⇄ TAIL; map updated."
+    }
+  },
+  {
+    "line": 19,
+    "narration": "Put C.",
+    "visual": {
+      "type": "react",
+      "content": "Insert node C at head; list: HEAD ⇄ C ⇄ B ⇄ A ⇄ TAIL; capacity is full (3)."
+    }
+  },
+  {
+    "line": 20,
+    "narration": "Access A: it's a hit, move A to head.",
+    "visual": {
+      "type": "react",
+      "content": "Node A slides from near tail to head: HEAD ⇄ A ⇄ C ⇄ B ⇄ TAIL."
+    }
+  },
+  {
+    "line": 21,
+    "narration": "Put D: capacity is full, so evict LRU—currently B at the tail.",
+    "visual": {
+      "type": "react",
+      "content": "Pop tail B, remove map['B']; insert D at head; list: HEAD ⇄ D ⇄ A ⇄ C ⇄ TAIL."
+    }
+  },
+  {
+    "line": 22,
+    "narration": "Access B: miss, since B was evicted.",
+    "visual": {
+      "type": "react",
+      "content": "Sequence chip 'B' turns red 'MISS'; small toast: 'return -1'."
+    }
+  },
+  {
+    "line": 23,
+    "narration": "Put E: evict LRU—now C—then insert E at head.",
+    "visual": {
+      "type": "react",
+      "content": "Pop tail C; insert E at head; list: HEAD ⇄ E ⇄ D ⇄ A ⇄ TAIL."
+    }
+  },
+  {
+    "line": 24,
+    "narration": "Access B again: still a miss; if we put B now, we will evict A.",
+    "visual": {
+      "type": "react",
+      "content": "Show hypothetical: put B → pop tail A → list becomes HEAD ⇄ B ⇄ E ⇄ D ⇄ TAIL."
+    }
+  },
+  {
+    "line": 25,
+    "narration": "This flow shows LRU’s behavior: hits move to the front; misses may trigger tail eviction.",
+    "visual": {
+      "type": "react",
+      "content": "Animate a loop: on hit, node flies to head; on miss+put, tail drops."
+    }
+  },
+  {
+    "line": 26,
+    "narration": "Now let’s outline get in code-like steps.",
+    "visual": {
+      "type": "react",
+      "content": "CodeSnippet: 'if key not in map: return -1; node = map[key]; moveToHead(node); return node.value;'"
+    }
+  },
+  {
+    "line": 27,
+    "narration": "And outline put: update if present; else insert; if size exceeds capacity, pop tail.",
+    "visual": {
+      "type": "react",
+      "content": "CodeSnippet: 'if key in map: node.value = v; moveToHead(node); else: node = new(key,v); map[key]=node; addNode(node); if size>cap: tail=popTail(); delete map[tail.key];'"
+    }
+  },
+  {
+    "line": 28,
+    "narration": "Why O(1)? All operations are pointer rewires and hash lookups—no scanning the list.",
+    "visual": {
+      "type": "react",
+      "content": "Show O(1) badges over 'map lookup', 'removeNode', 'addNode'; no loops icon appears with a crossed-out magnifying glass."
+    }
+  },
+  {
+    "line": 29,
+    "narration": "Space complexity is O(capacity), since at most capacity nodes live in the list and map.",
+    "visual": {
+      "type": "react",
+      "content": "Show a capacity gauge set to 3; list shows exactly 3 real nodes; map shows 3 entries."
+    }
+  },
+  {
+    "line": 30,
+    "narration": "What if you call put on an existing key? We must update the value and move it to head, not create duplicates.",
+    "visual": {
+      "type": "react",
+      "content": "Node X gets its value badge updated (e.g., 5→9) and slides to head; a 'no duplicate node' icon appears."
+    }
+  },
+  {
+    "line": 31,
+    "narration": "What if capacity is zero? Every put evicts immediately; practically, it stores nothing.",
+    "visual": {
+      "type": "react",
+      "content": "Capacity gauge to 0; inserting shows node flickers then disappears; toast: 'Always evicts'."
+    }
+  },
+  {
+    "line": 32,
+    "narration": "Edge cases: null keys, large values, and memory pressure—validate inputs and consider backpressure.",
+    "visual": {
+      "type": "react",
+      "content": "Checklist overlay with toggles: 'validate key', 'limit value size', 'eviction callback'."
+    }
+  },
+  {
+    "line": 33,
+    "narration": "Compare policies: FIFO evicts oldest inserted; LRU evicts least recently used; LFU evicts least frequently used.",
+    "visual": {
+      "type": "react",
+      "content": "Three columns cards: FIFO, LRU, LFU; under LRU, highlight 'recency'; under LFU, 'frequency'."
+    }
+  },
+  {
+    "line": 34,
+    "narration": "LRU fits workloads with temporal locality—recently used items are likely to be used again soon.",
+    "visual": {
+      "type": "react",
+      "content": "Line chart: probability of reuse vs time since last access slopes downward; 'temporal locality' label."
+    }
+  },
+  {
+    "line": 35,
+    "narration": "In operating systems, LRU approximates page replacement to reduce page faults.",
+    "visual": {
+      "type": "image",
+      "content": "DALLE3 prompt: 'OS page frames with new pages entering; least recently used page getting evicted; clean, educational diagram.'"
+    }
+  },
+  {
+    "line": 36,
+    "narration": "In databases and key-value stores, an LRU cache shields hot records from disk latency.",
+    "visual": {
+      "type": "react",
+      "content": "Pipeline sketch: App → LRU Cache → DB. Hits bypass DB; misses go through; hit counter increments."
+    }
+  },
+  {
+    "line": 37,
+    "narration": "In web backends and CDNs, LRU keeps hot responses ready, trimming cold ones automatically.",
+    "visual": {
+      "type": "react",
+      "content": "Server rack icon with 'cache' drawer; popular routes pile at head; old routes slide to tail and drop."
+    }
+  },
+  {
+    "line": 38,
+    "narration": "Implementation shortcuts exist: Python OrderedDict and Java LinkedHashMap support LRU with few lines.",
+    "visual": {
+      "type": "react",
+      "content": "CodeSnippet showing tiny examples: Python OrderedDict(move_to_end, popitem(last=False)); Java LinkedHashMap(accessOrder=true, removeEldestEntry)."
+    }
+  },
+  {
+    "line": 39,
+    "narration": "For high performance, the custom map + doubly list is still the canonical approach.",
+    "visual": {
+      "type": "react",
+      "content": "Return to our CacheViz; show blazing-fast badge and pointer rewires."
+    }
+  },
+  {
+    "line": 40,
+    "narration": "Concurrency note: the basic LRU is not thread-safe; you need locks, sharding, or lock-free structures.",
+    "visual": {
+      "type": "react",
+      "content": "Show a warning icon; then three options cards: 'global lock', 'segment by key hash', 'per-bucket lock'."
+    }
+  },
+  {
+    "line": 41,
+    "narration": "Eviction side effects: you might want a callback to close files or flush metrics when a key gets evicted.",
+    "visual": {
+      "type": "react",
+      "content": "Tail pop triggers a small 'onEvict(key, value)' callback bubble."
+    }
+  },
+  {
+    "line": 42,
+    "narration": "TTL vs LRU: TTL expires by time; LRU expires by inactivity. You can combine both.",
+    "visual": {
+      "type": "react",
+      "content": "Two dials: 'TTL seconds' and 'Capacity'. Item fades on time or evicts on tail."
+    }
+  },
+  {
+    "line": 43,
+    "narration": "Let’s visualize get once more: map lookup, then move node to head, and return the value.",
+    "visual": {
+      "type": "react",
+      "content": "Animated arrows: map['K'] → node; node slides to head; value badge pops as output."
+    }
+  },
+  {
+    "line": 44,
+    "narration": "And visualize put: update-or-insert, then maybe evict tail if over capacity.",
+    "visual": {
+      "type": "react",
+      "content": "Decision diamond: 'exists?' yes→update+move; no→add; if size>cap → pop tail."
+    }
+  },
+  {
+    "line": 45,
+    "narration": "Testing tips: validate hit/miss patterns, eviction order, and updates of existing keys.",
+    "visual": {
+      "type": "react",
+      "content": "Checklist with green checks: 'miss on absent', 'update keeps size', 'evict exact LRU key'."
+    }
+  },
+  {
+    "line": 46,
+    "narration": "Corner cases: capacity one, repeated same key, and alternating two keys.",
+    "visual": {
+      "type": "react",
+      "content": "Three small timelines: cap=1 thrashes; same key moves to head repeatedly; A↔B toggling head."
+    }
+  },
+  {
+    "line": 47,
+    "narration": "Memory overhead comes from pointers and map entries; weigh this against miss penalties.",
+    "visual": {
+      "type": "react",
+      "content": "Scale diagram: 'extra memory' on one side vs 'latency saved' on the other."
+    }
+  },
+  {
+    "line": 48,
+    "narration": "Performance tip: batch operations can amortize locks; sharded caches reduce contention.",
+    "visual": {
+      "type": "react",
+      "content": "Show 4 shards each with its own small LRU; a router directs keys by hash."
+    }
+  },
+  {
+    "line": 49,
+    "narration": "Recap: LRU = HashMap + Doubly List; move on access; evict from tail; O(1) get and put.",
+    "visual": {
+      "type": "react",
+      "content": "All core pieces glow: map, list head/tail, moveToHead, popTail, O(1) badges."
+    }
+  },
+  {
+    "line": 50,
+    "narration": "Now, here’s a 30-second interview-style summary you can say verbatim.",
+    "visual": {
+      "type": "image",
+      "content": "DALLE3 prompt: 'Clean interview card layout with bullet points and a tiny map+list diagram in the corner; modern UI card.'"
+    }
+  },
+  {
+    "line": 51,
+    "narration": "“An LRU Cache evicts the least recently used item. I implement it with a hash map for O(1) lookup and a doubly linked list to track recency.”",
+    "visual": {
+      "type": "react",
+      "content": "InterviewCard component with two bullets; small diagram Head⇄…⇄Tail beside them."
+    }
+  },
+  {
+    "line": 52,
+    "narration": "“get(key) returns -1 if missing; otherwise it moves the node to the head and returns the value.”",
+    "visual": {
+      "type": "react",
+      "content": "In the card, highlight 'get' flow: map hit → moveToHead → value."
+    }
+  },
+  {
+    "line": 53,
+    "narration": "“put(key, value) updates if present or inserts a new node; if we exceed capacity, we pop the tail and remove it from the map.”",
+    "visual": {
+      "type": "react",
+      "content": "In the card, highlight 'put' flow: update-or-insert → size check → pop tail."
+    }
+  },
+  {
+    "line": 54,
+    "narration": "“Both operations are O(1). This design works well anywhere recent items are likely to be reused.”",
+    "visual": {
+      "type": "react",
+      "content": "Final badge row: O(1) • predictable eviction • great for temporal locality. Small thumbs-up icon."
+    }
+  }
+]

@@ -14,17 +14,8 @@ class MediaProcessor:
         self.reGen_image = reGen_image
         self.theme = theme
 
-        # 优先加载 processed.json，如果不存在则加载 input.json
-        # processed_path = os.path.join(self.project_path, "processed.json")
         input_path = os.path.join(self.project_path, "input.json")
         self.data = load_json(input_path)
-
-        # if os.path.exists(processed_path):
-        #     print(f"📂 Loading existing progress from: {processed_path}")
-        #     self.data = load_json(processed_path)
-        # else:
-        #     print(f"📂 No processed.json found, loading from: {input_path}")
-        #     self.data = load_json(input_path)
 
 
     def process_all(self):

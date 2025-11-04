@@ -12,8 +12,6 @@ LLM_API_HEADERS = {
 }
 
 
-
-
 def ask_llm_decision(script_text, theme):
     prompt = (
         "Given the following script, decide whether we should:\n"

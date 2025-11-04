@@ -54,7 +54,6 @@ def generate_video_from_image_file(prompt, image_path, model="Wan-AI/Wan2.1-I2V-
         "seed":seed
     }
 
-
     try:
         response = requests.post(SILICONFLOW_SUBMIT_URL, json=payload, headers=HEADERS)
         response.raise_for_status()
