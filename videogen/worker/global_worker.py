@@ -22,8 +22,8 @@ class GlobalWorker:
         self.dao = WorkingBlockDAO(db_path)
         self.is_running = False
         self.thread = None
-        self.poll_interval = 5.0  # seconds
-        self.max_polls_per_task = 60  # 5 minutes at 5s intervals
+        self.poll_interval = 20.0
+        self.max_polls_per_task = 600
         
     def _process_working_block(self, working_block: WorkingBlock) -> bool:
         """Process a single WorkingBlock by delegating to the appropriate method."""
@@ -154,7 +154,7 @@ class GlobalWorker:
             self.thread.join(timeout=10)
         print("[GlobalWorker] Worker stopped")
     
-    def wait_for_completion(self, project_id: str = None, timeout_seconds: int = 300):
+    def wait_for_completion(self, project_id: str = None, timeout_seconds: int = 3000):
         """Wait for all pending WorkingBlocks to complete."""
         start_time = time.time()
         print(f"[GlobalWorker] Waiting for completion (timeout: {timeout_seconds}s)...")

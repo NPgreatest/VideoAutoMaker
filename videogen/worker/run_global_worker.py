@@ -5,13 +5,18 @@ This script starts the global worker to process pending WorkingBlocks in the dat
 """
 
 import sys
+import os
 import time
 import signal
 from pathlib import Path
 
 # Add the project root to the Python path
-project_root = Path(__file__).parent
+# __file__ is videogen/worker/run_global_worker.py, so we need to go up 2 levels
+project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
+
+# Change to project root directory to ensure correct database path resolution
+os.chdir(project_root)
 
 from videogen.worker.global_worker import get_global_worker, start_global_worker, stop_global_worker
 from videogen.dao.working_block_dao import WorkingBlockDAO

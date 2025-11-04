@@ -53,7 +53,7 @@ def get_clip_info(p: Path) -> ClipInfo:
     return ClipInfo(p,w,h,fps,bool(a))
 
 # ========== 阶段 1：收集并补齐 muxed ==========
-def ensure_muxed(project_dir: Path, idx: int) -> Optional[Path]:
+def ensure_muxed(project_dir: Path, idx: int, block: Optional[ScriptBlock] = None) -> Optional[Path]:
     mux = project_dir / f"L{idx}_muxed.mp4"
     if mux.exists(): return mux
     
@@ -65,9 +65,40 @@ def ensure_muxed(project_dir: Path, idx: int) -> Optional[Path]:
     audio = project_dir / f"audio/L{idx}.wav"
     
     if video.exists() and audio.exists():
+        # Resize video to match audio duration if block metadata is available
+        resized_video = video
+        if block and block.audio_generation:
+            audio_gen = block.audio_generation
+            if hasattr(audio_gen, 'ok') and audio_gen.ok:
+                # It's a GenerationResult object
+                target_dur_ms = audio_gen.meta.get('total_duration', None)
+            elif isinstance(audio_gen, dict) and audio_gen.get('ok', False):
+                # It's a dictionary
+                target_dur_ms = audio_gen.get('meta', {}).get('total_duration', None)
+            else:
+                target_dur_ms = None
+            
+            if target_dur_ms:
+                target_dur_sec = target_dur_ms / 1000.0
+                # Import resize function
+                from videogen.methods.text_video_silicon.utils import resize_video_duration
+                
+                # Resize video to target duration
+                resized_path = project_dir / "_work" / f"L{idx}_resized.mp4"
+                resized_path.parent.mkdir(parents=True, exist_ok=True)
+                
+                print(f"[resize] Resizing L{idx} to match audio duration ({target_dur_sec:.2f}s)...")
+                new_dur = resize_video_duration(video, resized_path, target_dur_sec)
+                
+                if new_dur > 0:
+                    resized_video = resized_path
+                    print(f"[resize] ✅ Resized to {new_dur:.2f}s")
+                else:
+                    print(f"[resize] ⚠️ Resize failed, using original video")
+        
         print(f"[mux] Generating L{idx}_muxed.mp4 ...")
         ok = run([
-            "ffmpeg","-y","-i",str(video),"-i",str(audio),
+            "ffmpeg","-y","-i",str(resized_video),"-i",str(audio),
             "-c:v","copy","-c:a","aac","-shortest",str(mux)
         ])
         return mux if ok else None
@@ -162,9 +193,12 @@ def concat_pipeline(project_name:str):
     muxed_dir=work/"muxed"; muxed_dir.mkdir(exist_ok=True)
     norm_dir=work/"norm"; norm_dir.mkdir(exist_ok=True)
 
+    # Parse blocks for metadata access
+    blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
+    
     clips=[]
-    for i,_ in enumerate(raw["script"],start=1):
-        p=ensure_muxed(project_dir,i)
+    for i, block in enumerate(blocks, start=1):
+        p=ensure_muxed(project_dir, i, block)
         if p: clips.append(p)
     if not clips: raise SystemExit("❌ no muxed clips found")
 

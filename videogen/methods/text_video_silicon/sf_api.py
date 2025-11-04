@@ -4,6 +4,7 @@ from typing import Any, Dict, Optional
 import requests
 import time
 import random
+import backoff
 
 from .constants import (
     SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL,
@@ -62,28 +63,41 @@ def submit_video(prompt: str, image_size: str = None, max_retries: int = 3, base
     
     return None
 
+@backoff.on_exception(
+    backoff.expo,
+    (requests.exceptions.RequestException, Exception),
+    max_tries=5,
+    max_time=60,
+    jitter=backoff.random_jitter
+)
+def _check_status_request(request_id: str) -> Dict[str, Any]:
+    """Internal function that makes the actual request with retry logic."""
+    r = requests.post(
+        SILICONFLOW_STATUS_URL,
+        headers=DEFAULT_HEADERS,
+        json={"requestId": request_id},
+        timeout=REQUEST_TIMEOUT,
+    )
+    
+    # Check HTTP status code
+    if r.status_code != 200:
+        raise requests.exceptions.HTTPError(
+            f'HTTP {r.status_code}: response status code is not 200. Response: {r.text[:200]}'
+        )
+    
+    response_data = r.json()
+    return response_data
+
 def check_status(request_id: str) -> Dict[str, Any]:
     if not SILICONFLOW_API_TOKEN:
         return {"status": "Error", "error": "Missing API token"}
     try:
-        r = requests.post(
-            SILICONFLOW_STATUS_URL,
-            headers=DEFAULT_HEADERS,
-            json={"requestId": request_id},
-            timeout=REQUEST_TIMEOUT,
-        )
-        
-        # Check HTTP status code
-        if r.status_code != 200:
-            raise Exception('response status code is not 200')
-
-        response_data = r.json()
+        response_data = _check_status_request(request_id)
         return response_data
-        
     except requests.exceptions.RequestException as e:
-        return {"status": "Error", "error": f"Request failed: {str(e)}"}
+        return {"status": "Error", "error": f"Request failed after retries: {str(e)}"}
     except Exception as e:
-        return {"status": "Error", "error": f"Unexpected error: {str(e)}"}
+        return {"status": "Error", "error": f"Unexpected error after retries: {str(e)}"}
 
 def download_to(url: str, target_path: Path) -> None:
     target_path.parent.mkdir(parents=True, exist_ok=True)

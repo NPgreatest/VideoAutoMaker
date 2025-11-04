@@ -104,18 +104,22 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
             else:
                 raise Exception(f"⚠️  Audio generation failed or missing total_duration for {block.id}")
 
-        if block.status == "done" and (block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(block.video_generation.meta['output_path'])):
-            print("→ Skipped (already done).")
-            continue
 
         # --- Video Part ---
         try:
             method = create_method(block.decision)
 
+            # prompt part
             if not block.prompt:
                 block.prompt = method.generate_prompt(block.text)
 
             if genMedia:
+
+                if block.status == "done" and (
+                        block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(
+                        block.video_generation.meta['output_path'])):
+                    print("→ Skipped (already done).")
+                    continue
                 # Retry logic for API rate limits
                 max_retries = 3
                 base_delay = 2.0
@@ -202,4 +206,4 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,False   ,True , True)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , True)

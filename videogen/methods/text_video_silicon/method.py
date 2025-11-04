@@ -12,7 +12,6 @@ from videogen.methods.text_video_silicon.constants import (
     SILICONFLOW_API_TOKEN, TEXT_TO_VIDEO_MODEL, STATUS_SUBMITTED, NON_TERMINAL, STATUS_ERROR, STATUS_SUCCEED
 )
 from .sf_api import submit_video, download_to, check_status
-from .utils import resize_video_duration
 from videogen.llm_engine import get_engine
 from videogen.pipeline.schema import WorkingBlock, ScriptBlock
 from videogen.pipeline.utils import read_json, write_json
@@ -113,48 +112,39 @@ class TextVideoSilicon(BaseMethod):
                 video_dir = project_dir / "video"
                 video_dir.mkdir(parents=True, exist_ok=True)
                 
-                final_mp4 = video_dir / f"{block.id}.mp4"
-                raw_mp4 = video_dir / f"{block.id}_raw.mp4"
+                main_mp4 = video_dir / f"{block.id}.mp4"
                 
                 try:
-                    # Download raw (always keep this)
-                    download_to(url, raw_mp4)
-                    print(f"[TextVideoSilicon] Saved raw file: {raw_mp4}")
+                    # Download video directly to main file
+                    download_to(url, main_mp4)
+                    print(f"[TextVideoSilicon] Saved video file: {main_mp4}")
                     
-                    # Resize to target duration, but keep raw
-                    target_dur = None
-                    if block.audio_generation:
-                        audio_gen = block.audio_generation
-                        if hasattr(audio_gen, 'ok') and audio_gen.ok:
-                            # It's a GenerationResult object
-                            target_dur = audio_gen.meta.get('total_duration', 5.0) / 1000.0
-                        elif isinstance(audio_gen, dict) and audio_gen.get('ok', False):
-                            # It's a dictionary
-                            target_dur = audio_gen.get('meta', {}).get('total_duration', 5.0) / 1000.0
-                        else:
-                            target_dur = 5.0
-                    else:
-                        target_dur = 5.0
-                    
-                    new_dur = resize_video_duration(raw_mp4, final_mp4, target_dur)
-                    
-                    if new_dur > 0:
-                        print(f"[TextVideoSilicon] Resized to {new_dur:.2f}s → {final_mp4.name}")
-                    else:
-                        print(f"[TextVideoSilicon] ⚠️ Resize failed, keeping raw as source only")
+                    # Get original video duration for metadata
+                    import subprocess
+                    cmd = [
+                        "ffprobe", "-v", "error",
+                        "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1",
+                        str(main_mp4)
+                    ]
+                    result = subprocess.run(cmd, capture_output=True, text=True)
+                    try:
+                        original_dur = float(result.stdout.strip())
+                    except Exception:
+                        original_dur = 0.0
                     
                     # Update the block's video generation result
                     from videogen.pipeline.schema import GenerationResult
                     block.video_generation = GenerationResult(
                         ok=True,
-                        artifacts=[str(final_mp4 if final_mp4.exists() else raw_mp4)],
+                        artifacts=[str(main_mp4)],
                         meta={
                             "request_id": request_id,
                             "model": TEXT_TO_VIDEO_MODEL,
                             "prompt": block.prompt,
                             "source_url": url,
-                            "duration": str(target_dur),
-                            "output_path": str(final_mp4 if final_mp4.exists() else raw_mp4),
+                            "duration": str(original_dur),
+                            "output_path": str(main_mp4),
                             "finished": time.time(),
                         },
                         error=None,
@@ -167,12 +157,12 @@ class TextVideoSilicon(BaseMethod):
                         "model": TEXT_TO_VIDEO_MODEL,
                         "prompt": block.prompt,
                         "source_url": url,
-                        "duration": str(target_dur),
-                        "output_path": str(final_mp4 if final_mp4.exists() else raw_mp4),
+                        "duration": str(original_dur),
+                        "output_path": str(main_mp4),
                         "created": time.time(),
                         "finished": time.time(),
                     }
-                    meta_path = final_mp4.with_suffix(".meta.json")
+                    meta_path = main_mp4.with_suffix(".meta.json")
                     with open(meta_path, "w", encoding="utf-8") as f:
                         json.dump(meta, f, ensure_ascii=False, indent=2)
                     print(f"[TextVideoSilicon] Meta saved: {meta_path}")
@@ -204,7 +194,7 @@ class TextVideoSilicon(BaseMethod):
                         ok=False,
                         artifacts=[],
                         meta=existing_meta,  # Preserve existing meta including request_id
-                        error=f"Download/Resize error: {e}",
+                        error=f"Download error: {e}",
                     )
                     block.status = "error"
                     
