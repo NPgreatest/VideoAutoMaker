@@ -142,8 +142,8 @@ def beautify_text_block(text_block: str) -> str:
 
     # Remove all punctuation and non Chinese/English letters in the final output
     def keep_cjk_english(s: str) -> str:
-        # keep only A-Za-z and \u4e00-\u9fff
-        return re.sub(r"[^A-Za-z\u4e00-\u9fff]", "", s)
+        # keep only A-Za-z, 0-9 and \u4e00-\u9fff
+        return re.sub(r"[^A-Za-z0-9\u4e00-\u9fff]", "", s)
 
     cleaned = [keep_cjk_english(l) for l in lines]
     cleaned = [l for l in cleaned if l]

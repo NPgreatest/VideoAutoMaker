@@ -267,6 +267,21 @@ image file name. `remotion_animation/method.py` will read the image file and inj
 folder, and the method.py will inject that image file into the video, delete the image file inside `public/assets` the video is rendered.
 
 
+## Add the feature of entire runnable pipeline
+Finish the generate.py in /videogen/cli, the entire pipeline include:
+1. call the pipeline, try to generate all resources
+2. Validate the result, if everything is passed, then goto concat step
+2.1. if some job failed, re-run the pipeline again, each block have a retry times,
+if it exceed the max_retry(add it in the .env file), then return error and stop the entire pipeline, mark
+the pipeline is failed in the json file, later if another program call pipeline it will just skip and return.
+3. Concat the video, if everything is passed, then goto the end
+
+You need to polish the validation framework, right now we only care about the json_validator,
+We need to verify each block's result ok is true, and the meta.output_path and 
+meta.audio_path exist, and the file exists.
+
+
+
 # test
 ## test pipeline
 If I want to test the entire pipeine, help me mock every thing that need the API, 

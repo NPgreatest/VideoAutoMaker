@@ -25,7 +25,7 @@ TTS_URL = f"http://{TTS_SERVER_IP}:{TTS_PORT}/tts"
 # 默认参数（每次请求会 copy 一份再覆盖）
 DEFAULT_TTS_PARAMS = {
     "text_lang": "zh",
-    "cut_punc": "。，？",
+    "cut_punc": "。，、？；\"",
     "speed": "1.2",
     "ref_audio_path": "output/hu/nanguo.wav",
     "prompt_text": "此为系统自动扣除，不可能不交，我的税后总收入为三万两千两百九十五元",
@@ -34,6 +34,7 @@ DEFAULT_TTS_PARAMS = {
     "batch_size": 1,
     "media_type": "wav",
     # "streaming_mode": "true",
+    "fragment_interval": 0.1,
     "speed_factor" : 1.2,
     "top_k" : 15,
     "temperature" : 0.7,

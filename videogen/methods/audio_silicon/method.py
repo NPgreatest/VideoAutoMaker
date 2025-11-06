@@ -139,7 +139,7 @@ class SiliconAudioMethod(BaseMethod):
                 info = mediainfo(str(wav_path))
                 total_duration = float(info.get('duration', 0)) * 1000  # 转换为毫秒
             except Exception as e:
-                print(f"[SiliconTTS] Warning: Could not get audio duration: {e}")
+                print(f"[FishTTS] Warning: Could not get audio duration: {e}")
                 total_duration = 0
 
             # ✅ 成功返回
@@ -148,7 +148,7 @@ class SiliconAudioMethod(BaseMethod):
                 "target_name": target_name,
                 "character": character,
                 "voice_uri": voice_uri,
-                "audio_path": str(wav_path.relative_to(project_dir)),
+                "audio_path": str(wav_path),
                 "total_duration": total_duration,
             }
             return {"ok": True, "artifacts": [str(wav_path)], "meta": meta, "error": None}

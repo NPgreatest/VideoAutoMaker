@@ -18,16 +18,14 @@ PROJECT_NAME = os.getenv("PROJECT_NAME")
 def main():
     """Main CLI entry point - hardcoded for debugging."""
     
-    GEN_DECISION = True
     GEN_AUDIO = True
-    GEN_PROMPT = True
     GEN_MEDIA = True
 
 
-    print(f"📋 Options: Decision={GEN_DECISION}, Audio={GEN_AUDIO}, Prompt={GEN_PROMPT}, Media={GEN_MEDIA}")
+    print(f"📋 Options: Audio={GEN_AUDIO}, Media={GEN_MEDIA}")
 
     try:
-        generate_video(PROJECT_NAME, GEN_DECISION, GEN_AUDIO, GEN_PROMPT, GEN_MEDIA)
+        generate_video(PROJECT_NAME, GEN_AUDIO, GEN_MEDIA)
     except KeyboardInterrupt:
         print("\n⚠️  Generation interrupted by user")
     except Exception as e:

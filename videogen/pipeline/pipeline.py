@@ -62,7 +62,7 @@ def _wait_for_video_completion(workdir: Path, project: str) -> None:
         print("   → Check logs for details")
 
 
-def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio = False, genPrompt = False, genMedia = False) -> None:
+def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = False) -> None:
     print(f"🚀 Starting pipeline for: {input_path}")
     raw = read_json(input_path)
 
@@ -72,12 +72,9 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
     for block in blocks:
         print(f"\n🎞️  Processing {block.id} | status={block.status}")
 
-        # --- 决策阶段 ---
-        if genDecision and (not block.decision or block.status == "regenerate"):
-            method_name = decide_generation_method(block.text, project)
-            block.decision = method_name
-            print(f"→ Decided method: {method_name}")
-
+        # right now just use text_video
+        if not block.decision:
+            block.decision = "text_video"
 
         # process Audio part
         totalDuration = None # duration is based from audio
@@ -87,15 +84,13 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
             fullPath = project_dir / audioPath
             totalDuration = get_total_audio_duration_ms(fullPath)
 
-        if genAudio:
-            if block.status == "done" and (
+        # if we want audio and not finished
+        if genAudio and not (block.status == "done" and (
                     block.audio_generation and 'audio_path' in block.audio_generation.meta and os.path.exists(
-                block.audio_generation.meta['audio_path'])):
-                print("→ Skipped Audio (already done).")
-                continue
-            audioMethod = create_method('audio_engine')
-            result = audioMethod.run(
-                    prompt=block.prompt,
+                block.audio_generation.meta['audio_path']))):
+
+            audio_method = create_method('fish_audio')
+            result = audio_method.run(
                     project=project,
                     target_name=block.id,
                     text=block.text,
@@ -115,67 +110,58 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
 
         # --- Video Part ---
-        try:
-            method = create_method(block.decision)
+        method = create_method(block.decision)
 
-            # prompt part
-            if not block.prompt:
-                block.prompt = method.generate_prompt(block.text)
+        # prompt part
+        if not block.prompt:
+            block.prompt = method.generate_prompt(block.text)
 
-            if genMedia:
-                if block.status == "done" and (
+        if genMedia and not(block.status == "done" and (
                         block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(
-                        block.video_generation.meta['output_path'])):
-                    print("→ Skipped (already done).")
-                    continue
-                
-                # Retry logic with backoff for API errors
-                @backoff.on_exception(
+                        block.video_generation.meta['output_path']))):
+
+            # Retry logic with backoff for API errors
+            @backoff.on_exception(
                     backoff.expo,
                     Exception,
                     max_tries=BACKOFF_MAX_TRIES,
                     max_time=BACKOFF_MAX_TIME,
                     jitter=backoff.random_jitter
-                )
-                def _run_method_with_retry():
-                    """Internal function that runs the method with retry logic."""
-                    return method.run(
-                        prompt=block.prompt,
-                        project=project,
-                        target_name=block.id,
-                        text=block.text,
-                        workdir=workdir,
-                        duration_ms=totalDuration,
-                        block=block,
-                    )
-                
-                try:
-                    result = _run_method_with_retry()
-                except Exception as e:
-                    print(f"❌ Error for {block.id} after all retries: {e}")
-                    raise e
-
-                block.video_generation = GenerationResult(
-                    ok=result.get("ok", False),
-                    artifacts=result.get("artifacts", []),
-                    meta=result.get("meta", {}),
-                    error=result.get("error"),
-                )
-                
-                # For both methods, mark as "submitted" if successful submission
-                if block.video_generation.ok:
-                    block.status = "submitted"  # Will be updated to "done" by worker
-                else:
-                    block.status = "error"
-
-        except Exception as e:
-            block.video_generation = GenerationResult(
-                ok=False,
-                artifacts=[],
-                meta={},
-                error=str(e),
             )
-            block.status = "error"
+            def _run_method_with_retry():
+                """Internal function that runs the method with retry logic."""
+                return method.run(
+                    project=project,
+                    target_name=block.id,
+                    text=block.text,
+                    workdir=workdir,
+                    duration_ms=totalDuration,
+                    block=block,
+                )
+                
+            try:
+                result = _run_method_with_retry()
+                if genMedia and block.decision == "text_video":
+                    delay = random.uniform(5.0, 10.0)
+                    print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
+                    time.sleep(delay)
+            except Exception as e:
+                print(f"❌ Error for {block.id} after all retries: {e}")
+                raise e
+
+            block.video_generation = GenerationResult(
+                ok=result.get("ok", False),
+                artifacts=result.get("artifacts", []),
+                meta=result.get("meta", {}),
+                error=result.get("error"),
+            )
+                
+            # For both methods, mark as "submitted" if successful submission
+            if block.video_generation.ok:
+                block.status = "submitted"  # Will be updated to "done" by worker
+            else:
+                block.status = "error"
+
 
         # --- 写回更新 ---
         raw["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
@@ -188,11 +174,7 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
         write_json(input_path, raw)
         print(f"→ Updated JSON ({block.status})")
         
-        # Small delay between video generation requests to prevent rate limiting
-        if genMedia and block.decision == "text_video":
-            delay = random.uniform(5.0, 10.0)
-            print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
-            time.sleep(delay)
+
 
     print("\n✅ Pipeline finished.")
     
@@ -202,4 +184,5 @@ def run_pipeline(input_path: Path, workdir: Path,genDecision = False, genAudio =
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."), True,True   ,True , False)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."),
+                 True, True)

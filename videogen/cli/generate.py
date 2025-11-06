@@ -13,16 +13,13 @@ from videogen.pipeline.pipeline import run_pipeline
 from videogen.pipeline.concat import concat_pipeline
 
 # ========== Main Function ==========
-def generate_video(project_name: str, genDecision: bool = True, genAudio: bool = False, 
-                   genPrompt: bool = True, genMedia: bool = True):
+def generate_video(project_name: str, genAudio: bool = False,  genMedia: bool = True):
     """
     Generate complete video from start to finish.
     
     Args:
         project_name: Name of the project
-        genDecision: Whether to generate method decisions
         genAudio: Whether to generate audio
-        genPrompt: Whether to generate prompts
         genMedia: Whether to generate media (videos)
     """
     print("🎬 Starting Complete Video Generation Pipeline")
@@ -39,7 +36,7 @@ def generate_video(project_name: str, genDecision: bool = True, genAudio: bool =
         raise SystemExit(f"❌ Project file not found: {input_path}")
     
     # Use existing pipeline function
-    run_pipeline(input_path, workdir, genDecision, genAudio, genPrompt, genMedia)
+    run_pipeline(input_path, workdir, genAudio, genMedia)
     
     # Step 2: Run concatenation pipeline
     print("\n🔗 STEP 2: Video Concatenation Pipeline")

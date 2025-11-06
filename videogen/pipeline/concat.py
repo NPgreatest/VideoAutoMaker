@@ -9,6 +9,7 @@ from dacite import from_dict
 from dotenv import load_dotenv
 from videogen.pipeline.schema import ScriptBlock
 from videogen.pipeline.utils import read_json, write_json
+from videogen.pipeline.add_picture import add_picture_overlay
 
 # ========== 配置项 ==========
 CRF = "14"             # 画质（越低越好）
@@ -16,6 +17,10 @@ PRESET = "slow"
 AUDIO_RATE = "44100"
 AUDIO_BR = "192k"
 PIX_FMT = "yuv420p"
+
+load_dotenv()
+BGM_PATH = os.getenv("BGM_PATH")
+
 
 # ========== 辅助函数 ==========
 def run(cmd: List[str]) -> bool:
@@ -230,7 +235,16 @@ def concat_pipeline(project_name:str):
         print(f"[srt] ⚠️ refine failed: {e}")
     print("✅ pipeline complete!")
 
-    # ====== 阶段 6：字幕硬烧录 ======
+    # ====== 阶段 6：添加图片叠加 ======
+    final_with_picture = work / "final_with_picture.mp4"
+    
+    if not add_picture_overlay(final, final_with_picture):
+        print("[picture] ⚠️ Failed to add picture overlay, using original video for subtitle burn-in.")
+        final_with_picture = final  # 如果失败，使用原视频
+    else:
+        final = final_with_picture  # 更新 final 为带图片的视频，用于后续字幕烧录
+
+    # ====== 阶段 7：字幕硬烧录（在图片层之上） ======
     burn_out = work / f"{project_name}_burn.mp4"
     font_path = Path("./assets/microhei.ttc").resolve()  # 你已有的字体路径，可替换
 
@@ -241,12 +255,12 @@ def concat_pipeline(project_name:str):
     if not chosen_srt.exists():
         print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
     else:
-        subtitles_filter = f"subtitles='{chosen_srt}':force_style='FontName={font_path.stem},FontSize=22," \
+        subtitles_filter = f"subtitles='{chosen_srt}':force_style='FontName={font_path.stem},FontSize=13," \
                            f"PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=1," \
-                           f"Outline=2,Shadow=0,MarginV=50,Alignment=2'"
+                           f"Outline=2,Shadow=0,MarginV=50,Alignment=8'"
         cmd = [
             "ffmpeg", "-y",
-            "-i", str(final),
+            "-i", str(final),  # 使用带图片的视频（如果有）
             "-vf", subtitles_filter,
             "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
             "-pix_fmt", PIX_FMT,
@@ -259,6 +273,61 @@ def concat_pipeline(project_name:str):
             print(f"[burn] ✅ Subtitle burned video saved to: {burn_out}")
         else:
             print(f"[burn] ❌ Burn-in failed.")
+            burn_out = final  # 如果烧录失败，使用之前的视频
+
+    # ====== 阶段 8：添加背景音乐 ======
+    # Determine input video: prefer burned subtitles, fallback to final
+    input_video = burn_out if burn_out.exists() else final
+    
+    bgm_path = Path(BGM_PATH)
+    
+    if not bgm_path.exists():
+        print(f"[bgm] ⚠️ BGM file not found: {bgm_path}, skipping BGM addition.")
+    else:
+        final_with_bgm = work / f"{project_name}_final.mp4"
+        video_dur = get_duration(input_video)
+        bgm_dur = get_duration(bgm_path)
+        
+        print(f"[bgm] 🎵 Adding background music...")
+        print(f"[bgm] Video duration: {video_dur:.2f}s, BGM duration: {bgm_dur:.2f}s")
+        
+        # Mix audio: video audio + BGM (BGM volume at 0.3, video audio at 1.0)
+        # If BGM is shorter than video, loop it
+        if bgm_dur < video_dur:
+            # Loop BGM to match video duration
+            filter_complex = (
+                f"[1:a]aloop=loop=-1:size=2e+09,atrim=0:{video_dur},volume=0.3[bgm];"
+                f"[0:a]volume=1.0[va];"
+                f"[va][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            )
+        else:
+            # BGM is longer, trim it to video duration
+            filter_complex = (
+                f"[1:a]atrim=0:{video_dur},volume=0.3[bgm];"
+                f"[0:a]volume=1.0[va];"
+                f"[va][bgm]amix=inputs=2:duration=first:dropout_transition=2[aout]"
+            )
+        
+        cmd = [
+            "ffmpeg", "-y",
+            "-i", str(input_video),
+            "-i", str(bgm_path),
+            "-filter_complex", filter_complex,
+            "-map", "0:v",
+            "-map", "[aout]",
+            "-c:v", "copy",
+            "-c:a", "aac",
+            "-ar", AUDIO_RATE,
+            "-b:a", AUDIO_BR,
+            "-shortest",
+            str(final_with_bgm)
+        ]
+        
+        ok = run(cmd)
+        if ok:
+            print(f"[bgm] ✅ Final video with BGM saved to: {final_with_bgm}")
+        else:
+            print(f"[bgm] ❌ BGM mixing failed.")
 
 
 # ========== 入口 ==========
