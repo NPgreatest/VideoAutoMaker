@@ -282,6 +282,12 @@ meta.audio_path exist, and the file exists.
 
 
 
+## Project Structure refine
+Currently the {project_name}_burn.mp4 and {project_name}_final.mp4 are in the _work
+folder, but they are final videos, re-name them to the {project_name}_nobgm.mp4 and
+{project_name}.mp4, store outside the _work folder, just flat in the project folder,
+and after the concat job, delete the _work folder.
+
 # test
 ## test pipeline
 If I want to test the entire pipeine, help me mock every thing that need the API, 

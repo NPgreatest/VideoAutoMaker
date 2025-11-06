@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import os, json, re, subprocess
+import os, json, re, subprocess, shutil
 from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass
@@ -20,6 +20,7 @@ PIX_FMT = "yuv420p"
 
 load_dotenv()
 BGM_PATH = os.getenv("BGM_PATH")
+FONT_PATH = os.getenv("FONT_PATH")
 
 
 # ========== 辅助函数 ==========
@@ -245,8 +246,9 @@ def concat_pipeline(project_name:str):
         final = final_with_picture  # 更新 final 为带图片的视频，用于后续字幕烧录
 
     # ====== 阶段 7：字幕硬烧录（在图片层之上） ======
-    burn_out = work / f"{project_name}_burn.mp4"
-    font_path = Path("./assets/microhei.ttc").resolve()  # 你已有的字体路径，可替换
+    # 按新规范：无 BGM 的最终成品输出到项目根目录，命名为 {project_name}_nobgm.mp4
+    burn_out = project_dir / f"{project_name}_nobgm.mp4"
+    font_path = Path(FONT_PATH).resolve()  # 你已有的字体路径，可替换
 
     # Prefer refined SRT if exists
     refined = work / f"{project_name}.srt"
@@ -257,7 +259,7 @@ def concat_pipeline(project_name:str):
     else:
         subtitles_filter = f"subtitles='{chosen_srt}':force_style='FontName={font_path.stem},FontSize=13," \
                            f"PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=1," \
-                           f"Outline=2,Shadow=0,MarginV=50,Alignment=8'"
+                           f"Outline=2,Shadow=0,MarginV=50,MarginL=40,Alignment=8'"
         cmd = [
             "ffmpeg", "-y",
             "-i", str(final),  # 使用带图片的视频（如果有）
@@ -273,18 +275,29 @@ def concat_pipeline(project_name:str):
             print(f"[burn] ✅ Subtitle burned video saved to: {burn_out}")
         else:
             print(f"[burn] ❌ Burn-in failed.")
-            burn_out = final  # 如果烧录失败，使用之前的视频
+            # 如果烧录失败，稍后将使用最终视频复制为无 BGM 成品
 
     # ====== 阶段 8：添加背景音乐 ======
-    # Determine input video: prefer burned subtitles, fallback to final
+    # 确定无 BGM 成品：若字幕烧录成功，burn_out 已在项目根目录；
+    # 若未烧录（或失败），则将当前 final 复制为 {project_name}_nobgm.mp4
+    if not burn_out.exists():
+        try:
+            shutil.copy2(final, burn_out)
+            print(f"[nobgm] ✅ Copied video without BGM to: {burn_out}")
+        except Exception as e:
+            print(f"[nobgm] ❌ Failed to produce no-BGM output: {e}")
+
+    # BGM 输入以无 BGM 成品为准
     input_video = burn_out if burn_out.exists() else final
     
     bgm_path = Path(BGM_PATH)
     
     if not bgm_path.exists():
         print(f"[bgm] ⚠️ BGM file not found: {bgm_path}, skipping BGM addition.")
+        final_with_bgm = None
     else:
-        final_with_bgm = work / f"{project_name}_final.mp4"
+        # 按新规范：带 BGM 的最终成品输出到项目根目录，命名为 {project_name}.mp4
+        final_with_bgm = project_dir / f"{project_name}.mp4"
         video_dur = get_duration(input_video)
         bgm_dur = get_duration(bgm_path)
         
@@ -328,6 +341,14 @@ def concat_pipeline(project_name:str):
             print(f"[bgm] ✅ Final video with BGM saved to: {final_with_bgm}")
         else:
             print(f"[bgm] ❌ BGM mixing failed.")
+            final_with_bgm = None
+
+    # ====== 阶段 9：清理临时目录 ======
+    try:
+        shutil.rmtree(work, ignore_errors=True)
+        print(f"[clean] 🧹 Removed work directory: {work}")
+    except Exception as e:
+        print(f"[clean] ⚠️ Failed to remove work directory {work}: {e}")
 
 
 # ========== 入口 ==========

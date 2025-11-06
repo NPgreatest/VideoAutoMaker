@@ -66,6 +66,12 @@ def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = F
     print(f"🚀 Starting pipeline for: {input_path}")
     raw = read_json(input_path)
 
+    # Check if pipeline is already marked as failed
+    if raw.get("pipeline_failed", False):
+        print(f"⚠️  Pipeline is already marked as failed for this project")
+        print(f"   → Skipping pipeline execution")
+        return
+
     project = raw.get("project", "demo_project")
     blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
 

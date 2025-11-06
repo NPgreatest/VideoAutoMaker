@@ -350,7 +350,6 @@ class TextVideoSilicon(BaseMethod):
     def run(
         self,
         *,
-        prompt: str,
         project: str,
         target_name: str,
         text: str,
@@ -394,7 +393,7 @@ class TextVideoSilicon(BaseMethod):
                 print(f"[TextVideoSilicon] Warning: Could not read project config: {e}")
 
         # Submit new task
-        request_id = submit_video(prompt, image_size)
+        request_id = submit_video(block.prompt, image_size)
         if not request_id:
             return {"ok": False, "artifacts": [], "meta": {}, "error": "Submit failed (no requestId)."}
 

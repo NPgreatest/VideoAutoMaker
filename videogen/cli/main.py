@@ -38,8 +38,8 @@ def main():
         concat_pipeline(PROJECT_NAME)
         print(f"\n🎉 Concatenation completed!")
         print(f"📁 Project directory: project/{PROJECT_NAME}")
-        print(f"📁 Work directory: project/{PROJECT_NAME}/_work")
-        print(f"🎬 Final video: project/{PROJECT_NAME}/_work/{PROJECT_NAME}_burn.mp4")
+        print(f"🎬 Final video (with BGM): project/{PROJECT_NAME}/{PROJECT_NAME}.mp4")
+        print(f"🎬 No-BGM video: project/{PROJECT_NAME}/{PROJECT_NAME}_nobgm.mp4")
     except KeyboardInterrupt:
         print("\n⚠️  Concatenation interrupted by user")
     except Exception as e:
