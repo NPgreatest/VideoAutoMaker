@@ -13,8 +13,8 @@ from dotenv import load_dotenv
 
 from videogen.methods.audio_engine.utils import get_total_audio_duration_ms
 from videogen.methods.registry import create_method
-from videogen.pipeline.schema import ScriptBlock, GenerationResult
-from videogen.pipeline.utils import read_json, write_json
+from videogen.pipeline.schema import ScriptBlock, GenerationResult, ProjectStatus
+from videogen.pipeline.utils import read_json, write_json, set_project_status, get_project_status
 from videogen.router.decider import decide_generation_method
 
 load_dotenv()
@@ -62,17 +62,26 @@ def _wait_for_video_completion(workdir: Path, project: str) -> None:
         print("   → Check logs for details")
 
 
-def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = False) -> None:
+def run_pipeline(input_path: Path, workdir: Path) -> None:
+    """
+    Run pipeline to generate audio and video resources.
+    Automatically checks if resources exist and generates them if missing.
+    """
     print(f"🚀 Starting pipeline for: {input_path}")
     raw = read_json(input_path)
 
-    # Check if pipeline is already marked as failed
-    if raw.get("pipeline_failed", False):
-        print(f"⚠️  Pipeline is already marked as failed for this project")
+    # Check if project is already marked as failed
+    project_status = get_project_status(raw)
+    if project_status == ProjectStatus.FAILED:
+        print(f"⚠️  Project is already marked as failed")
         print(f"   → Skipping pipeline execution")
         return
 
     project = raw.get("project", "demo_project")
+    
+    # Set status to GENERATING when starting pipeline
+    set_project_status(input_path, ProjectStatus.GENERATING)
+
     blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
 
     for block in blocks:
@@ -90,10 +99,14 @@ def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = F
             fullPath = project_dir / audioPath
             totalDuration = get_total_audio_duration_ms(fullPath)
 
-        # if we want audio and not finished
-        if genAudio and not (block.status == "done" and (
-                    block.audio_generation and 'audio_path' in block.audio_generation.meta and os.path.exists(
-                block.audio_generation.meta['audio_path']))):
+        # Check if audio exists, generate if missing
+        audio_exists = (
+            block.audio_generation and
+            'audio_path' in block.audio_generation.meta and
+            os.path.exists(block.audio_generation.meta['audio_path'])
+        )
+        
+        if not audio_exists:
 
             audio_method = create_method('fish_audio')
             result = audio_method.run(
@@ -122,9 +135,14 @@ def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = F
         if not block.prompt:
             block.prompt = method.generate_prompt(block.text)
 
-        if genMedia and not(block.status == "done" and (
-                        block.video_generation and 'output_path' in block.video_generation.meta and os.path.exists(
-                        block.video_generation.meta['output_path']))):
+        # Check if video exists, generate if missing
+        video_exists = (
+            block.video_generation and
+            'output_path' in block.video_generation.meta and
+            os.path.exists(block.video_generation.meta['output_path'])
+        )
+        
+        if not video_exists:
 
             # Retry logic with backoff for API errors
             @backoff.on_exception(
@@ -147,7 +165,7 @@ def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = F
                 
             try:
                 result = _run_method_with_retry()
-                if genMedia and block.decision == "text_video":
+                if block.decision == "text_video":
                     delay = random.uniform(5.0, 10.0)
                     print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
                     time.sleep(delay)
@@ -185,10 +203,10 @@ def run_pipeline(input_path: Path, workdir: Path, genAudio = False, genMedia = F
     print("\n✅ Pipeline finished.")
     
     # Wait for all video downloads to complete if any were submitted
-    if genMedia:
-        _wait_for_video_completion(workdir, project)
+    _wait_for_video_completion(workdir, project)
+    # After video generation completes, set status to RENDERING
+    set_project_status(input_path, ProjectStatus.RENDERING)
 
 
 if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."),
-                 True, True)
+    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."))

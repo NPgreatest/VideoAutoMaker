@@ -8,7 +8,8 @@ from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
 from dotenv import load_dotenv
 from videogen.pipeline.schema import ScriptBlock
-from videogen.pipeline.utils import read_json, write_json
+from videogen.pipeline.utils import read_json, write_json, get_character_info, set_project_status
+from videogen.pipeline.schema import ProjectStatus
 from videogen.pipeline.add_picture import add_picture_overlay
 
 # ========== 配置项 ==========
@@ -239,7 +240,29 @@ def concat_pipeline(project_name:str):
     # ====== 阶段 6：添加图片叠加 ======
     final_with_picture = work / "final_with_picture.mp4"
     
-    if not add_picture_overlay(final, final_with_picture):
+    # 从 blocks 的 character 字段获取图片路径
+    picture_path = None
+    if blocks:
+        # 使用第一个 block 的 character，或者最常见的 character
+        characters = [b.character for b in blocks if hasattr(b, "character") and b.character]
+        if characters:
+            # 使用最常见的 character
+            most_common_character = Counter(characters).most_common(1)[0][0]
+            character_info = get_character_info(most_common_character)
+            if character_info and "image_path" in character_info:
+                image_path_str = character_info["image_path"]
+                # 处理相对路径（相对于项目根目录）
+                if not Path(image_path_str).is_absolute():
+                    # 从项目根目录解析相对路径
+                    project_root = Path.cwd()
+                    picture_path = (project_root / image_path_str).resolve()
+                else:
+                    picture_path = Path(image_path_str)
+                print(f"[picture] Using image from character '{most_common_character}': {picture_path}")
+            else:
+                print(f"[picture] ⚠️ Character '{most_common_character}' not found in config, using default image")
+    
+    if not add_picture_overlay(final, final_with_picture, picture_path=picture_path):
         print("[picture] ⚠️ Failed to add picture overlay, using original video for subtitle burn-in.")
         final_with_picture = final  # 如果失败，使用原视频
     else:
@@ -290,10 +313,26 @@ def concat_pipeline(project_name:str):
     # BGM 输入以无 BGM 成品为准
     input_video = burn_out if burn_out.exists() else final
     
-    bgm_path = Path(BGM_PATH)
+    # Get BGM path from JSON, fallback to environment variable if not set
+    bgm_path_str = raw.get("bgm_path")
+    if bgm_path_str:
+        # Use BGM path from JSON (relative to project root)
+        bgm_path = Path(bgm_path_str)
+        if not bgm_path.is_absolute():
+            # Resolve relative path from project root
+            project_root = Path.cwd()
+            bgm_path = (project_root / bgm_path).resolve()
+    elif BGM_PATH:
+        # Fallback to environment variable for backward compatibility
+        bgm_path = Path(BGM_PATH)
+    else:
+        bgm_path = None
     
-    if not bgm_path.exists():
-        print(f"[bgm] ⚠️ BGM file not found: {bgm_path}, skipping BGM addition.")
+    if not bgm_path or not bgm_path.exists():
+        if bgm_path_str:
+            print(f"[bgm] ⚠️ BGM file not found: {bgm_path}, skipping BGM addition.")
+        else:
+            print(f"[bgm] ℹ️ No BGM specified in project, skipping BGM addition.")
         final_with_bgm = None
     else:
         # 按新规范：带 BGM 的最终成品输出到项目根目录，命名为 {project_name}.mp4

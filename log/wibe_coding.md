@@ -288,6 +288,32 @@ folder, but they are final videos, re-name them to the {project_name}_nobgm.mp4 
 {project_name}.mp4, store outside the _work folder, just flat in the project folder,
 and after the concat job, delete the _work folder.
 
+
+## customize the character
+Currently the `AUDIO_FISH_MODEL_ID`, `PICTURE_PATH` are read from .env. I want to read the project jsons block character field. get the information from the @character_config.json
+And when concat the video, the @add_picture.py procedure will read the picture address from 
+blocks character field as well.
+
+## add the gradio front-end
+use gradio create this project front-end, we have 2 sub-pages, first is to create project, user select a character from @[character_config.json](../config/character_config.json), and input the script in multiple lines format,
+similar like @project_json_generator.py, and click create button to create new project.
+
+The second sub-page need select a project from project folder, and it will display the config of that project(line by line script), and add a sub-sub page to view raw json. when User click make full video, it will refer to @cli/generate.py, begin the pipeline, and the front-end will keep polling the result from json file, display each blocks progress(Audio, Video, finish, etc...)
+
+## avoid re-submit the video
+1. In @pipeline.py, check the db first, if there are any job currently pending, invoke the
+worker finished the current job first, then run the pipeline, to avoid re-submit the video.
+2. when pipeline are running, set the status of `start making` button processing, avoid user click twice.
+
+
+## Add status in the entire project pipeline
+I add a new enum `ProjectStatus` in schema.py, add a new field in project json.
+when pipeline running, set the correspond status for user to track details. In gradio
+front-end, add a progress bar to show the status as well. 3 steps bar, first indicate 
+project created, second indicate processing, third indicate rendering, if finish, mark
+green or finish in the progress bar. Discard the `pipeline_failed` field, if more than 3 times try failed, mark the `ProjectStatus` failed and the pipeline will skip the project.
+
+
 # test
 ## test pipeline
 If I want to test the entire pipeine, help me mock every thing that need the API, 
@@ -298,6 +324,14 @@ test the worker's function.
 create a folder for testing, in the future we may add lots of test file. 
 then create a json file folder and put the json into that.
 Abstract the mock api things into another python file, decouple the entire testing logic.
+
+## make BGM_PATH as a choice
+scan /assets/bgm/{}.wav, and when creating the project, add a dropbox let use to choose one, then write into the project json file, remember add a field in schema.py. when @concat.py the video, select the bgm from json, if that field is None then skip bgm concat.
+
+
+## Fix the bug of re-submit video request
+in /text_video_silicon/method.py, before submit the video, check the database first, if any of the same block video already submitted or success, do 
+not re-submit it again, directly skip it.
 
 ## Exception hanlder
 In this project, We will encounter lots of error during the pipeline, help me create a folder that 

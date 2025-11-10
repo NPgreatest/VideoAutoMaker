@@ -13,6 +13,7 @@ from fish_audio_sdk import Session, TTSRequest, Prosody
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
 from videogen.pipeline.schema import ScriptBlock
+from videogen.pipeline.utils import get_character_info
 
 load_dotenv()
 AUDIO_FISH_API_KEY = os.getenv("AUDIO_FISH_API_KEY")
@@ -42,11 +43,15 @@ def _get_voice_content(block: Optional[ScriptBlock], text: str = "") -> str:
     max_time=BACKOFF_MAX_TIME,
     jitter=backoff.random_jitter
 )
-def _tts_fish_request_internal(text: str, out_path: Path) -> None:
+def _tts_fish_request_internal(text: str, out_path: Path, model_id: Optional[str] = None) -> None:
+    # 使用传入的 model_id，如果没有则使用环境变量中的默认值
+    reference_id = model_id or AUDIO_FISH_MODEL_ID
+    if not reference_id:
+        raise ValueError("No model_id provided and AUDIO_FISH_MODEL_ID not set in environment")
 
     request = TTSRequest(
         text=text,
-        reference_id=AUDIO_FISH_MODEL_ID,
+        reference_id=reference_id,
         prosody=Prosody(volume=-4.0, speed=1.2)
     )
 
@@ -59,9 +64,9 @@ def _tts_fish_request_internal(text: str, out_path: Path) -> None:
     print(f"[FishTTS] ✅ Audio saved to {out_path}")
 
 
-def _tts_fish_request(text: str, out_path: Path) -> bool:
+def _tts_fish_request(text: str, out_path: Path, model_id: Optional[str] = None) -> bool:
     try:
-        _tts_fish_request_internal(text, out_path)
+        _tts_fish_request_internal(text, out_path, model_id)
         return True
     except requests.exceptions.RequestException as e:
         print(f"[FishTTS] ❌ Request failed after retries: {e}")
@@ -93,10 +98,21 @@ class FishAudioMethod(BaseMethod):
             if not voice_content:
                 return {"ok": False, "artifacts": [], "meta": {}, "error": "No input text provided."}
 
+            # 2️⃣ 从 block.character 获取 model_id
+            model_id = None
+            if block and hasattr(block, "character") and block.character:
+                character_info = get_character_info(block.character)
+                if character_info and "model_id" in character_info:
+                    model_id = character_info["model_id"]
+                    print(f"[FishTTS] Using model_id from character '{block.character}': {model_id}")
+                else:
+                    print(f"[FishTTS] ⚠️ Character '{block.character}' not found in config, using default model_id")
+            else:
+                print(f"[FishTTS] No character specified in block, using default model_id")
 
             project_dir = workdir / "project" / project
             wav_path = project_dir / "audio" / f"{target_name}.wav"
-            ok = _tts_fish_request(voice_content, wav_path)
+            ok = _tts_fish_request(voice_content, wav_path, model_id)
 
             if not ok:
                 return {"ok": False, "artifacts": [], "meta": {}, "error": "TTS generation failed."}

@@ -1,0 +1,17 @@
+{
+  "huchenfeng": {
+    "name": "户晨风",
+    "model_id": "d5bfcb07538d435d9e9c25ea0cf39920",
+    "image_path": "./assets/pic/huchenfeng.png"
+  },
+  "fengge": {
+    "name": "峰哥亡命天涯",
+    "model_id": "d4badb3f1bd145ad927770017d0a19ce",
+    "image_path": "./assets/pic/fengge.png"
+  },
+  "mark": {
+    "name": "Mark Zuckerberg",
+    "model_id": "94bed7d980aa412eb787949bb33816d8",
+    "image_path": "./assets/pic/mark.png"
+  }
+}

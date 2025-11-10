@@ -14,7 +14,8 @@ from dotenv import load_dotenv
 # Import existing pipeline functions
 from videogen.pipeline.pipeline import run_pipeline
 from videogen.pipeline.concat import concat_pipeline
-from videogen.pipeline.utils import read_json, write_json
+from videogen.pipeline.utils import read_json, write_json, set_project_status, get_project_status
+from videogen.pipeline.schema import ProjectStatus
 from videogen.validation.base_validator import validate_project
 from videogen.validation.json_validator import JSONValidator
 
@@ -22,13 +23,13 @@ load_dotenv()
 MAX_RETRY = int(os.getenv("MAX_RETRY", "3"))
 
 # ========== Main Function ==========
-def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = True):
+def generate_video(project_name: str):
     """
     Generate complete video from start to finish.
     
     This function implements the complete pipeline:
     1. Check if pipeline is already marked as failed, if so, skip and return
-    2. Call the pipeline to generate all resources
+    2. Call the pipeline to generate all resources (audio and video will be generated automatically if missing)
     3. Validate the result, if everything is passed, goto concat step
     4. If some job failed, re-run the pipeline again, each block have a retry times,
        if it exceed the max_retry, then return error and stop the entire pipeline,
@@ -37,8 +38,6 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
     
     Args:
         project_name: Name of the project
-        genAudio: Whether to generate audio
-        genMedia: Whether to generate media (videos)
     """
     print("🎬 Starting Complete Video Generation Pipeline")
     print("=" * 60)
@@ -52,9 +51,10 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
     # Read JSON file
     raw = read_json(input_path)
     
-    # Step 0: Check if pipeline is already marked as failed
-    if raw.get("pipeline_failed", False):
-        print(f"\n⚠️  Pipeline is already marked as failed for project: {project_name}")
+    # Step 0: Check if project is already marked as failed
+    project_status = get_project_status(raw)
+    if project_status == ProjectStatus.FAILED:
+        print(f"\n⚠️  Project is already marked as failed")
         print("   → Skipping pipeline execution")
         return
     
@@ -67,8 +67,8 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
     
     while retry_count <= max_retry:
         try:
-            # Run pipeline
-            run_pipeline(input_path, workdir, genAudio, genMedia)
+            # Run pipeline (automatically generates audio and video if missing)
+            run_pipeline(input_path, workdir)
             
             # Step 2: Validate the result
             print("\n🔍 STEP 2: Validating Results")
@@ -100,13 +100,13 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
                     print("-" * 40)
                 else:
                     print(f"\n❌ Maximum retry count ({max_retry}) exceeded!")
-                    # Mark pipeline as failed in JSON file
+                    # Mark project as failed
+                    set_project_status(input_path, ProjectStatus.FAILED)
                     raw = read_json(input_path)
-                    raw["pipeline_failed"] = True
-                    raw["pipeline_failed_reason"] = "Maximum retry count exceeded"
-                    raw["pipeline_failed_errors"] = validation_result.get("errors", [])
+                    raw["project_failed_reason"] = "Maximum retry count exceeded"
+                    raw["project_failed_errors"] = validation_result.get("errors", [])
                     write_json(input_path, raw)
-                    print("   → Pipeline marked as failed in JSON file")
+                    print("   → Project marked as failed")
                     raise SystemExit("Pipeline failed after maximum retries")
         
         except SystemExit as e:
@@ -121,12 +121,12 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
                 print("-" * 40)
             else:
                 print(f"\n❌ Maximum retry count ({max_retry}) exceeded!")
-                # Mark pipeline as failed in JSON file
+                # Mark project as failed
+                set_project_status(input_path, ProjectStatus.FAILED)
                 raw = read_json(input_path)
-                raw["pipeline_failed"] = True
-                raw["pipeline_failed_reason"] = f"Pipeline execution failed: {str(e)}"
+                raw["project_failed_reason"] = f"Pipeline execution failed: {str(e)}"
                 write_json(input_path, raw)
-                print("   → Pipeline marked as failed in JSON file")
+                print("   → Project marked as failed")
                 raise SystemExit(f"Pipeline failed after maximum retries: {e}")
     
     # Step 3: Run concatenation pipeline
@@ -137,6 +137,9 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
         # Use existing concat function
         concat_pipeline(project_name)
         
+        # Mark project as finished
+        set_project_status(input_path, ProjectStatus.FINISHED)
+        
         print("\n🎉 Complete Video Generation Finished!")
         print("=" * 60)
         print(f"📁 Project directory: project/{project_name}")
@@ -144,6 +147,11 @@ def generate_video(project_name: str, genAudio: bool = False, genMedia: bool = T
         print(f"🎬 No-BGM video: project/{project_name}/{project_name}_nobgm.mp4")
     except Exception as e:
         print(f"\n❌ Concatenation failed: {e}")
+        # Mark project as failed if concatenation fails
+        set_project_status(input_path, ProjectStatus.FAILED)
+        raw = read_json(input_path)
+        raw["project_failed_reason"] = f"Concatenation failed: {str(e)}"
+        write_json(input_path, raw)
         raise
 
 # ========== Direct Function Call ==========

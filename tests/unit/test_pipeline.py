@@ -66,14 +66,10 @@ class TestPipelineUnit(unittest.TestCase):
         }
         mock_create_method.return_value = mock_method
         
-        # Test pipeline run
+        # Test pipeline run (automatically generates audio and video if missing)
         run_pipeline(
             input_path=self.project.json_path,
-            workdir=self.project.workdir,
-            genDecision=True,
-            genAudio=False,
-            genPrompt=True,
-            genMedia=True
+            workdir=self.project.workdir
         )
         
         # Verify mocks were called
@@ -89,14 +85,10 @@ class TestPipelineUnit(unittest.TestCase):
         mock_method = Mock()
         mock_create_method.return_value = mock_method
         
-        # Test pipeline run (should skip completed tasks)
+        # Test pipeline run (should skip completed tasks if they exist)
         run_pipeline(
             input_path=self.project.json_path,
-            workdir=self.project.workdir,
-            genDecision=False,
-            genAudio=False,
-            genPrompt=False,
-            genMedia=False
+            workdir=self.project.workdir
         )
         
         # Verify no method calls were made for completed tasks
@@ -111,11 +103,7 @@ class TestPipelineUnit(unittest.TestCase):
         with self.assertRaises(FileNotFoundError):
             run_pipeline(
                 input_path=non_existent_path,
-                workdir=self.project.workdir,
-                genDecision=True,
-                genAudio=False,
-                genPrompt=False,
-                genMedia=False
+                workdir=self.project.workdir
             )
 
 

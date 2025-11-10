@@ -4,10 +4,10 @@ run_global_worker.py - Entry point to manually start the global worker
 This script starts the global worker to process pending WorkingBlocks in the database.
 """
 
-import sys
 import os
-import time
 import signal
+import sys
+import time
 from pathlib import Path
 
 # Add the project root to the Python path
@@ -18,9 +18,8 @@ sys.path.insert(0, str(project_root))
 # Change to project root directory to ensure correct database path resolution
 os.chdir(project_root)
 
-from videogen.worker.global_worker import get_global_worker, start_global_worker, stop_global_worker
+from videogen.worker.global_worker import get_global_worker, stop_global_worker
 from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.schema import WorkingBlockStatus
 
 
 def print_status_summary():

@@ -13,8 +13,9 @@ from videogen.methods.text_video_silicon.constants import (
 )
 from .sf_api import submit_video, download_to, check_status
 from videogen.llm_engine import get_engine
-from videogen.pipeline.schema import WorkingBlock, ScriptBlock
+from videogen.pipeline.schema import WorkingBlock, ScriptBlock, WorkingBlockStatus
 from videogen.pipeline.utils import read_json, write_json
+from videogen.dao.working_block_dao import WorkingBlockDAO
 from datetime import datetime, timezone
 
 @register_method
@@ -374,6 +375,48 @@ class TextVideoSilicon(BaseMethod):
                 "meta": block.video_generation.meta,
                 "error": None,
             }
+
+        # Check database for existing submitted or successful video for the same block
+        if block and block.id:
+            dao = WorkingBlockDAO()
+            existing_blocks = dao.get_all_working_blocks(project_id=project)
+            
+            for existing_block in existing_blocks:
+                if (existing_block.block and 
+                    existing_block.block.id == block.id and 
+                    existing_block.status in [WorkingBlockStatus.PENDING, WorkingBlockStatus.SUCCESS]):
+                    
+                    # Check if it has a request_id
+                    if existing_block.block.video_generation:
+                        video_gen = existing_block.block.video_generation
+                        if hasattr(video_gen, 'meta'):
+                            meta = video_gen.meta
+                        else:
+                            meta = video_gen.get('meta', {}) if isinstance(video_gen, dict) else {}
+                        
+                        request_id = meta.get('request_id')
+                        if request_id:
+                            print(f"[TextVideoSilicon] ⚠️ Block {block.id} already has a submitted/successful video (request_id: {request_id}), skipping re-submission")
+                            # Return the existing working block info
+                            return {
+                                "ok": True,
+                                "artifacts": [],
+                                "meta": {
+                                    "working_id": existing_block.working_id,
+                                    "request_id": request_id,
+                                    "project": project,
+                                    "target_name": target_name,
+                                    "status": STATUS_SUBMITTED if existing_block.status == WorkingBlockStatus.PENDING else STATUS_SUCCEED,
+                                    "output_path": meta.get('output_path', ''),
+                                    "source_url": meta.get('source_url', ''),
+                                    "submitted_at": meta.get('submitted_at', str(time.time())),
+                                },
+                                "error": None,
+                            }
+
+        # Ensure block exists before submitting
+        if not block:
+            return {"ok": False, "artifacts": [], "meta": {}, "error": "Missing block data."}
 
         # Get project configuration to determine video format
         project_config_path = workdir / "project" / project / f"{project}.json"

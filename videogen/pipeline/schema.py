@@ -17,6 +17,16 @@ class BaseModel:
     is_delete: bool = False
 
 
+
+class ProjectStatus(Enum):
+    """Status enum for Project instances."""
+    CREATED = "created"
+    GENERATING = "generating"
+    GENERATE_FAILED = "generate_failed"
+    RENDERING = "rendering"
+    FINISHED = "finished"
+    FAILED = "failed"
+
 @dataclass
 class GenerationResult:
     """Stores result and metadata for generation steps."""
@@ -62,6 +72,8 @@ class Project(BaseModel):
 class ProjectJSON(Project):
     """Project info and blocks, stored in JSON file."""
     script: List[ScriptBlock] = field(default_factory=list)
+    project_status: ProjectStatus = ProjectStatus.CREATED
+    bgm_path: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -71,6 +83,7 @@ class WorkingBlockStatus(Enum):
     SUCCESS = "success"
     PENDING = "pending"
     ERROR = "error"
+
 
 
 @dataclass(kw_only=True)
