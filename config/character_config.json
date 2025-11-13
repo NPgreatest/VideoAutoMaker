@@ -13,5 +13,30 @@
     "name": "Mark Zuckerberg",
     "model_id": "94bed7d980aa412eb787949bb33816d8",
     "image_path": "./assets/pic/mark.png"
+  },
+  "dingzhen": {
+    "name": "理塘丁真",
+    "model_id": "1d8be897bf3944ae8a6eec8a3d8c8785",
+    "image_path": "./assets/pic/dingzhen.png"
+  },
+    "elon": {
+    "name": "Elon Musk",
+    "model_id": "4fdf94af78b442da83e8f246e034d601",
+    "image_path": "./assets/pic/elon.png"
+  },
+    "trump": {
+    "name": "Trump",
+    "model_id": "227c8e729d43454f8657a61df6cda7a3",
+    "image_path": "./assets/pic/trump.png"
+  },
+  "leijun": {
+        "name": "雷军",
+    "model_id": "0bcdfe563eca444f935c0cf780f287d3",
+    "image_path": "./assets/pic/leijun.png"
+  },
+    "sun": {
+      "name": "孙笑川",
+    "model_id": "434c2fec2e0d4e47ab003c1ecefc24ef",
+    "image_path": "./assets/pic/sun.png"
   }
 }

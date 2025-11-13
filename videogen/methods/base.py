@@ -70,7 +70,8 @@ class BaseMethod(abc.ABC):
             project_id=project,
             output_folder=str(workdir),
             block=block,
-            status=WorkingBlockStatus.PENDING
+            status=WorkingBlockStatus.PENDING,
+            method_name=self.NAME  # Store the method name for processing
         )
         
         # Store in SQLite database

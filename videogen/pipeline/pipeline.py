@@ -186,6 +186,28 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
             else:
                 block.status = "error"
 
+        remotion_exists = (
+            block.remotion_generation and
+            'output_path' in block.remotion_generation.meta and
+            os.path.exists(block.remotion_generation.meta['output_path'])
+        )
+        if not remotion_exists and block.extra_info:
+            remotion_method = create_method("remotion_picture")
+            remotion_result = remotion_method.run(
+                project=project,
+                target_name=block.id,
+                text=block.text,
+                workdir=workdir,
+                duration_ms=totalDuration,
+                block=block,
+            )
+            block.remotion_generation = GenerationResult(
+                ok=remotion_result.get("ok", False),
+                artifacts=remotion_result.get("artifacts", []),
+                meta=remotion_result.get("meta", {}),
+                error=remotion_result.get("error"),
+            )
+
 
         # --- 写回更新 ---
         raw["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")

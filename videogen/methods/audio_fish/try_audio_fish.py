@@ -5,6 +5,7 @@ import json
 from pathlib import Path
 
 from videogen.methods.audio_fish.method import FishAudioMethod
+from videogen.pipeline.schema import ScriptBlock
 
 
 def try_audio_engine():
@@ -14,17 +15,17 @@ def try_audio_engine():
 
     # ===================== 测试文本 =====================
     text_huzi = (
-        "一个城市只要没有山姆超市，就完全不值得去。"
+        "所以我说啊，没朋友不是悲哀，是你终于学会了，谁值得留在生命里。"
     )
 
 
     m = FishAudioMethod()
     res_default = m.run(
-        prompt="",
         project=project,
-        target_name="sample_default",
+        target_name="fish_audio_default",
         text=text_huzi,
         workdir=workdir,
+        block=ScriptBlock(character="huchenfeng",id="L1",text=text_huzi),
     )
 
     print("\n✅ 测试完成！音频已输出到：", workdir / "project" / project / "audio")

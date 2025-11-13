@@ -105,26 +105,30 @@ def add_picture_overlay(
     # 1. 缩放图片到指定大小
     # 2. 将缩放后的图片叠加到视频上
     # 格式：[1:v]scale=w:h[scaled];[0:v][scaled]overlay=x:y[outv]
+    # Note: 图片作为第二个输入，需要先转换为视频流
     scale_filter = f"[1:v]scale={pic_w}:{pic_h}[scaled]"
     overlay_filter = f"[0:v][scaled]overlay={pic_x}:{pic_y}[outv]"
     filter_complex = f"{scale_filter};{overlay_filter}"
     
     # 构建 ffmpeg 命令
+    # 使用 -loop 1 让图片作为视频流输入，确保图片可以正确叠加
     cmd = [
         "ffmpeg", "-y",
-        "-i", str(video_path),  # 输入视频
-        "-i", str(pic_path),    # 输入图片
+        "-i", str(video_path),  # 输入视频 (input 0)
+        "-loop", "1", "-i", str(pic_path),  # 输入图片作为视频流 (input 1)
         "-filter_complex", filter_complex,
         "-map", "[outv]",  # 映射视频流（来自 filter_complex 的输出）
         "-c:v", "libx264",
         "-preset", PRESET,
         "-crf", CRF,
         "-pix_fmt", PIX_FMT,
+        "-shortest",  # 确保输出长度与视频一致
     ]
     
     # 如果有音频流，添加音频映射和编码参数
+    # Explicitly map the first audio stream to avoid issues with multiple audio streams
     if has_audio:
-        cmd.extend(["-map", "0:a", "-c:a", "copy"])  # 复制音频流
+        cmd.extend(["-map", "0:a:0", "-c:a", "copy"])  # 复制第一个音频流
     
     cmd.append(str(output_path))
     

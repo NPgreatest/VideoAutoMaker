@@ -314,6 +314,27 @@ project created, second indicate processing, third indicate rendering, if finish
 green or finish in the progress bar. Discard the `pipeline_failed` field, if more than 3 times try failed, mark the `ProjectStatus` failed and the pipeline will skip the project.
 
 
+## Modify the remotion method
+modify the current /methods/remotion_animation/method.py, we get the image path and title 
+from
+block.extra_info, and inside the working block, if the video generation result exists, render the output video, and save the info into block.remotion_generation.
+If the video generation result not exists, then keep pending the working block.
+You need to modify the [FilterTikTokSlide.tsx](../videogen/methods/remotion_animation/remotion_project/src/FilterTikTokSlide.tsx)
+and rest of the tsx as well, to support render image on top of the video, not the black background.
+
+
+## modify the project generation logic in @gradio_app.py
+In @gradio_app.py, when user click the `create project` button, we need to abstract the generation process into a file in pipeline folder, and add some new rules: specific character only if the line begin with "character_name": xxxx.
+if the entire line is [Lx.png:picture title...], then it will be treated as a picture block to the previous line, add the information inside the "extra_info" field, add the "title" file, the "template" file = FilterTikTokSlide
+"single_picture" field is the picture file name.
+
+
+## add method_name in working_blocks.db
+We may need multiple job in same block, so we need to add a field in working_blocks.db, @setup_database.py and @working_block_dao.py, 
+and store the method_name, so we can know which method to use.
+Modify the @global_worker.py, when create and reading the working block, add the method_name field. create the method based on the method_name.
+
+
 # test
 ## test pipeline
 If I want to test the entire pipeine, help me mock every thing that need the API, 

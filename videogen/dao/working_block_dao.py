@@ -46,9 +46,17 @@ class WorkingBlockDAO:
                     modify_time TEXT NOT NULL,
                     is_delete BOOLEAN DEFAULT FALSE,
                     block_data TEXT,  -- JSON string of ScriptBlock
-                    error_message TEXT
+                    error_message TEXT,
+                    method_name TEXT DEFAULT ''  -- Method name to use for processing
                 )
             """)
+            
+            # Add method_name column if it doesn't exist (for existing databases)
+            try:
+                cursor.execute("ALTER TABLE working_blocks ADD COLUMN method_name TEXT DEFAULT ''")
+            except sqlite3.OperationalError:
+                # Column already exists, ignore
+                pass
             
             # Create indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_working_id ON working_blocks(working_id)")
@@ -72,8 +80,8 @@ class WorkingBlockDAO:
                 cursor.execute("""
                     INSERT INTO working_blocks 
                     (working_id, project_id, output_folder, poll_count, quota_cost, 
-                     status, create_time, modify_time, is_delete, block_data, error_message)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                     status, create_time, modify_time, is_delete, block_data, error_message, method_name)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     working_block.working_id,
                     working_block.project_id,
@@ -85,7 +93,8 @@ class WorkingBlockDAO:
                     working_block.modify_time,
                     working_block.is_delete,
                     block_data_json,
-                    None
+                    None,
+                    working_block.method_name
                 ))
                 
                 conn.commit()
@@ -104,7 +113,7 @@ class WorkingBlockDAO:
         try:
             cursor.execute("""
                 SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                       status, create_time, modify_time, is_delete, block_data, error_message
+                       status, create_time, modify_time, is_delete, block_data, error_message, method_name
                 FROM working_blocks 
                 WHERE working_id = ? AND is_delete = FALSE
             """, (working_id,))
@@ -132,7 +141,8 @@ class WorkingBlockDAO:
                 create_time=row[6],
                 modify_time=row[7],
                 is_delete=bool(row[8]),
-                block=block_data
+                block=block_data,
+                method_name=row[11] if len(row) > 11 else ""
             )
         finally:
             conn.close()
@@ -146,7 +156,7 @@ class WorkingBlockDAO:
             if project_id:
                 cursor.execute("""
                     SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                           status, create_time, modify_time, is_delete, block_data, error_message
+                           status, create_time, modify_time, is_delete, block_data, error_message, method_name
                     FROM working_blocks 
                     WHERE project_id = ? AND is_delete = FALSE
                     ORDER BY create_time ASC
@@ -154,7 +164,7 @@ class WorkingBlockDAO:
             else:
                 cursor.execute("""
                     SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                           status, create_time, modify_time, is_delete, block_data, error_message
+                           status, create_time, modify_time, is_delete, block_data, error_message, method_name
                     FROM working_blocks 
                     WHERE is_delete = FALSE
                     ORDER BY create_time ASC
@@ -183,7 +193,8 @@ class WorkingBlockDAO:
                     create_time=row[6],
                     modify_time=row[7],
                     is_delete=bool(row[8]),
-                    block=block_data
+                    block=block_data,
+                    method_name=row[11] if len(row) > 11 else ""
                 ))
             
             return working_blocks
@@ -203,7 +214,7 @@ class WorkingBlockDAO:
                 cursor.execute("""
                     UPDATE working_blocks 
                     SET project_id = ?, output_folder = ?, poll_count = ?, quota_cost = ?,
-                        status = ?, modify_time = ?, is_delete = ?, block_data = ?, error_message = ?
+                        status = ?, modify_time = ?, is_delete = ?, block_data = ?, error_message = ?, method_name = ?
                     WHERE working_id = ?
                 """, (
                     working_block.project_id,
@@ -215,6 +226,7 @@ class WorkingBlockDAO:
                     working_block.is_delete,
                     block_data_json,
                     None,  # error_message - could be added to WorkingBlock schema if needed
+                    working_block.method_name,
                     working_block.working_id
                 ))
                 

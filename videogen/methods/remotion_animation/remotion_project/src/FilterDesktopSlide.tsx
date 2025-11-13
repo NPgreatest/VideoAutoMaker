@@ -1,5 +1,5 @@
 import React from 'react';
-import {useCurrentFrame, interpolate, AbsoluteFill, spring, useVideoConfig, Img, staticFile, Html5Audio, Sequence} from 'remotion';
+import {useCurrentFrame, interpolate, AbsoluteFill, spring, useVideoConfig, Img, staticFile, Html5Audio, Sequence, Video} from 'remotion';
 import { fontFamily } from './load-fonts';
 
 export const FilterDesktopSlide: React.FC<{
@@ -7,9 +7,10 @@ export const FilterDesktopSlide: React.FC<{
   description: string;
   duration: number;
   imagePath?: string;
+  videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
-}> = ({title, description, duration, imagePath = "openai.png", titleStartTime, soundEffect}) => {
+}> = ({title, description, duration, imagePath = "openai.png", videoPath, titleStartTime, soundEffect}) => {
   const SOUND_EFFECT_VOLUME = 1.8;
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
@@ -72,7 +73,6 @@ export const FilterDesktopSlide: React.FC<{
   return (
     <AbsoluteFill
       style={{
-        background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -80,17 +80,44 @@ export const FilterDesktopSlide: React.FC<{
         padding: '60px',
       }}
     >
-      {/* Background decoration */}
-      <div
-        style={{
-          position: 'absolute',
-          top: 0,
-          left: 0,
-          right: 0,
-          bottom: 0,
-          background: 'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%)',
-        }}
-      />
+      {/* Background Video (if provided) */}
+      {videoPath ? (
+        <AbsoluteFill>
+          <Video
+            src={staticFile(`assets/${videoPath}`)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+            }}
+          />
+        </AbsoluteFill>
+      ) : (
+        <>
+          {/* Background gradient (fallback if no video) */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
+            }}
+          />
+          {/* Background decoration */}
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              background: 'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%)',
+            }}
+          />
+        </>
+      )}
       
       {/* Centered Image */}
       <div

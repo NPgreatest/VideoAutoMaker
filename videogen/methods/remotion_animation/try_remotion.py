@@ -9,7 +9,7 @@ import time
 from pathlib import Path
 from videogen.methods.remotion_animation import RemotionMethod
 from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.schema import ScriptBlock
+from videogen.pipeline.schema import ScriptBlock, GenerationResult
 
 
 def create_test_output_dir():
@@ -351,41 +351,141 @@ def example_4_image_integration():
     print()
 
 
-def example_5_error_handling():
-    """Example 5: Demonstrate error handling with invalid template"""
-    print("🎬 Example 5: Error Handling - Invalid Template")
+def example_5_video_as_input():
+    """Example 5: Render remotion video using an existing video as input"""
+    print("🎬 Example 5: Remotion Video with Video Input")
     print("=" * 60)
     
     method = RemotionMethod()
     workdir = create_test_output_dir()
     
-    # Create a ScriptBlock with invalid template
-    block = ScriptBlock(
-        id="invalid_template",
-        text="This will fail",
-        prompt="This should fail",
-        decision="remotion_picture",
-        extra_info={"template": "InvalidTemplate"}  # Invalid template
-    )
+    # Create a test video file (or use existing one)
+    project_name = "【户晨风】人到中年没朋友，不是孤独，是清醒"
+    project_dir = workdir / "project" / project_name
+    project_dir.mkdir(parents=True, exist_ok=True)
+    video_dir = project_dir / "video"
+    video_dir.mkdir(parents=True, exist_ok=True)
     
-    # Use run() method to create WorkingBlock
-    result = method.run(
-        prompt="This should fail",
-        project="error_demo",
-        target_name="invalid_template",
-        text="This will fail",
-        workdir=workdir,
-        duration_ms=3000,
-        block=block
-    )
-    
-    if result["ok"]:
-        print(f"❌ Unexpected success: {result}")
+    # Check if there's an existing video we can use
+    # First, try to find any existing video in the project folder
+    test_video_path = None
+    existing_videos = list(video_dir.glob("*.mp4"))
+    if existing_videos:
+        test_video_path = existing_videos[0]
+        print(f"📹 Using existing video: {test_video_path.name}")
     else:
-        print(f"✅ Expected failure: {result['error']}")
+        # Try to find a video from other projects
+        for other_project_dir in (workdir / "project").glob("*"):
+            other_video_dir = other_project_dir / "video"
+            if other_video_dir.exists():
+                other_videos = list(other_video_dir.glob("*.mp4"))
+                if other_videos:
+                    test_video_path = other_videos[0]
+                    # Copy it to our project
+                    import shutil
+                    dest_video = video_dir / test_video_path.name
+                    shutil.copy2(str(test_video_path), str(dest_video))
+                    test_video_path = dest_video
+                    print(f"📹 Copied existing video: {test_video_path.name}")
+                    break
+    
+    if not test_video_path or not test_video_path.exists():
+        print("⚠️  No existing video found. Creating a dummy video file for testing...")
+        # Create a minimal dummy video file (this won't actually work for rendering, but demonstrates the flow)
+        test_video_path = video_dir / "test_input_video.mp4"
+        test_video_path.write_bytes(b"dummy video content")
+        print(f"📹 Created dummy video file: {test_video_path.name}")
+        print("⚠️  Note: This is a dummy file. For real rendering, use an actual video file.")
+    
+    # Prepare image file (if available)
+    image_filename = None
+    example_assets_path = Path(__file__).parent / "example_assets"
+    if example_assets_path.exists():
+        available_images = list(example_assets_path.glob("*.png")) + list(example_assets_path.glob("*.webp"))
+        if available_images:
+            source_image = available_images[0]
+            dest_image = project_dir / source_image.name
+            import shutil
+            shutil.copy2(str(source_image), str(dest_image))
+            image_filename = source_image.name
+            print(f"📸 Using image: {image_filename}")
+    
+    # Create ScriptBlock with video_generation already set
+    block = ScriptBlock(
+        id="video_input_remotion",
+        text="AI Technology | Advanced artificial intelligence",
+        prompt="Create a remotion video with video background",
+        decision="remotion_picture",
+        extra_info={
+            "template": "FilterTikTokSlide",
+            "title": "AI Technology",
+            "description": "Advanced artificial intelligence",
+            "single_picture": image_filename
+        } if image_filename else {
+            "template": "FilterTikTokSlide",
+            "title": "AI Technology",
+            "description": "Advanced artificial intelligence"
+        },
+        video_generation=GenerationResult(
+            ok=True,
+            artifacts=[str(test_video_path)],
+            meta={
+                "output_path": str(test_video_path),
+                "duration": 5.0
+            },
+            error=None
+        )
+    )
+    
+    # Create WorkingBlock manually with the block that has video_generation
+    dao = WorkingBlockDAO()
+    from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus
+    
+    working_block = WorkingBlock(
+        working_id=f"video_input_{int(time.time())}",
+        project_id=project_name,
+        block=block,
+        output_folder=str(workdir),
+        status=WorkingBlockStatus.PENDING
+    )
+    
+    # Save the WorkingBlock to database
+    dao.create_working_block(working_block)
+    working_id = working_block.working_id
+    
+    print(f"📤 WorkingBlock created: {working_id}")
+    print(f"📊 Template: {block.extra_info.get('template')}")
+    print(f"📝 Title: {block.extra_info.get('title')}")
+    print(f"📄 Description: {block.extra_info.get('description')}")
+    print(f"📹 Input video: {test_video_path.name}")
+    if image_filename:
+        print(f"📸 Overlay image: {image_filename}")
+    
+    # Process the WorkingBlock directly
+    print(f"\n🎬 Processing WorkingBlock {working_id}...")
+    result = method.process_working_block(working_block)
+    
+    if result is None:
+        print("⏳ Video generation not ready yet (this shouldn't happen in this example)")
+    elif result:
+        print(f"✅ Remotion rendering successful!")
+        
+        # Get the updated WorkingBlock to see results
+        updated_block = dao.get_working_block(working_id)
+        if updated_block and updated_block.block and updated_block.block.remotion_generation:
+            remotion_result = updated_block.block.remotion_generation
+            if remotion_result.ok:
+                print(f"✅ Remotion video created at: {remotion_result.artifacts[0]}")
+                print(f"⏱️  Duration: {remotion_result.meta.get('duration_sec', 'N/A')}s")
+                print(f"📹 Source video: {remotion_result.meta.get('source_video_path', 'N/A')}")
+            else:
+                print(f"❌ Remotion generation failed: {remotion_result.error}")
+        else:
+            print("⚠️  Remotion generation result not found in block")
+    else:
+        print(f"❌ Remotion rendering failed!")
     
     print()
-
 
 
 
@@ -394,7 +494,7 @@ def main():
     print("🎥 RemotionMethod Worker System Examples")
     print("=" * 80)
     print("This script demonstrates the new method-integrated worker system")
-    print("Including the new image integration feature with Elon Musk, OpenAI Letter, and OpenAI images")
+    print("Including the new image integration feature and video-as-input rendering")
     print("All output videos will be saved to ./_test_out/")
     print()
     
@@ -405,12 +505,12 @@ def main():
     
     # Run examples
     try:
-        example_1_desktop_video()
-        example_2_tiktok_video()
-        example_3_default_template()
-        example_4_image_integration()
-        example_5_error_handling()
-        
+        # example_1_desktop_video()
+        # example_2_tiktok_video()
+        # example_3_default_template()
+        # example_4_image_integration()
+        example_5_video_as_input()
+
         print("🎉 All examples completed!")
         print(f"📁 Check the output directory: {test_dir.absolute()}")
         

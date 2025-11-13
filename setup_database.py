@@ -49,7 +49,8 @@ def setup_database():
         project_id="test_project",
         output_folder=".",
         block=test_block,
-        status=WorkingBlockStatus.PENDING
+        status=WorkingBlockStatus.PENDING,
+        method_name="remotion_picture"  # Test method_name field
     )
     
     # Test create

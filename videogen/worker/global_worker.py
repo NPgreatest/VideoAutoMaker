@@ -13,6 +13,8 @@ from datetime import datetime
 from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus, ScriptBlock
 from videogen.methods.registry import create_method
+# Import methods to ensure they are registered
+import videogen.methods  # noqa: F401
 
 
 class GlobalWorker:
@@ -31,11 +33,18 @@ class GlobalWorker:
             print(f"[GlobalWorker] WorkingBlock {working_block.working_id} has no block data")
             return False
         
-        block = working_block.block
-        method_name = block.decision
+        # Use method_name from working_block, fallback to block.decision for backward compatibility
+        method_name = working_block.method_name or (working_block.block.decision if working_block.block else None)
+        
+        if not method_name:
+            print(f"[GlobalWorker] WorkingBlock {working_block.working_id} has no method_name or block.decision")
+            working_block.status = WorkingBlockStatus.ERROR
+            working_block.modify_time = datetime.utcnow().isoformat() + "Z"
+            self.dao.update_working_block(working_block)
+            return False
         
         try:
-            # Create method instance
+            # Create method instance based on method_name
             method = create_method(method_name)
             
             # Check if method supports background processing
@@ -130,13 +139,20 @@ class GlobalWorker:
                 print(f"[GlobalWorker] Error in worker loop: {e}")
                 time.sleep(self.poll_interval)
         
+        # Reset is_running flag when worker loop exits
+        self.is_running = False
         print("[GlobalWorker] Worker loop stopped.")
     
     def start(self):
         """Start the global worker."""
-        if self.is_running:
+        # Check if thread is actually alive, not just is_running flag
+        if self.is_running and self.thread and self.thread.is_alive():
             print("[GlobalWorker] Worker is already running")
             return
+        
+        # Reset state if thread is dead but flag is still True
+        if self.thread and not self.thread.is_alive():
+            self.is_running = False
         
         self.is_running = True
         self.thread = threading.Thread(target=self._worker_loop, daemon=True)
@@ -159,7 +175,18 @@ class GlobalWorker:
         start_time = time.time()
         print(f"[GlobalWorker] Waiting for completion (timeout: {timeout_seconds}s)...")
         
+        # Ensure worker is running before waiting
+        if not self.is_running or (self.thread and not self.thread.is_alive()):
+            print("[GlobalWorker] Worker is not running, starting it...")
+            self.start()
+        
         while time.time() - start_time < timeout_seconds:
+            # Check if worker thread is still alive
+            if self.thread and not self.thread.is_alive() and self.is_running:
+                print("[GlobalWorker] Worker thread died, restarting...")
+                self.is_running = False
+                self.start()
+            
             pending_blocks = self.dao.get_pending_working_blocks()
             if project_id:
                 pending_blocks = [wb for wb in pending_blocks if wb.project_id == project_id]

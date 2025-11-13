@@ -11,6 +11,7 @@ from videogen.pipeline.schema import ScriptBlock
 from videogen.pipeline.utils import read_json, write_json, get_character_info, set_project_status
 from videogen.pipeline.schema import ProjectStatus
 from videogen.pipeline.add_picture import add_picture_overlay
+from videogen.pipeline.gen_cover import gen_cover
 
 # ========== 配置项 ==========
 CRF = "14"             # 画质（越低越好）
@@ -65,10 +66,13 @@ def ensure_muxed(project_dir: Path, idx: int, muxed_dir: Path, block: Optional[S
     mux = muxed_dir / f"L{idx}_muxed.mp4"
     if mux.exists(): return mux
     
-    # Check in video/ subdirectory first, then project root
-    video = project_dir / "video" / f"L{idx}.mp4"
+    # Check remotion_video folder first (stores raw videos like video folder)
+    video = project_dir / "remotion_video" / f"L{idx}.mp4"
     if not video.exists():
-        video = project_dir / f"L{idx}.mp4"
+        # Fallback to video/ subdirectory, then project root
+        video = project_dir / "video" / f"L{idx}.mp4"
+        if not video.exists():
+            video = project_dir / f"L{idx}.mp4"
     
     audio = project_dir / f"audio/L{idx}.wav"
     
@@ -106,8 +110,11 @@ def ensure_muxed(project_dir: Path, idx: int, muxed_dir: Path, block: Optional[S
                     print(f"[resize] ⚠️ Resize failed, using original video")
         
         print(f"[mux] Generating L{idx}_muxed.mp4 ...")
+        # Explicitly map video from first input and audio from second input
+        # This ensures we use the audio from audio folder, not from the video
         ok = run([
             "ffmpeg","-y","-i",str(resized_video),"-i",str(audio),
+            "-map","0:v:0","-map","1:a:0",  # Map video from input 0, audio from input 1
             "-c:v","copy","-c:a","aac","-shortest",str(mux)
         ])
         return mux if ok else None
@@ -163,26 +170,68 @@ def fmt_time(x: float) -> str:
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
 def generate_srt_from_json(raw: Dict, clips: List[Path], out_path: Path) -> None:
-    """Generate global subtitle file using block.text + clip duration."""
+    """
+    Generate SRT file from JSON.
+    优先使用 block.meta['segments'] 里的短句字幕，
+    否则 fallback 到原有 block.text + clip 时长。
+    每个 segment 都会单独显示，时间戳会加上前面所有 clips 的累计时长。
+    """
     blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
     assert len(blocks) == len(clips), f"Script blocks ({len(blocks)}) != clips ({len(clips)})"
 
-    total = 0.0
     idx = 1
     lines = []
+    block_index = 0  # Track current block index for calculating offset
 
     for block, clip in zip(blocks, clips):
+        # 计算当前 block 在整个视频中的起始时间（前面所有 clips 的累计时长）
+        block_offset = sum(float(get_duration(c)) for c in clips[:block_index])
+        
+        # 从 audio_generation.meta.segments 获取 segments
+        segments = None
+        if block.audio_generation and block.audio_generation.ok:
+            audio_meta = block.audio_generation.meta
+            if isinstance(audio_meta, dict):
+                segments = audio_meta.get("segments")
+        
+        # 如果 segments 存在，为每个 segment 单独生成字幕
+        if segments and isinstance(segments, list) and len(segments) > 0:
+            # 每个 segment 单独显示，时间戳加上 block 的偏移量
+            for seg in segments:
+                # segment 应该是字典格式，包含 start, end, text 字段
+                if isinstance(seg, dict):
+                    seg_start = seg.get("start", 0.0)
+                    seg_end = seg.get("end", 0.0)
+                    text = seg.get("text", "").strip()
+                else:
+                    # 如果不是字典，尝试作为对象访问
+                    seg_start = getattr(seg, "start", 0.0)
+                    seg_end = getattr(seg, "end", 0.0)
+                    text = getattr(seg, "text", "").strip()
+                
+                # segment 的时间戳是相对于当前 block 的（从 0 开始），需要加上 block_offset
+                seg_start = float(seg_start) + block_offset
+                seg_end = float(seg_end) + block_offset
+                
+                if text:
+                    lines.append(f"{idx}\n{fmt_time(seg_start)} --> {fmt_time(seg_end)}\n{text}\n\n")
+                    idx += 1
+            block_index += 1
+            continue
+
+        # fallback: 原逻辑（整个 clip 一条字幕）
         dur = get_duration(clip)
-        start = total
-        end = total + dur
         text = (block.text or "").strip()
         if text:
+            start = block_offset
+            end = start + dur
             lines.append(f"{idx}\n{fmt_time(start)} --> {fmt_time(end)}\n{text}\n\n")
             idx += 1
-        total = end
+        block_index += 1
 
     out_path.write_text("".join(lines), encoding="utf-8")
-    print(f"[srt] ✅ generated precise subtitles -> {out_path}")
+    print(f"[srt] ✅ generated subtitles with segment support -> {out_path}")
+
 
 
 # ========== 阶段 5：拼接 ==========
@@ -193,6 +242,9 @@ def concat_videos(files: List[Path], out: Path)->bool:
               "-c","copy","-movflags","+faststart",str(out)])
     if ok: print(f"[concat] ✅ {out}")
     return ok
+
+# ========== 阶段 10：生成封面照片 ==========
+# 封面生成功能已移至 videogen.pipeline.gen_cover 模块
 
 # ========== 主函数 ==========
 def concat_pipeline(project_name:str):
@@ -206,17 +258,53 @@ def concat_pipeline(project_name:str):
     blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
     
     clips=[]
+    clip_blocks=[]
     for i, block in enumerate(blocks, start=1):
         p=ensure_muxed(project_dir, i, muxed_dir, block)
-        if p: clips.append(p)
+        if p:
+            clips.append(p)
+            clip_blocks.append(block)
     if not clips: raise SystemExit("❌ no muxed clips found")
 
-    infos=[get_clip_info(p) for p in clips]
+    # ====== 阶段 6：逐段添加图片叠加 ======
+    picture_dir = work / "picture"
+    picture_dir.mkdir(exist_ok=True)
+
+    clips_with_picture = []
+    for clip_path, block in zip(clips, clip_blocks):
+        picture_output = picture_dir / f"{clip_path.stem}_picture.mp4"
+        character = getattr(block, "character", None)
+        picture_path = None
+
+        if character:
+            character_info = get_character_info(character)
+            if character_info:
+                image_path_str = character_info.get("image_path")
+                if image_path_str:
+                    candidate_path = Path(image_path_str)
+                    if not candidate_path.is_absolute():
+                        project_root = Path.cwd()
+                        candidate_path = (project_root / candidate_path).resolve()
+                    picture_path = candidate_path
+
+        print(f"[picture] 🎯 Processing clip {clip_path.name} (character={character})")
+        ok = add_picture_overlay(
+            clip_path,
+            picture_output,
+            picture_path=picture_path,
+        )
+        if ok:
+            clips_with_picture.append(picture_output)
+        else:
+            print(f"[picture] ⚠️ Falling back to original clip without overlay: {clip_path}")
+            clips_with_picture.append(clip_path)
+
+    infos=[get_clip_info(p) for p in clips_with_picture]
     w,h,fps=choose_target(infos, raw)
     print(f"[spec] Target {w}x{h}@{fps}fps")
 
     norm=[]
-    for c in clips:
+    for c in clips_with_picture:
         out=norm_dir/f"{c.stem}_norm.mp4"
         if normalize_clip(c,out,w,h,fps): norm.append(out)
     if not norm: raise SystemExit("❌ normalize failed")
@@ -225,80 +313,77 @@ def concat_pipeline(project_name:str):
     if not concat_videos(norm,final):
         raise SystemExit("concat failed")
 
-    out_srt = work / "full.srt"
-    generate_srt_from_json(raw, norm, out_srt)
-    # Beautify and refine SRT -> project_name.srt
+    # Generate and beautify SRT directly -> project_name.srt
+    out_srt = work / f"{project_name}.srt"
+    # First generate raw SRT to a temp file
+    temp_srt = work / "temp_srt.srt"
+    generate_srt_from_json(raw, norm, temp_srt)
+    # Beautify and save directly to final location
     try:
         from videogen.pipeline.beautify_srt import beautify_srt_at_path
-        refined_srt = work / f"{project_name}.srt"
-        beautify_srt_at_path(out_srt, refined_srt)
-        print(f"[srt] ✅ refined -> {refined_srt}")
+        beautify_srt_at_path(temp_srt, out_srt)
+        # Remove temp file
+        temp_srt.unlink()
+        print(f"[srt] ✅ generated and beautified -> {out_srt}")
     except Exception as e:
-        print(f"[srt] ⚠️ refine failed: {e}")
+        print(f"[srt] ⚠️ beautify failed: {e}")
+        # If beautify fails, use the raw SRT
+        if temp_srt.exists():
+            temp_srt.replace(out_srt)
+            print(f"[srt] ✅ generated (raw) -> {out_srt}")
     print("✅ pipeline complete!")
 
-    # ====== 阶段 6：添加图片叠加 ======
-    final_with_picture = work / "final_with_picture.mp4"
-    
-    # 从 blocks 的 character 字段获取图片路径
-    picture_path = None
-    if blocks:
-        # 使用第一个 block 的 character，或者最常见的 character
-        characters = [b.character for b in blocks if hasattr(b, "character") and b.character]
-        if characters:
-            # 使用最常见的 character
-            most_common_character = Counter(characters).most_common(1)[0][0]
-            character_info = get_character_info(most_common_character)
-            if character_info and "image_path" in character_info:
-                image_path_str = character_info["image_path"]
-                # 处理相对路径（相对于项目根目录）
-                if not Path(image_path_str).is_absolute():
-                    # 从项目根目录解析相对路径
-                    project_root = Path.cwd()
-                    picture_path = (project_root / image_path_str).resolve()
-                else:
-                    picture_path = Path(image_path_str)
-                print(f"[picture] Using image from character '{most_common_character}': {picture_path}")
-            else:
-                print(f"[picture] ⚠️ Character '{most_common_character}' not found in config, using default image")
-    
-    if not add_picture_overlay(final, final_with_picture, picture_path=picture_path):
-        print("[picture] ⚠️ Failed to add picture overlay, using original video for subtitle burn-in.")
-        final_with_picture = final  # 如果失败，使用原视频
-    else:
-        final = final_with_picture  # 更新 final 为带图片的视频，用于后续字幕烧录
-
-    # ====== 阶段 7：字幕硬烧录（在图片层之上） ======
-    # 按新规范：无 BGM 的最终成品输出到项目根目录，命名为 {project_name}_nobgm.mp4
+    # ====== 阶段 7：字幕硬烧录 ======
     burn_out = project_dir / f"{project_name}_nobgm.mp4"
-    font_path = Path(FONT_PATH).resolve()  # 你已有的字体路径，可替换
 
-    # Prefer refined SRT if exists
-    refined = work / f"{project_name}.srt"
-    chosen_srt = refined if refined.exists() else out_srt
-
-    if not chosen_srt.exists():
-        print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
+    # Check if subtitle burning is enabled (default to True for backward compatibility)
+    burn_subtitle = raw.get("burn_subtitle", True)
+    
+    if not burn_subtitle:
+        print("[burn] ⏭️  Subtitle burning is disabled, skipping burn-in step.")
+        # If burning is disabled, just copy the final video to burn_out
+        try:
+            shutil.copy2(final, burn_out)
+            print(f"[burn] ✅ Copied video without subtitle burn-in to: {burn_out}")
+        except Exception as e:
+            print(f"[burn] ❌ Failed to copy video: {e}")
     else:
-        subtitles_filter = f"subtitles='{chosen_srt}':force_style='FontName={font_path.stem},FontSize=13," \
-                           f"PrimaryColour=&HFFFFFF&,OutlineColour=&H000000&,BorderStyle=1," \
-                           f"Outline=2,Shadow=0,MarginV=50,MarginL=40,Alignment=8'"
-        cmd = [
-            "ffmpeg", "-y",
-            "-i", str(final),  # 使用带图片的视频（如果有）
-            "-vf", subtitles_filter,
-            "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
-            "-pix_fmt", PIX_FMT,
-            "-c:a", "copy",
-            str(burn_out)
-        ]
-        print(f"[burn] 🔥 Burning subtitles into video ...")
-        ok = run(cmd)
-        if ok:
-            print(f"[burn] ✅ Subtitle burned video saved to: {burn_out}")
+        refined = work / f"{project_name}.srt"
+        chosen_srt = refined if refined.exists() else out_srt
+
+        if not chosen_srt.exists():
+            print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
         else:
-            print(f"[burn] ❌ Burn-in failed.")
-            # 如果烧录失败，稍后将使用最终视频复制为无 BGM 成品
+            srt_path = str(chosen_srt.resolve()).replace("\\", "/")
+            font_path_abs = str(Path(FONT_PATH).resolve()).replace("\\", "/") if FONT_PATH else "Arial"
+
+            subtitles_filter = (
+                f"subtitles='{srt_path}':"
+                f"force_style='FontName={Path(font_path_abs).stem},"
+                f"FontSize=20,"
+                f"PrimaryColour=&H0000FFFF,"   # 黄色字体
+                f"OutlineColour=&H00000000,"   # 黑色描边
+                f"BorderStyle=1,Outline=2,Shadow=0,"
+                f"Alignment=2,MarginL=40,MarginR=40,MarginV=60'"
+            )
+
+            cmd = [
+                "ffmpeg", "-y",
+                "-i", str(final),
+                "-vf", subtitles_filter,
+                "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+                "-pix_fmt", PIX_FMT,
+                "-c:a", "copy",
+                str(burn_out)
+            ]
+
+            print("[burn] 🔥 Burning subtitles into video ...")
+            ok = run(cmd)
+            if ok:
+                print(f"[burn] ✅ Subtitle burned video saved to: {burn_out}")
+            else:
+                print("[burn] ❌ Burn-in failed.")
+
 
     # ====== 阶段 8：添加背景音乐 ======
     # 确定无 BGM 成品：若字幕烧录成功，burn_out 已在项目根目录；
@@ -382,12 +467,16 @@ def concat_pipeline(project_name:str):
             print(f"[bgm] ❌ BGM mixing failed.")
             final_with_bgm = None
 
+    # ====== 阶段 10：生成封面照片 ======
+    # 使用 _work/norm/*.mp4 的第一帧作为背景
+    gen_cover(project_dir, project_name, raw, blocks)
+
     # ====== 阶段 9：清理临时目录 ======
-    try:
-        shutil.rmtree(work, ignore_errors=True)
-        print(f"[clean] 🧹 Removed work directory: {work}")
-    except Exception as e:
-        print(f"[clean] ⚠️ Failed to remove work directory {work}: {e}")
+    # try:
+    #     shutil.rmtree(work, ignore_errors=True)
+    #     print(f"[clean] 🧹 Removed work directory: {work}")
+    # except Exception as e:
+    #     print(f"[clean] ⚠️ Failed to remove work directory {work}: {e}")
 
 
 # ========== 入口 ==========

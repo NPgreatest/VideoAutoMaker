@@ -18,6 +18,7 @@ from videogen.pipeline.utils import (
     get_project_status,
 )
 from videogen.pipeline.schema import ProjectStatus
+from videogen.pipeline.parse_script import parse_script_lines
 
 
 PROJECT_ROOT = Path("project")
@@ -74,37 +75,6 @@ def get_bgm_choices() -> List[Tuple[str, str]]:
     return choices
 
 
-def parse_script_lines(script_text: str, default_character: str) -> List[Dict[str, Any]]:
-    blocks: List[Dict[str, Any]] = []
-    if not script_text:
-        return blocks
-
-    line_index = 1
-    for raw_line in script_text.splitlines():
-        line = raw_line.strip()
-        if not line:
-            continue
-
-        text = line
-        character = default_character
-
-        if ":" in line and not line.startswith("http"):
-            prefix, rest = line.split(":", 1)
-            if prefix.strip():
-                character = prefix.strip()
-                text = rest.strip()
-
-        blocks.append(
-            {
-                "id": f"L{line_index}",
-                "text": text,
-                "voice": text,
-                "character": character or None,
-            }
-        )
-        line_index += 1
-
-    return blocks
 
 
 def format_generation_status(data: Dict[str, Any] | None) -> str:
@@ -188,7 +158,7 @@ def get_status_text(raw: Dict[str, Any]) -> str:
     return status_text
 
 
-def save_project(project_name: str, size: str, default_character: str, script_text: str, bgm_path: str) -> Tuple[str, Any]:
+def save_project(project_name: str, size: str, default_character: str, script_text: str, bgm_path: str, burn_subtitle: bool) -> Tuple[str, Any]:
     project_name = (project_name or "").strip()
     if not project_name:
         return "❌ 项目名不能为空", gr.update()
@@ -209,6 +179,7 @@ def save_project(project_name: str, size: str, default_character: str, script_te
         "script": blocks,
         "project_status": ProjectStatus.CREATED.value,
         "bgm_path": bgm_path_value,
+        "burn_subtitle": burn_subtitle,  # Save subtitle burn option
     }
 
     project_dir = PROJECT_ROOT / project_name
@@ -290,9 +261,14 @@ def build_interface() -> gr.Blocks:
                 value=bgm_choices[0][1],
                 allow_custom_value=False,
             )
+            burn_subtitle = gr.Checkbox(
+                label="烧录字幕到视频",
+                value=True,
+                info="如果勾选，字幕将硬编码到最终视频中；如果不勾选，将跳过字幕烧录步骤",
+            )
             script_input = gr.Textbox(
-                label="剧本文本（每行一条，可通过 `角色: 文本` 覆盖默认角色）",
-                placeholder="示例：\nhu: 这是第一句\n这是第二句",
+                label="剧本文本（每行一条，支持多种格式）",
+                placeholder="示例：\n\"huchenfeng\": 这是第一句\n这是第二句\n[L1.png:图片标题]\n\n支持的格式：\n1. 角色: 文本（如：hu: 这是文本）\n2. \"角色名\": 文本（如：\"huchenfeng\": 这是文本）\n3. [图片名.png:标题]（作为前一行文本的图片块）",
                 lines=10,
             )
             create_status = gr.Markdown(value="")
@@ -324,7 +300,7 @@ def build_interface() -> gr.Blocks:
 
         create_button.click(
             fn=save_project,
-            inputs=[project_name, size, character, script_input, bgm_dropdown],
+            inputs=[project_name, size, character, script_input, bgm_dropdown, burn_subtitle],
             outputs=[create_status, project_dropdown],
         )
 

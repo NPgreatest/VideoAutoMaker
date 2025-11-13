@@ -53,6 +53,7 @@ class ScriptBlock:
     extra_info: Dict[str, Any] = field(default_factory=dict)
     video_generation: Optional[GenerationResult] = None
     audio_generation: Optional[GenerationResult] = None
+    remotion_generation: Optional[GenerationResult] = None
     status: str = "pending"
     retries: int = 0
 
@@ -74,6 +75,7 @@ class ProjectJSON(Project):
     script: List[ScriptBlock] = field(default_factory=list)
     project_status: ProjectStatus = ProjectStatus.CREATED
     bgm_path: Optional[str] = None
+    background_video: Optional[str] = None
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
@@ -99,3 +101,4 @@ class WorkingBlock(BaseModel):
     poll_count: int = 0
     quota_cost: int = 0
     status: WorkingBlockStatus = WorkingBlockStatus.PENDING
+    method_name: str = ""  # Method name to use for processing this block

@@ -202,3 +202,6 @@ def main():
         if result.get("details"):
             print(f"  Details: {result['details']}")
 
+
+if __name__ == "__main__":
+    main()

@@ -153,7 +153,6 @@ class JSONValidator(BaseValidator):
             block_errors = []
             block_warnings = []
             block_info = {"index": i}
-            
             # Check if block is a dictionary
             if not isinstance(block, dict):
                 block_errors.append(f"Block {i} is not a dictionary")
@@ -207,8 +206,8 @@ class JSONValidator(BaseValidator):
                                 block_errors.append(f"Block {block.get('id', i)} video_generation.meta.output_path is missing")
                             else:
                                 output_path_str = meta["output_path"]
-                                if not isinstance(output_path_str, str):
-                                    block_errors.append(f"Block {block.get('id', i)} video_generation.meta.output_path must be a string")
+                                if not isinstance(output_path_str, str) or not output_path_str:
+                                    block_errors.append(f"Block {block.get('id', i)} video_generation.meta.output_path is empty")
                                 else:
                                     # Check if file exists
                                     output_path = Path(output_path_str)
