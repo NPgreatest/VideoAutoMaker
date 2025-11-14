@@ -84,59 +84,45 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
         
         # 将提取的帧转换为PIL图像
         canvas = Image.fromarray(cv2.cvtColor(frame, cv2.COLOR_BGR2RGB))
-        
-        # 检查并调整图片尺寸，确保宽度至少为 960 像素
+        original_width, original_height = canvas.size
+        print(f"[cover] Original frame size: {original_width}x{original_height}")
+
+        # 确保封面分辨率至少为 960x600
         min_width = 960
         min_height = 600
-        
-        original_width, original_height = canvas.size
-        print(f"[cover] Original image size: {original_width}x{original_height}")
-        
-        # 如果宽度小于最小要求，按比例放大
-        if original_width < min_width:
-            # 计算缩放比例，使宽度达到 min_width
-            scale = min_width / original_width
-            new_width = min_width
-            new_height = int(original_height * scale)
-            
-            # 如果缩放后的高度小于最小高度，再次调整
-            if new_height < min_height:
-                scale_height = min_height / new_height
-                new_width = int(new_width * scale_height)
-                new_height = min_height
-            
-            print(f"[cover] Resizing image to: {new_width}x{new_height} (scale: {scale:.2f})")
-            # 使用高质量的重采样方法（LANCZOS）
+        resize_needed = False
+        scale_factor = 1.0
+
+        if original_width < min_width or original_height < min_height:
+            scale_w = min_width / original_width if original_width < min_width else 1.0
+            scale_h = min_height / original_height if original_height < min_height else 1.0
+            scale_factor = max(scale_w, scale_h)
+            new_width = int(round(original_width * scale_factor))
+            new_height = int(round(original_height * scale_factor))
+            new_width = max(new_width, min_width)
+            new_height = max(new_height, min_height)
+            resize_needed = True
+            print(f"[cover] Upscaling canvas to {new_width}x{new_height} (scale={scale_factor:.2f})")
+
             try:
-                # Pillow 9.0.0+ 使用 Image.Resampling.LANCZOS
                 canvas = canvas.resize((new_width, new_height), Image.Resampling.LANCZOS)
             except AttributeError:
-                # 旧版本使用 Image.LANCZOS
-                canvas = canvas.resize((new_width, new_height), Image.LANCZOS)
-        elif original_height < min_height:
-            # 如果宽度满足但高度不够，按高度比例放大
-            scale = min_height / original_height
-            new_width = int(original_width * scale)
-            new_height = min_height
-            print(f"[cover] Resizing image to: {new_width}x{new_height} (scale: {scale:.2f})")
-            try:
-                # Pillow 9.0.0+ 使用 Image.Resampling.LANCZOS
-                canvas = canvas.resize((new_width, new_height), Image.Resampling.LANCZOS)
-            except AttributeError:
-                # 旧版本使用 Image.LANCZOS
                 canvas = canvas.resize((new_width, new_height), Image.LANCZOS)
         else:
-            print(f"[cover] Image size already meets requirements: {original_width}x{original_height}")
-        
-        # 计算字体缩放比例（基于宽度变化）
-        font_scale = canvas.width / original_width if original_width > 0 else 1.0
-        font_size_character = int(60 * font_scale)
-        font_size_title = int(50 * font_scale)
-        print(f"[cover] Font scale: {font_scale:.2f}, character font size: {font_size_character}, title font size: {font_size_title}")
-        
-        # 在图片上添加文字
+            print("[cover] Canvas already meets minimum resolution.")
+
+        # 字体及位置缩放系数基于缩放后的画布宽度（相对于 720px 基准）
+        base_width = 720.0
+        font_scale = canvas.width / base_width
+        font_scale = max(font_scale, 1.0)  # 不缩小字体，只放大
+        print(f"[cover] Font scale factor: {font_scale:.2f}")
+
         draw = ImageDraw.Draw(canvas)
         
+        # 根据缩放系数计算字体大小
+        base_char_size = max(60, int(round(60 * font_scale)))
+        base_title_size = max(50, int(round(50 * font_scale)))
+
         # 尝试加载字体，如果失败则使用默认字体
         font_character = None
         font_title = None
@@ -145,8 +131,8 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
         if FONT_PATH and Path(FONT_PATH).exists():
             try:
                 # 尝试加载粗体字体，如果失败则使用普通字体
-                font_character = ImageFont.truetype(FONT_PATH, font_size_character)
-                font_title = ImageFont.truetype(FONT_PATH, font_size_title)
+                font_character = ImageFont.truetype(FONT_PATH, base_char_size)
+                font_title = ImageFont.truetype(FONT_PATH, base_title_size)
             except Exception as e:
                 print(f"[cover] ⚠️ Failed to load font from FONT_PATH: {e}")
         
@@ -155,16 +141,16 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
             default_font_path = Path("assets/microhei.ttc")
             if default_font_path.exists():
                 try:
-                    font_character = ImageFont.truetype(str(default_font_path), font_size_character)
-                    font_title = ImageFont.truetype(str(default_font_path), font_size_title)
+                    font_character = ImageFont.truetype(str(default_font_path), base_char_size)
+                    font_title = ImageFont.truetype(str(default_font_path), base_title_size)
                 except Exception as e:
                     print(f"[cover] ⚠️ Failed to load default font: {e}")
         
         # 如果还是失败，使用默认字体
         if not font_character:
             try:
-                font_character = ImageFont.truetype("arial.ttf", font_size_character)
-                font_title = ImageFont.truetype("arial.ttf", font_size_title)
+                font_character = ImageFont.truetype("arial.ttf", base_char_size)
+                font_title = ImageFont.truetype("arial.ttf", base_title_size)
             except:
                 font_character = ImageFont.load_default()
                 font_title = ImageFont.load_default()
@@ -199,29 +185,38 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
             else:
                 w_title = h_title = 0
         
-        # 计算文字位置（按比例缩放偏移量）
-        offset_character_y = int(300 * font_scale)  # 角色文字向下偏移
-        offset_title_y = int(150 * font_scale)  # 标题文字距离底部偏移
-        
-        # 角色文字：屏幕中间偏下（往下偏移）
+        # 计算文字位置
+        offset_character_y = int(round(300 * font_scale))
+        offset_title_y = int(round(150 * font_scale))
+        stroke_width = max(4, int(round(4 * font_scale)))
+
+        # 角色文字：屏幕中间偏下
         if character_text:
             x_character = (canvas.width - w_character) // 2
             y_character = (canvas.height - h_character) // 2 + offset_character_y
             
-            # 绘制角色文字（白色字体，黑色描边，加粗效果通过增加 stroke_width）
-            stroke_width_character = max(4, int(4 * font_scale))
-            draw.text((x_character, y_character), character_text, font=font_character,
-                      fill=(255, 255, 255, 255), stroke_width=stroke_width_character, stroke_fill='black')
+            draw.text(
+                (x_character, y_character),
+                character_text,
+                font=font_character,
+                fill=(255, 255, 255, 255),
+                stroke_width=stroke_width,
+                stroke_fill="black",
+            )
         
-        # 标题文字：字幕位置（底部，距离底部往上移）
+        # 标题文字：字幕位置（底部往上）
         if title_text:
             x_title = (canvas.width - w_title) // 2
             y_title = canvas.height - h_title - offset_title_y
             
-            # 绘制标题文字（黄色字体，黑色描边，加粗效果通过增加 stroke_width）
-            stroke_width_title = max(4, int(4 * font_scale))
-            draw.text((x_title, y_title), title_text, font=font_title,
-                      fill=(255, 255, 0, 255), stroke_width=stroke_width_title, stroke_fill='black')
+            draw.text(
+                (x_title, y_title),
+                title_text,
+                font=font_title,
+                fill=(255, 255, 0, 255),
+                stroke_width=stroke_width,
+                stroke_fill="black",
+            )
         
         # 保存最终图片（已经是 RGB 模式）
         canvas.save(output_path, quality=95)

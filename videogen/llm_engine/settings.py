@@ -8,7 +8,7 @@ load_dotenv()
 
 # 环境变量（可在 .env 中配置）
 LLM_API_URL = os.getenv("LLM_API_URL", "https://api.siliconflow.cn/v1/chat/completions")
-LLM_API_KEY = os.getenv("LLM_API_TOKEN") or os.getenv("SILICONFLOW_API_TOKEN")
+LLM_API_KEY = os.getenv("SILICONFLOW_API_TOKEN")
 LLM_DEFAULT_MODEL = os.getenv("LLM_DEFAULT_MODEL", "deepseek-ai/DeepSeek-V3")
 
 # 请求超时/重试

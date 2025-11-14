@@ -1,194 +1,97 @@
-# 🎬 VideoGen — 从脚本到视频的AI自动化管道
+# 🎬 Video_Auto_Maker — 一键生成可发布短视频的全自动 AI 管道
 
-> *"From words to worlds — VideoGen turns your ideas into living stories."*
+> **给我一段文字，我给你一条成品短视频。**  
 
-**[English](README.md) | [中文版本](README_CN.md)**
+Video_Auto_Maker 是一个面向创作者、工程师与内容团队的 **端到端 AI 视频生成系统**。  
+它能将一段纯文字脚本自动转换为完整短视频，包括：
 
-VideoGen 是一个**AI驱动的视频生成引擎**，能够将文本脚本自动转换为完整的视频内容，包含匹配的视觉画面、TTS音频和字幕，适用于 YouTube、TikTok、Bilibili 等平台。
+- 场景画面（AI 文生视频 / 动态示意图）
+- 多角色 TTS 配音（可情感控制）
+- 字幕与节奏自动对齐
+- 视频拼接与混音
+- 横屏 / 竖屏适配（YouTube / TikTok）
 
-## 🤖 AI 模型
+**输入：纯文字**  
+**输出：可直接上传平台的成片**
+---
 
-- **文本到视频模型**：Wan-AI/Wan2.1-T2V-14B-Turbo
-- **音频模型**：GPT-SoVITS（微调）
-- **LLM 模型**：DeepSeekV3
+## 🎬 输入脚本 vs 自动生成的视频（成品展示）
+
+|        🎞️ 视频类型        | 📄 视频内容简介                              |                   🎥 YouTube 预览（可点击）                   |
+| :----------------------: | ------------------------------------------- | :----------------------------------------------------------: |
+| 🇺🇸 科普类（英文 / 竖屏） | 介绍什么是大模型里的 Context Window         | <a href="https://youtube.com/shorts/Or9nb3m-yKA"><img src="https://img.youtube.com/vi/Or9nb3m-yKA/0.jpg" width="260"></a> |
+| 🇨🇳 故事类（中文 / 横屏） | 老高风格的 MH370 故事讲解视频               | <a href="https://youtu.be/MPJBOrTR8v0"><img src="https://img.youtube.com/vi/MPJBOrTR8v0/0.jpg" width="260"></a> |
+| 🇨🇳 观点类（中文 / 竖屏） | 户晨风风格重制：雅思八分含金量远超 211 本科 | <a href="https://youtube.com/shorts/dsHxtVA9J6Q"><img src="https://img.youtube.com/vi/dsHxtVA9J6Q/0.jpg" width="260"></a> |
+
 
 ---
 
-## ⚠️ 开发状态
 
-**本项目目前正在积极开发中。** 代码库正在快速演进，部分功能可能不稳定或不完整。
 
-如果您想使用 VideoGen 或为项目做出贡献，请直接联系作者以获取最新信息和访问权限。
+## 🎬 输入脚本 vs 自动生成的视频（流程地展示）
+
+**左边是纯文字脚本，右边是完全自动生成的视频。**
+
+| 📄 纯文字脚本 | 🎥 自动生成的视频（本地播放） |
+|--------------|-------------------------------|
+| "dingzhen": 雷总，今天我写 PHP 发现了 Trait，xxx<br>"leijun": Trait 其实很正常，xxx<br>"dingzhen": 听着有点厉害，就是xxx<br>"leijun": 没错，它在xxx<br>[trait_expand.png: Trait 展开到类中的流程示意]<br>"dingzhen": 但是很多语言没有 Trait，xxx<br>"leijun": 不是的，xxx<br>"dingzhen": 哦，就是那些你到处都想用，xxx<br> | [![YouTube Video](https://img.youtube.com/vi/f7M_WSHvG8s/0.jpg)](https://youtube.com/shorts/f7M_WSHvG8s) |
 
 ---
 
-## 🖼️ Web UI 预览
+
+
+# 🚀 项目概述
+
+Video_Auto_Maker 的目标非常明确：
+
+> **从纯文字脚本 → 自动生成可直接上传短视频平台的成品视频**
+
+整个管道覆盖 **写作以外的所有环节**，包括：
+
+* 场景生成（文本 → 视频画面）
+* 文本转语音（多角色、情感）
+* 自动字幕
+* 视频拼接与混音
+* 格式标准化（16:9、9:16）
+* pipeline 配置与状态管理
+
+适合：
+
+* 知识类讲解视频
+* 讲故事类短视频
+* 叙述型 vlog
+* 纪录片式 narration
+* AI 头像口播视频
+* 内容农场式批量生产
+
+---
+
+# 🖼️ Web UI（Gradio 交互界面）
 
 ![UI Screenshot](example/picture/ui1.png)
 
-基于 Gradio 的 Web 界面提供了可视化方式来浏览、编辑和管理您的视频生成项目。
+启动方法：
 
-**使用方法：**
 ```bash
-python run_browser.py
-```
-然后访问 `http://localhost:7860` 使用 Web 界面。
-
----
-
-## 📺 示例视频
-
-**示例视频（中文）：**
-
-[![Watch the demo video](https://img.youtube.com/vi/RjH_D1CPzps/0.jpg)](https://www.youtube.com/watch?v=RjH_D1CPzps)
-
-**示例视频（英文）：**
-
-![Video_clip](example/picture/video_en.png)
-
----
-
-## 📄 项目论文
-
-我们已经撰写了一篇论文，详细描述了完整的管道、模型集成和设计原则。
-
-[📄 阅读完整论文 (PDF)](example/paper/paper.pdf)
-
----
-
-## ✨ 核心特性
-
-### 🔊 文本转语音
-使用 GPT-SoVITS 或微调的角色语音将脚本转换为语音。
-
-**使用方法：** 在 `config/character_profiles.json` 中配置角色语音，系统将自动为每个脚本块使用指定的角色语音生成音频。
-
-### 🎬 视觉匹配
-LLM 生成的搜索词从 Pexels 获取相关视频片段。
-
-**使用方法：** 系统自动分析脚本内容并生成搜索查询。当前已集成 SiliconFlow 视频生成 API 用于场景匹配。
-
-### 📥 高清视频下载
-自动获取最佳匹配的素材视频。
-
-**使用方法：** 当使用 `text_video` 生成方法时，管道会自动处理。视频会被下载并存储在项目的 `video/` 目录中。
-
-### 🧠 使用 LLM 进行场景匹配
-脚本行转换为高质量的视频提示词。
-
-**使用方法：** 决策系统自动为每个脚本块选择最佳生成方法。对于视觉内容，LLM 会生成详细的提示词，用于创建匹配的视频场景。
-
-### 🎞️ 文本到视频生成
-使用 Wan-AI/Wan2.1-T2V-14B-Turbo 等模型生成 AI 视觉内容。
-
-**使用方法：** 当决策系统选择 `text_video` 方法时，系统会自动将提示词提交到视频生成 API 并管理异步生成过程。
-
-### ✅ JSON + 媒体管道
-支持块级别的音频/视频重新生成。
-
-**使用方法：** 每个项目都存储为包含所有元数据的 JSON 文件。您可以手动编辑 JSON，通过将特定块的状态设置为 `"pending"` 并重新运行管道来重新生成它们。
-
-### ⚙️ 基于 FastAPI 的控制
-通过 RESTful 端点提供完整的程序化控制（即将推出）。
-
-**使用方法：** FastAPI 服务器将提供用于项目管理、媒体生成和管道控制的端点。此功能目前正在开发中。
-
----
-
-## 🛠️ 技术栈
-
-- **LLM 模型**：DeepSeek-V3（通过 SiliconFlow API）
-- **文本到视频模型**：Wan-AI/Wan2.1-T2V-14B-Turbo（通过 SiliconFlow API）
-- **TTS 模型**：GPT-SoVITS / FunAudioLLM/CosyVoice2-0.5B（通过 SiliconFlow API）
-- **动画引擎**：Remotion（React-based 视频生成）
-- **视频处理**：FFmpeg
-- **Web UI**：Gradio
-- **Python**：3.9+
-
----
-
-## ⚙️ 工作流程
-
-### 1. 决策阶段（Decision）
-
-LLM 分析每段脚本，自动选择最适合的生成方法：
-- `text_video`：适合描述生动场景、动作或环境的文本
-- `remotion_picture`：适合包含数字、统计、对比或结构化信息的文本
-- `subtitle_only`：适合纯叙述性文本
-
-### 2. 提示词生成（Prompt Generation）
-
-对于需要视觉内容的块，LLM 生成详细的视频提示词。
-
-### 3. 音频生成（Audio Generation）
-
-使用 SiliconFlow TTS API 或 GPT-SoVITS 生成音频文件，支持：
-- 多角色语音
-- 自定义角色配置
-- 情感调节
-
-### 4. 视频生成（Video Generation）
-
-根据决策结果：
-- **text_video**：提交到 SiliconFlow 视频生成 API
-- **remotion_picture**：使用 Remotion 渲染 React 动画
-- **subtitle_only**：跳过视频生成
-
-### 5. 视频拼接（Concatenation）
-
-- 音视频混合（mux）
-- 格式统一（normalize）
-- 视频拼接（concat）
-- 字幕生成和美化
-- 字幕烧录（可选）
-
----
-
-## 📂 项目配置
-
-项目 JSON 文件结构：
-
-```json
-{
-  "project": "my_project",
-  "size": "landscape",  // 或 "tiktok"
-  "script": [
-    {
-      "id": "L1",
-      "text": "这是第一段脚本",
-      "voice": "这是第一段脚本",
-      "character": "narrator",
-      "decision": "text_video",
-      "status": "done",
-      "video_generation": {
-        "ok": true,
-        "artifacts": ["video/L1.mp4"],
-        "meta": {
-          "video_path": "video/L1.mp4",
-          "duration": 5.2
-        }
-      },
-      "audio_generation": {
-        "ok": true,
-        "artifacts": ["audio/L1.wav"],
-        "meta": {
-          "audio_path": "audio/L1.wav",
-          "total_duration": 5200
-        }
-      }
-    }
-  ]
-}
+python videogen/gradio_app.py
 ```
 
-
-## 💡 贡献
-
-**本项目正在积极开发中。** 如果您想使用 VideoGen 或为项目做出贡献，请直接联系作者。
+所需的环境变量 `.env`可以从.env_example复制过来并且填充
 
 ---
 
+# 🤖 核心使用的模型
 
-**Built with ❤️ by NP_123**
+* **文本到视频**：Wan-AI / Wan2.1-T2V-14B Turbo
+* **TTS 配音**：GPT-SoVITS（支持角色微调）
+* **LLM 生成决策、提示词、分镜**：DeepSeek-V3
 
+
+
+---
+
+# ❤️ 作者
+
+**NP_123**
 *Let's turn imagination into moving images.*
+
