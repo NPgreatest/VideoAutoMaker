@@ -9,8 +9,6 @@ from dotenv import load_dotenv
 # ========== 配置项 ==========
 load_dotenv()
 
-# 从 .env 读取图片配置，如果没有则使用默认值
-PICTURE_PATH = os.getenv("PICTURE_PATH", "./assets/pic/huchenfeng.png")
 # 使用比例模式：相对于视频尺寸的比例（0.0-1.0）
 # 例如 0.15 表示视频宽度的 15%，高度会根据图片原始宽高比自动计算
 PICTURE_WIDTH_RATIO = float(os.getenv("PICTURE_WIDTH_RATIO", "0.15"))  # 图片宽度比例（相对于视频宽度，高度自动保持宽高比）
@@ -92,16 +90,7 @@ def add_picture_overlay(
     Returns:
         成功返回 True，失败返回 False
     """
-    # 使用参数或从环境变量读取
-    if picture_path:
-        pic_path = Path(picture_path)
-    else:
-        # 处理相对路径，从项目根目录解析
-        pic_path = Path(PICTURE_PATH)
-        if not pic_path.is_absolute():
-            # 如果是相对路径，从项目根目录解析（假设在项目根目录运行）
-            project_root = Path.cwd()
-            pic_path = (project_root / pic_path).resolve()
+    pic_path = Path(picture_path)
     
     # 检查文件是否存在
     if not video_path.exists():

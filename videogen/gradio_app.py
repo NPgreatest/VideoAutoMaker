@@ -196,7 +196,8 @@ def save_project(project_name: str, size: str, default_character: str, script_te
     if not script_text.strip():
         return "❌ Script text cannot be empty", gr.update()
 
-    blocks = parse_script_lines(script_text, default_character)
+    slide_template = "FilterDesktopSlide" if size == "landscape" else "FilterTikTokSlide"
+    blocks = parse_script_lines(script_text, default_character, slide_template)
     if not blocks:
         return "❌ No valid script text parsed", gr.update()
 

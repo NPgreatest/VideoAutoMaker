@@ -118,14 +118,7 @@ class RemotionMethod(BaseMethod):
         if hasattr(block, 'extra_info') and block.extra_info:
             image_filename = block.extra_info.get("single_picture")
             title = block.extra_info.get("title", "")
-        
-        # If no title in extra_info, fall back to block.text
-        if not title:
-            if "|" in block.text:
-                parts = block.text.split("|", 1)
-                title = parts[0].strip()
-            else:
-                title = block.text.strip()
+
         
         # Determine template from block parameter
         template_name = None

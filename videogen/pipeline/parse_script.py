@@ -10,7 +10,11 @@ from typing import Any, Dict, List
 import re
 
 
-def parse_script_lines(script_text: str, default_character: str) -> List[Dict[str, Any]]:
+def parse_script_lines(
+    script_text: str,
+    default_character: str,
+    slide_template: str = "FilterTikTokSlide",
+) -> List[Dict[str, Any]]:
     """
     Parse script text into blocks with support for character specification and picture blocks.
     
@@ -56,7 +60,7 @@ def parse_script_lines(script_text: str, default_character: str) -> List[Dict[st
                 
                 last_block["extra_info"]["single_picture"] = picture_filename
                 last_block["extra_info"]["title"] = picture_title
-                last_block["extra_info"]["template"] = "FilterTikTokSlide"
+                last_block["extra_info"]["template"] = slide_template
             # If no previous block, create a new block with picture info
             else:
                 blocks.append({
@@ -67,7 +71,7 @@ def parse_script_lines(script_text: str, default_character: str) -> List[Dict[st
                     "extra_info": {
                         "single_picture": picture_filename,
                         "title": picture_title,
-                        "template": "FilterTikTokSlide",
+                        "template": slide_template,
                     }
                 })
                 line_index += 1
