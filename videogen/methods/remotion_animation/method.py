@@ -39,7 +39,7 @@ class RemotionMethod(BaseMethod):
 
     DEFAULT_DURATION_SEC = 5
     DEFAULT_IMAGE = "openai.png"
-    DEFAULT_SOUND_EFFECT = "dong_effect.wav"
+    DEFAULT_SOUND_EFFECT = ""
 
     def supports_background_processing(self) -> bool:
         """Remotion method supports background processing."""
@@ -141,9 +141,26 @@ class RemotionMethod(BaseMethod):
             print(f"[RemotionMethod] Invalid template '{template_name}'")
             return False
         
-        # Calculate duration from video or audio
+        # Calculate duration from video or audio (similar to extract_background_segment)
         duration_ms = None
-        if hasattr(block, 'audio_generation') and block.audio_generation:
+        
+        # First, try to get duration from video_generation meta (if available)
+        if hasattr(block, 'video_generation') and block.video_generation:
+            if hasattr(block.video_generation, 'meta'):
+                video_meta = block.video_generation.meta
+                # Check if video has duration info
+                if 'duration' in video_meta:
+                    try:
+                        # Duration might be in seconds (string or float)
+                        duration_str = str(video_meta['duration'])
+                        duration_sec = float(duration_str)
+                        duration_ms = int(duration_sec * 1000)
+                        print(f"[RemotionMethod] Using duration from video_generation: {duration_sec:.2f}s")
+                    except (ValueError, TypeError):
+                        pass
+        
+        # If not found, try to get from audio_generation
+        if not duration_ms and hasattr(block, 'audio_generation') and block.audio_generation:
             # Handle both GenerationResult object and dict cases
             if hasattr(block.audio_generation, 'ok'):
                 audio_ok = block.audio_generation.ok
@@ -154,6 +171,25 @@ class RemotionMethod(BaseMethod):
             
             if audio_ok:
                 duration_ms = audio_meta.get('total_duration')
+                if duration_ms:
+                    print(f"[RemotionMethod] Using duration from audio_generation: {duration_ms/1000.0:.2f}s")
+        
+        # If still not found, try to get duration from the video file itself
+        if not duration_ms and video_path and video_path.exists():
+            try:
+                cmd = [
+                    "ffprobe", "-v", "error",
+                    "-show_entries", "format=duration",
+                    "-of", "default=noprint_wrappers=1:nokey=1",
+                    str(video_path)
+                ]
+                result = subprocess.run(cmd, capture_output=True, text=True)
+                if result.returncode == 0:
+                    duration_sec = float(result.stdout.strip())
+                    duration_ms = int(duration_sec * 1000)
+                    print(f"[RemotionMethod] Using duration from video file: {duration_sec:.2f}s")
+            except Exception as e:
+                print(f"[RemotionMethod] ⚠️  Failed to get duration from video file: {e}")
         
         # Create output directories
         output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
@@ -213,14 +249,23 @@ class RemotionMethod(BaseMethod):
         if hasattr(block, 'extra_info') and block.extra_info:
             description = block.extra_info.get("description", "")
         
-        # Calculate duration
-        duration_sec = (duration_ms / 1000.0) if duration_ms else self.DEFAULT_DURATION_SEC
+        # Calculate duration - use actual duration from block, not default
+        if duration_ms:
+            duration_sec = duration_ms / 1000.0
+            print(f"[RemotionMethod] ✅ Using block duration: {duration_sec:.2f}s ({duration_ms}ms)")
+        else:
+            duration_sec = self.DEFAULT_DURATION_SEC
+            print(f"[RemotionMethod] ⚠️  No duration found, using default: {duration_sec}s")
         
-        # Ensure duration is within reasonable bounds
-        if duration_sec < 3:
-            duration_sec = 3
-        elif duration_sec > 10:
-            duration_sec = 10
+        # Ensure minimum duration (but don't cap maximum - use actual duration)
+        if duration_sec < 1:
+            print(f"[RemotionMethod] ⚠️  Duration too short ({duration_sec:.2f}s), setting minimum to 1s")
+            duration_sec = 1
+        
+        # Calculate durationInFrames for Remotion (30 fps)
+        REMOTION_FPS = 30
+        duration_in_frames = int(round(duration_sec * REMOTION_FPS))
+        print(f"[RemotionMethod] 📐 Calculated durationInFrames: {duration_in_frames} frames ({duration_sec:.2f}s × {REMOTION_FPS} fps)")
         
         # Create props for Remotion
         props = {
@@ -253,12 +298,17 @@ class RemotionMethod(BaseMethod):
             temp_output_path_for_cmd = Path("output") / temp_output_filename
             
             # Render video using Remotion
+            # Use --frames with range format (0-based index: 0 to duration_in_frames-1)
+            # For example, 299 frames = 0-298 (frames 0, 1, 2, ..., 298)
+            frames_range = f"0-{duration_in_frames - 1}"
             cmd = [
                 "npx", "remotion", "render",
                 template_name,
                 str(temp_output_path_for_cmd),
+                "--frames", frames_range,  # Override Composition's durationInFrames with range
                 "--props", json.dumps(props)
             ]
+            print(f"[RemotionMethod] 🎞️  Frame range: {frames_range} ({duration_in_frames} frames total)")
             
             print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {block.id}...")
             print(f"[RemotionMethod] 📊 Props: {json.dumps(props, indent=2)}")

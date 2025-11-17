@@ -334,28 +334,89 @@ We may need multiple job in same block, so we need to add a field in working_blo
 and store the method_name, so we can know which method to use.
 Modify the @global_worker.py, when create and reading the working block, add the method_name field. create the method based on the method_name.
 
+# Feature Request: Add background_video support (global background video mode)
 
-# test
-## test pipeline
-If I want to test the entire pipeine, help me mock every thing that need the API, 
-that will cost lots of money, mock the API return, use @openai_demo2.json as the project json, 
-create unit test file, and mock every needed function, test the pipeline's function, 
-test the worker's function. 
+## Goal
+Enable users to attach a global background video to a project.  
+When a background video exists, the pipeline should skip text_to_video generation and instead extract a segment from the background video for each clip.  
+The extracted segment duration should match the generated audio length for each ScriptBlock.
 
-create a folder for testing, in the future we may add lots of test file. 
-then create a json file folder and put the json into that.
-Abstract the mock api things into another python file, decouple the entire testing logic.
+---
 
-## make BGM_PATH as a choice
-scan /assets/bgm/{}.wav, and when creating the project, add a dropbox let use to choose one, then write into the project json file, remember add a field in schema.py. when @concat.py the video, select the bgm from json, if that field is None then skip bgm concat.
+## Step 1 — Update schema.py
+1. Add a new optional field to Project or ScriptBlock (depending on current design):
+background_video: Optional[str] = None
 
 
-## Fix the bug of re-submit video request
-in /text_video_silicon/method.py, before submit the video, check the database first, if any of the same block video already submitted or success, do 
-not re-submit it again, directly skip it.
 
-## Exception hanlder
-In this project, We will encounter lots of error during the pipeline, help me create a folder that 
-specifily store All custom Exceptions(e.g AudioNotFound, RateLimitExceed, LLMGenerateFormatError ...)
-how to construct this model in this project, help me do that.
-You just need to help me construct the Exception model, I'll use leverage these exceptions in my project
+2. Ensure that this field is serialized and deserialized in the JSON correctly.
+
+---
+
+## Step 2 — Update gradio_app.py UI
+1. Add a new UI component that allows the user to upload or choose a background video.
+2. After user confirms, store the path in the project's JSON using the new `background_video` field.
+3. Make sure loading an existing project correctly shows the current background video.
+
+---
+
+## Step 3 — Modify the pipeline flow
+Inside the main pipeline execution logic (where ScriptBlock → WorkingBlocks are constructed):
+
+1. Detect whether the project has `background_video`.
+2. If background_video is set:
+- DO NOT create a `text_to_video` step.
+- Instead insert a new step: `"extract_background_segment"`.
+
+Example:
+tts → extract_background_segment → overlays → compose
+   
+
+3. If background_video is NOT set:
+   - Keep the existing pipeline:
+
+tts → text_to_video → overlays → compose
+
+
+---
+
+## Step 4 — Implement extract_background_segment method
+Create a new method somewhere in `/pipeline/methods/` (follow existing convention).
+
+Suggested name:
+
+extract_background_segment_method()
+
+ Compute start_time based on cumulative previous clip durations OR 0.0 if you want sequential slices.
+ Use ffmpeg to extract:
+
+ffmpeg -i background.mp4 -ss {start} -to {end} -c copy output.mp4
+
+4. Save the output path to ScriptBlock.video_generation or a dedicated field.
+
+---
+
+## Step 5 — Update compose step
+Ensure compose step uses:
+- extracted background segment
+- overlay layers (explain / character)
+- audio track
+
+---
+
+## Requirements
+- DO NOT break existing pipeline or text_to_video mode.
+- The code must be backward compatible.
+- The field name should be `background_video` (use consistent naming everywhere).
+- The implementation should be easy to extend later (for motion/background registry).
+
+---
+
+## Deliverables
+- schema.py updated
+- gradio_app UI updated
+- pipeline builder modified (conditional sequence)
+- new extract_background_segment method implemented
+- unit path or json examples updated if necessary
+
+

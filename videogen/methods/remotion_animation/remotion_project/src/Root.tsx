@@ -10,7 +10,7 @@ export const Root: React.FC = () => {
       <Composition
         id="FilterDesktopSlide"
         component={FilterDesktopSlide}
-        durationInFrames={150}
+        durationInFrames={1000}
         width={1920}
         height={1080}
         fps={30}
@@ -28,7 +28,7 @@ export const Root: React.FC = () => {
       <Composition
         id="FilterTikTokSlide"
         component={FilterTikTokSlide}
-        durationInFrames={150}
+        durationInFrames={1000}
         width={1080}
         height={1920}
         fps={30}

@@ -84,12 +84,27 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
 
     blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
 
+    # Check if project has background_video
+    background_video = raw.get("background_video")
+    use_background_video = background_video and background_video.strip()
+
     for block in blocks:
         print(f"\n🎞️  Processing {block.id} | status={block.status}")
 
-        # right now just use text_video
-        if not block.decision:
+        # Determine method based on background_video
+        # Force override decision if background_video is set, regardless of existing decision
+        if use_background_video:
+            block.decision = "extract_background_segment"
+            print(f"   → Using background video mode: {background_video}")
+        elif not block.decision or block.decision == "":
+            # Only set to text_video if decision is empty
             block.decision = "text_video"
+            print(f"   → Using text-to-video mode")
+        else:
+            # Keep existing decision if it's already set and no background_video
+            print(f"   → Using existing decision: {block.decision}")
+        
+        print(f"   → Final decision: {block.decision}")
 
         # process Audio part
         totalDuration = None # duration is based from audio
@@ -131,8 +146,8 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
         # --- Video Part ---
         method = create_method(block.decision)
 
-        # prompt part
-        if not block.prompt:
+        # prompt part (only for text_video, not for extract_background_segment)
+        if not block.prompt and block.decision == "text_video":
             block.prompt = method.generate_prompt(block.text)
 
         # Check if video exists, generate if missing
@@ -180,9 +195,13 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
                 error=result.get("error"),
             )
                 
-            # For both methods, mark as "submitted" if successful submission
+            # Mark status based on method type
             if block.video_generation.ok:
-                block.status = "submitted"  # Will be updated to "done" by worker
+                if block.decision == "text_video":
+                    block.status = "submitted"  # Will be updated to "done" by worker
+                else:
+                    # extract_background_segment completes immediately
+                    block.status = "done"
             else:
                 block.status = "error"
 
@@ -191,7 +210,18 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
             'output_path' in block.remotion_generation.meta and
             os.path.exists(block.remotion_generation.meta['output_path'])
         )
-        if not remotion_exists and block.extra_info:
+        # Generate remotion if:
+        # 1. Remotion doesn't exist yet
+        # 2. Block has extra_info (image/picture information)
+        # 3. Video generation is complete (for both text_video and extract_background_segment)
+        video_ready = (
+            block.video_generation and
+            block.video_generation.ok and
+            'output_path' in block.video_generation.meta and
+            os.path.exists(block.video_generation.meta['output_path'])
+        )
+        if not remotion_exists and block.extra_info and video_ready:
+            print(f"   → Generating remotion video for {block.id} (has extra_info and video ready)")
             remotion_method = create_method("remotion_picture")
             remotion_result = remotion_method.run(
                 project=project,
@@ -207,6 +237,10 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
                 meta=remotion_result.get("meta", {}),
                 error=remotion_result.get("error"),
             )
+        elif block.extra_info and not video_ready:
+            print(f"   → Skipping remotion for {block.id} (video not ready yet)")
+        elif not block.extra_info:
+            print(f"   → Skipping remotion for {block.id} (no extra_info)")
 
 
         # --- 写回更新 ---
@@ -223,9 +257,9 @@ def run_pipeline(input_path: Path, workdir: Path) -> None:
 
 
     print("\n✅ Pipeline finished.")
-    
-    # Wait for all video downloads to complete if any were submitted
+
     _wait_for_video_completion(workdir, project)
+    
     # After video generation completes, set status to RENDERING
     set_project_status(input_path, ProjectStatus.RENDERING)
 

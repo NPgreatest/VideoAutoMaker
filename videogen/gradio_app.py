@@ -23,6 +23,7 @@ from videogen.pipeline.parse_script import parse_script_lines
 
 PROJECT_ROOT = Path("project")
 BGM_ROOT = Path("assets/bgm")
+BACKGROUND_VIDEO_ROOT = Path("assets/background_videos")
 STATUS_COLUMNS = ["ID", "Character", "Text", "Audio", "Video", "Status"]
 
 
@@ -71,6 +72,35 @@ def get_bgm_choices() -> List[Tuple[str, str]]:
             # If relative_to fails, use the path as-is (shouldn't happen in normal cases)
             bgm_path = str(bgm_file)
         choices.append((display_name, bgm_path))
+    
+    return choices
+
+
+def get_background_video_choices() -> List[Tuple[str, str]]:
+    """Scan background video directory and return list of (display_name, file_path) tuples."""
+    choices: List[Tuple[str, str]] = [("No Background Video", "")]
+    if not BACKGROUND_VIDEO_ROOT.exists():
+        return choices
+    
+    cwd_resolved = Path.cwd().resolve()
+    # Support common video formats
+    video_extensions = ["*.mp4", "*.mov", "*.avi", "*.mkv", "*.webm"]
+    video_files = []
+    for ext in video_extensions:
+        video_files.extend(BACKGROUND_VIDEO_ROOT.glob(ext))
+    
+    video_files = sorted(video_files)
+    
+    for video_file in video_files:
+        # Use filename without extension as display name
+        display_name = video_file.stem
+        # Store relative path from project root
+        try:
+            video_path = str(video_file.resolve().relative_to(cwd_resolved))
+        except ValueError:
+            # If relative_to fails, use the path as-is (shouldn't happen in normal cases)
+            video_path = str(video_file)
+        choices.append((display_name, video_path))
     
     return choices
 
@@ -158,7 +188,7 @@ def get_status_text(raw: Dict[str, Any]) -> str:
     return status_text
 
 
-def save_project(project_name: str, size: str, default_character: str, script_text: str, bgm_path: str, burn_subtitle: bool) -> Tuple[str, Any]:
+def save_project(project_name: str, size: str, default_character: str, script_text: str, bgm_path: str, background_video_path: str, burn_subtitle: bool) -> Tuple[str, Any]:
     project_name = (project_name or "").strip()
     if not project_name:
         return "❌ Project name cannot be empty", gr.update()
@@ -172,6 +202,8 @@ def save_project(project_name: str, size: str, default_character: str, script_te
 
     # Normalize bgm_path: empty string becomes None
     bgm_path_value = bgm_path.strip() if bgm_path.strip() else None
+    # Normalize background_video_path: empty string becomes None
+    background_video_path_value = background_video_path.strip() if background_video_path.strip() else None
 
     data = {
         "project": project_name,
@@ -179,6 +211,7 @@ def save_project(project_name: str, size: str, default_character: str, script_te
         "script": blocks,
         "project_status": ProjectStatus.CREATED.value,
         "bgm_path": bgm_path_value,
+        "background_video": background_video_path_value,
         "burn_subtitle": burn_subtitle,  # Save subtitle burn option
     }
 
@@ -235,6 +268,7 @@ def build_interface() -> gr.Blocks:
     character_choices = get_character_choices()
     dropdown_choices: List[Tuple[str, str]] = [("Not Set", "")] + character_choices if character_choices else [("Not Set", "")]
     bgm_choices = get_bgm_choices()
+    background_video_choices = get_background_video_choices()
     project_choices = list_projects()
 
     with gr.Blocks(title="Videogen Console") as demo:
@@ -260,6 +294,13 @@ def build_interface() -> gr.Blocks:
                 choices=bgm_choices,
                 value=bgm_choices[0][1],
                 allow_custom_value=False,
+            )
+            background_video_dropdown = gr.Dropdown(
+                label="Background Video (Optional)",
+                choices=background_video_choices,
+                value=background_video_choices[0][1],
+                allow_custom_value=False,
+                info="If set, the pipeline will extract segments from this video instead of generating text-to-video. Each clip will use a sequential segment matching the audio duration.",
             )
             burn_subtitle = gr.Checkbox(
                 label="Burn Subtitles to Video",
@@ -300,7 +341,7 @@ def build_interface() -> gr.Blocks:
 
         create_button.click(
             fn=save_project,
-            inputs=[project_name, size, character, script_input, bgm_dropdown, burn_subtitle],
+            inputs=[project_name, size, character, script_input, bgm_dropdown, background_video_dropdown, burn_subtitle],
             outputs=[create_status, project_dropdown],
         )
 
