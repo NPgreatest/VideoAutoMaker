@@ -10,7 +10,7 @@ import time
 from pathlib import Path
 from videogen.methods.text_video_silicon import TextVideoSilicon
 from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.schema import ScriptBlock
+from videogen.schema.schema import ScriptBlock
 
 
 def create_test_output_dir():

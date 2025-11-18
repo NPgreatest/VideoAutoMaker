@@ -11,11 +11,11 @@ import time
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Import existing pipeline functions
+# Import pipeline functions
 from videogen.pipeline.pipeline import run_pipeline
 from videogen.pipeline.concat import concat_pipeline
 from videogen.pipeline.utils import read_json, write_json, set_project_status, get_project_status
-from videogen.pipeline.schema import ProjectStatus
+from videogen.schema.project_schema import ProjectStatus
 from videogen.validation.base_validator import validate_project
 from videogen.validation.json_validator import JSONValidator
 
@@ -43,7 +43,6 @@ def generate_video(project_name: str):
     print("=" * 60)
     
     input_path = Path(f"./project/{project_name}/{project_name}.json")
-    workdir = Path(".")
     
     if not input_path.exists():
         raise SystemExit(f"❌ Project file not found: {input_path}")
@@ -52,11 +51,11 @@ def generate_video(project_name: str):
     raw = read_json(input_path)
     
     # Step 0: Check if project is already marked as failed
-    project_status = get_project_status(raw)
-    if project_status == ProjectStatus.FAILED:
-        print(f"\n⚠️  Project is already marked as failed")
-        print("   → Skipping pipeline execution")
-        return
+    # project_status = get_project_status(raw)
+    # if project_status == ProjectStatus.FAILED:
+    #     print(f"\n⚠️  Project is already marked as failed")
+    #     print("   → Skipping pipeline execution")
+    #     return
     
     # Step 1: Run video generation pipeline
     print("\n📹 STEP 1: Video Generation Pipeline")
@@ -68,7 +67,7 @@ def generate_video(project_name: str):
     while retry_count <= max_retry:
         try:
             # Run pipeline (automatically generates audio and video if missing)
-            run_pipeline(input_path, workdir)
+            run_pipeline(input_path)
             
             # Step 2: Validate the result
             print("\n🔍 STEP 2: Validating Results")
@@ -108,10 +107,7 @@ def generate_video(project_name: str):
                     write_json(input_path, raw)
                     print("   → Project marked as failed")
                     raise SystemExit("Pipeline failed after maximum retries")
-        
-        except SystemExit as e:
-            # Re-raise SystemExit exceptions
-            raise
+
         except Exception as e:
             retry_count += 1
             print(f"\n❌ Error during pipeline execution: {e}")

@@ -1,7 +1,9 @@
 import json
 from pathlib import Path
 from typing import Any, Dict, Optional
-from videogen.pipeline.schema import ProjectStatus
+
+from videogen.schema.project_schema import ProjectStatus
+
 
 def read_json(path: Path) -> Dict[str, Any]:
     if not path.exists():

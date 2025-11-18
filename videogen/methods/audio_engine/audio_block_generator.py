@@ -1,19 +1,15 @@
 from __future__ import annotations
 import os
-import re
-import json
-import subprocess
 from pathlib import Path
-from typing import Dict, Any, List, Tuple, Optional
+from typing import Dict, Any, Tuple, Optional
 
 import requests
 from dotenv import load_dotenv
-from pydub.utils import mediainfo
 
 from .utils import get_total_audio_duration_ms
 from ..base import BaseMethod
 from ..registry import register_method
-from ...pipeline.schema import ScriptBlock
+from ...schema.project_schema import ScriptBlock
 
 # ----------------- 环境 & 常量 -----------------
 load_dotenv()

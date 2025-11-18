@@ -4,12 +4,11 @@ try_remotion.py - Examples of using the RemotionMethod with the new worker syste
 Demonstrates how to use the method-integrated worker system for video generation
 """
 
-import os
 import time
 from pathlib import Path
 from videogen.methods.remotion_animation import RemotionMethod
 from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.schema import ScriptBlock, GenerationResult
+from videogen.schema.schema import ScriptBlock, GenerationResult
 
 
 def create_test_output_dir():
@@ -439,7 +438,7 @@ def example_5_video_as_input():
     
     # Create WorkingBlock manually with the block that has video_generation
     dao = WorkingBlockDAO()
-    from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus
+    from videogen.schema.schema import WorkingBlock, WorkingBlockStatus
     
     working_block = WorkingBlock(
         working_id=f"video_input_{int(time.time())}",

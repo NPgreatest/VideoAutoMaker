@@ -7,16 +7,20 @@ import sqlite3
 import json
 import threading
 from pathlib import Path
-from typing import Dict, List, Optional, Any
+from typing import List, Optional
 from datetime import datetime
-
-from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus, ScriptBlock
+from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 
 
 class WorkingBlockDAO:
     """SQLite DAO for WorkingBlock management."""
     
     _lock = threading.Lock()
+    SELECT_FIELDS = (
+        "id, project_name, action_id, method_name, status, retries, "
+        "prev_ids, output_path, accumulated_duration_sec, block_id, "
+        "config_json, result_json, create_time, modify_time"
+    )
     
     def __init__(self, db_path: Path = None):
         if db_path is None:
@@ -26,147 +30,164 @@ class WorkingBlockDAO:
         self.db_path.parent.mkdir(parents=True, exist_ok=True)
         self._init_database()
     
+    def _ensure_block_id_column(self, cursor):
+        """Ensure the block_id column exists for legacy databases."""
+        cursor.execute("PRAGMA table_info(working_blocks)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "block_id" not in columns:
+            cursor.execute("ALTER TABLE working_blocks ADD COLUMN block_id TEXT")
+    
     def _init_database(self):
         """Initialize the SQLite database with required tables."""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
-            # Create working_blocks table
+            # Create working_blocks table with new schema
             cursor.execute("""
                 CREATE TABLE IF NOT EXISTS working_blocks (
-                    id INTEGER PRIMARY KEY AUTOINCREMENT,
-                    working_id TEXT NOT NULL UNIQUE,
-                    project_id TEXT NOT NULL,
-                    output_folder TEXT DEFAULT '',
-                    poll_count INTEGER DEFAULT 0,
-                    quota_cost INTEGER DEFAULT 0,
+                    id TEXT PRIMARY KEY,
+                    project_name TEXT NOT NULL,
+                    action_id TEXT NOT NULL,
+                    method_name TEXT NOT NULL,
                     status TEXT DEFAULT 'pending',
-                    create_time TEXT NOT NULL,
-                    modify_time TEXT NOT NULL,
-                    is_delete BOOLEAN DEFAULT FALSE,
-                    block_data TEXT,  -- JSON string of ScriptBlock
-                    error_message TEXT,
-                    method_name TEXT DEFAULT ''  -- Method name to use for processing
+                    retries INTEGER DEFAULT 0,
+                    prev_ids TEXT,
+                    output_path TEXT,
+                    accumulated_duration_sec REAL DEFAULT 0.0,
+                    block_id TEXT,
+                    config_json TEXT DEFAULT '',
+                    result_json TEXT DEFAULT '',
+                    create_time TEXT,
+                    modify_time TEXT
                 )
             """)
             
-            # Add method_name column if it doesn't exist (for existing databases)
-            try:
-                cursor.execute("ALTER TABLE working_blocks ADD COLUMN method_name TEXT DEFAULT ''")
-            except sqlite3.OperationalError:
-                # Column already exists, ignore
-                pass
+            # Ensure new columns exist for legacy DBs
+            self._ensure_block_id_column(cursor)
             
             # Create indexes
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_working_id ON working_blocks(working_id)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_id ON working_blocks(project_id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_id ON working_blocks(id)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_name ON working_blocks(project_name)")
+            cursor.execute("CREATE INDEX IF NOT EXISTS idx_action_id ON working_blocks(action_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON working_blocks(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_create_time ON working_blocks(create_time)")
             
             conn.commit()
             conn.close()
     
-    def create_working_block(self, working_block: WorkingBlock) -> bool:
-        """Create a new WorkingBlock in the database."""
+    def insert(self, working_block: WorkingBlock) -> bool:
+        """Insert a new WorkingBlock into the database."""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             try:
-                # Serialize block data to JSON
-                block_data_json = json.dumps(working_block.block.to_dict()) if working_block.block else None
+                now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                if not working_block.create_time:
+                    working_block.create_time = now
+                if not working_block.modify_time:
+                    working_block.modify_time = now
                 
                 cursor.execute("""
                     INSERT INTO working_blocks 
-                    (working_id, project_id, output_folder, poll_count, quota_cost, 
-                     status, create_time, modify_time, is_delete, block_data, error_message, method_name)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    (id, project_name, action_id, method_name, status, retries,
+                     prev_ids, output_path, accumulated_duration_sec, block_id,
+                     config_json, result_json, create_time, modify_time)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
-                    working_block.working_id,
-                    working_block.project_id,
-                    working_block.output_folder,
-                    working_block.poll_count,
-                    working_block.quota_cost,
+                    working_block.id,
+                    working_block.project_name,
+                    working_block.action_id,
+                    working_block.method_name,
                     working_block.status.value,
+                    working_block.retries,
+                    json.dumps(working_block.prev_ids or []),
+                    working_block.output_path,
+                    working_block.accumulated_duration_sec,
+                    working_block.block_id,
+                    working_block.config_json,
+                    working_block.result_json,
                     working_block.create_time,
-                    working_block.modify_time,
-                    working_block.is_delete,
-                    block_data_json,
-                    None,
-                    working_block.method_name
+                    working_block.modify_time
                 ))
                 
                 conn.commit()
                 return True
             except sqlite3.IntegrityError as e:
-                print(f"[WorkingBlockDAO] Error creating working block {working_block.working_id}: {e}")
+                print(f"[WorkingBlockDAO] Error inserting working block {working_block.id}: {e}")
                 return False
             finally:
                 conn.close()
     
-    def get_working_block(self, working_id: str) -> Optional[WorkingBlock]:
+    def create_working_block(self, working_block: WorkingBlock) -> bool:
+        """Alias for insert() for backward compatibility."""
+        return self.insert(working_block)
+    
+    def get_by_id(self, working_id: str) -> Optional[WorkingBlock]:
         """Get a WorkingBlock by its ID."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
-            cursor.execute("""
-                SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                       status, create_time, modify_time, is_delete, block_data, error_message, method_name
+            cursor.execute(f"""
+                SELECT {self.SELECT_FIELDS}
                 FROM working_blocks 
-                WHERE working_id = ? AND is_delete = FALSE
+                WHERE id = ?
             """, (working_id,))
             
             row = cursor.fetchone()
             if not row:
                 return None
             
-            # Deserialize block data
-            block_data = None
-            if row[9]:  # block_data
+            # Parse prev_ids from JSON
+            prev_ids = []
+            if row[6]:
                 try:
-                    block_dict = json.loads(row[9])
-                    block_data = ScriptBlock(**block_dict)
-                except Exception as e:
-                    print(f"[WorkingBlockDAO] Error deserializing block data: {e}")
+                    prev_ids = json.loads(row[6])
+                except (json.JSONDecodeError, TypeError):
+                    prev_ids = []
             
             return WorkingBlock(
-                working_id=row[0],
-                project_id=row[1],
-                output_folder=row[2],
-                poll_count=row[3],
-                quota_cost=row[4],
-                status=WorkingBlockStatus(row[5]),
-                create_time=row[6],
-                modify_time=row[7],
-                is_delete=bool(row[8]),
-                block=block_data,
-                method_name=row[11] if len(row) > 11 else ""
+                id=row[0],
+                project_name=row[1],
+                action_id=row[2],
+                method_name=row[3],
+                status=WorkingBlockStatus(row[4]),
+                retries=row[5] or 0,
+                prev_ids=prev_ids,
+                output_path=row[7],
+                accumulated_duration_sec=row[8] or 0.0,
+                block_id=row[9],
+                config_json=row[10] or "",
+                result_json=row[11] or "",
+                create_time=row[12],
+                modify_time=row[13]
             )
         finally:
             conn.close()
     
-    def get_all_working_blocks(self, project_id: str = None) -> List[WorkingBlock]:
-        """Get all WorkingBlocks, optionally filtered by project_id."""
+    def get_working_block(self, working_id: str) -> Optional[WorkingBlock]:
+        """Alias for get_by_id() for backward compatibility."""
+        return self.get_by_id(working_id)
+    
+    def get_all(self, project_name: str = None) -> List[WorkingBlock]:
+        """Get all WorkingBlocks, optionally filtered by project_name."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
         
         try:
-            if project_id:
-                cursor.execute("""
-                    SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                           status, create_time, modify_time, is_delete, block_data, error_message, method_name
+            if project_name:
+                cursor.execute(f"""
+                    SELECT {self.SELECT_FIELDS}
                     FROM working_blocks 
-                    WHERE project_id = ? AND is_delete = FALSE
+                    WHERE project_name = ?
                     ORDER BY create_time ASC
-                """, (project_id,))
+                """, (project_name,))
             else:
-                cursor.execute("""
-                    SELECT working_id, project_id, output_folder, poll_count, quota_cost,
-                           status, create_time, modify_time, is_delete, block_data, error_message, method_name
+                cursor.execute(f"""
+                    SELECT {self.SELECT_FIELDS}
                     FROM working_blocks 
-                    WHERE is_delete = FALSE
                     ORDER BY create_time ASC
                 """)
             
@@ -174,83 +195,90 @@ class WorkingBlockDAO:
             working_blocks = []
             
             for row in rows:
-                # Deserialize block data
-                block_data = None
-                if row[9]:  # block_data
+                # Parse prev_ids from JSON
+                prev_ids = []
+                if row[6]:
                     try:
-                        block_dict = json.loads(row[9])
-                        block_data = ScriptBlock(**block_dict)
-                    except Exception as e:
-                        print(f"[WorkingBlockDAO] Error deserializing block data: {e}")
+                        prev_ids = json.loads(row[6])
+                    except (json.JSONDecodeError, TypeError):
+                        prev_ids = []
                 
                 working_blocks.append(WorkingBlock(
-                    working_id=row[0],
-                    project_id=row[1],
-                    output_folder=row[2],
-                    poll_count=row[3],
-                    quota_cost=row[4],
-                    status=WorkingBlockStatus(row[5]),
-                    create_time=row[6],
-                    modify_time=row[7],
-                    is_delete=bool(row[8]),
-                    block=block_data,
-                    method_name=row[11] if len(row) > 11 else ""
+                    id=row[0],
+                    project_name=row[1],
+                    action_id=row[2],
+                    method_name=row[3],
+                    status=WorkingBlockStatus(row[4]),
+                    retries=row[5] or 0,
+                    prev_ids=prev_ids,
+                    output_path=row[7],
+                    accumulated_duration_sec=row[8] or 0.0,
+                    block_id=row[9],
+                    config_json=row[10] or "",
+                    result_json=row[11] or "",
+                    create_time=row[12],
+                    modify_time=row[13]
                 ))
             
             return working_blocks
         finally:
             conn.close()
     
-    def update_working_block(self, working_block: WorkingBlock) -> bool:
+    def get_all_working_blocks(self, project_id: str = None) -> List[WorkingBlock]:
+        """Alias for get_all() for backward compatibility."""
+        return self.get_all(project_id)
+    
+    def update(self, working_block: WorkingBlock) -> bool:
         """Update an existing WorkingBlock."""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             try:
-                # Serialize block data to JSON
-                block_data_json = json.dumps(working_block.block.to_dict()) if working_block.block else None
+                now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                working_block.modify_time = now
                 
                 cursor.execute("""
                     UPDATE working_blocks 
-                    SET project_id = ?, output_folder = ?, poll_count = ?, quota_cost = ?,
-                        status = ?, modify_time = ?, is_delete = ?, block_data = ?, error_message = ?, method_name = ?
-                    WHERE working_id = ?
+                    SET project_name = ?, action_id = ?, method_name = ?, status = ?, retries = ?,
+                        prev_ids = ?, output_path = ?, accumulated_duration_sec = ?, block_id = ?, config_json = ?, result_json = ?, modify_time = ?
+                    WHERE id = ?
                 """, (
-                    working_block.project_id,
-                    working_block.output_folder,
-                    working_block.poll_count,
-                    working_block.quota_cost,
-                    working_block.status.value,
-                    working_block.modify_time,
-                    working_block.is_delete,
-                    block_data_json,
-                    None,  # error_message - could be added to WorkingBlock schema if needed
+                    working_block.project_name,
+                    working_block.action_id,
                     working_block.method_name,
-                    working_block.working_id
+                    working_block.status.value,
+                    working_block.retries,
+                    json.dumps(working_block.prev_ids or []),
+                    working_block.output_path,
+                    working_block.accumulated_duration_sec,
+                    working_block.block_id,
+                    working_block.config_json,
+                    working_block.result_json,
+                    working_block.modify_time,
+                    working_block.id
                 ))
                 
                 conn.commit()
                 return cursor.rowcount > 0
             except Exception as e:
-                print(f"[WorkingBlockDAO] Error updating working block {working_block.working_id}: {e}")
+                print(f"[WorkingBlockDAO] Error updating working block {working_block.id}: {e}")
                 return False
             finally:
                 conn.close()
     
-    def delete_working_block(self, working_id: str) -> bool:
-        """Soft delete a WorkingBlock by setting is_delete = True."""
+    def update_working_block(self, working_block: WorkingBlock) -> bool:
+        """Alias for update() for backward compatibility."""
+        return self.update(working_block)
+    
+    def delete(self, working_id: str) -> bool:
+        """Delete a WorkingBlock by ID."""
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             
             try:
-                cursor.execute("""
-                    UPDATE working_blocks 
-                    SET is_delete = TRUE, modify_time = ?
-                    WHERE working_id = ?
-                """, (datetime.utcnow().isoformat() + "Z", working_id))
-                
+                cursor.execute("DELETE FROM working_blocks WHERE id = ?", (working_id,))
                 conn.commit()
                 return cursor.rowcount > 0
             except Exception as e:
@@ -259,36 +287,68 @@ class WorkingBlockDAO:
             finally:
                 conn.close()
     
-    def get_pending_working_blocks(self) -> List[WorkingBlock]:
-        """Get all pending WorkingBlocks."""
-        return [wb for wb in self.get_all_working_blocks() 
-                if wb.status == WorkingBlockStatus.PENDING]
+    def delete_working_block(self, working_id: str) -> bool:
+        """Alias for delete() for backward compatibility."""
+        return self.delete(working_id)
     
-    def get_completed_working_blocks(self) -> List[WorkingBlock]:
-        """Get all completed WorkingBlocks (success or error)."""
-        return [wb for wb in self.get_all_working_blocks() 
+    def get_pending(self, project_name: str = None) -> List[WorkingBlock]:
+        """Get all pending WorkingBlocks, optionally filtered by project_name."""
+        all_blocks = self.get_all(project_name)
+        return [wb for wb in all_blocks if wb.status == WorkingBlockStatus.PENDING]
+    
+    def get_pending_working_blocks(self) -> List[WorkingBlock]:
+        """Alias for get_pending() for backward compatibility."""
+        return self.get_pending()
+    
+    def get_completed(self, project_name: str = None) -> List[WorkingBlock]:
+        """Get all completed WorkingBlocks (success or error), optionally filtered by project_name."""
+        all_blocks = self.get_all(project_name)
+        return [wb for wb in all_blocks 
                 if wb.status in [WorkingBlockStatus.SUCCESS, WorkingBlockStatus.ERROR]]
     
-    def cleanup_old_blocks(self, days_old: int = 7) -> int:
-        """Clean up old completed blocks (hard delete)."""
-        with self._lock:
-            conn = sqlite3.connect(self.db_path)
-            cursor = conn.cursor()
-            
-            try:
-                cutoff_date = datetime.utcnow().isoformat() + "Z"
-                # This is a simplified cleanup - in production you'd want proper date arithmetic
-                cursor.execute("""
-                    DELETE FROM working_blocks 
-                    WHERE status IN ('success', 'error') 
-                    AND create_time < datetime('now', '-{} days')
-                """.format(days_old))
-                
-                deleted_count = cursor.rowcount
-                conn.commit()
-                return deleted_count
-            except Exception as e:
-                print(f"[WorkingBlockDAO] Error cleaning up old blocks: {e}")
-                return 0
-            finally:
-                conn.close()
+    def get_completed_working_blocks(self) -> List[WorkingBlock]:
+        """Alias for get_completed() for backward compatibility."""
+        return self.get_completed()
+
+    def get_by_action_id(self, project_name: str, action_id: str) -> Optional[WorkingBlock]:
+        """Return a WorkingBlock for the given project_name + action_id."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(f"""
+                           SELECT {self.SELECT_FIELDS}
+                           FROM working_blocks
+                           WHERE project_name = ?
+                             AND action_id = ? LIMIT 1
+                           """, (project_name, action_id))
+
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            prev_ids = []
+            if row[6]:
+                try:
+                    prev_ids = json.loads(row[6])
+                except:
+                    prev_ids = []
+
+            return WorkingBlock(
+                id=row[0],
+                project_name=row[1],
+                action_id=row[2],
+                method_name=row[3],
+                status=WorkingBlockStatus(row[4]),
+                retries=row[5] or 0,
+                prev_ids=prev_ids,
+                output_path=row[7],
+                accumulated_duration_sec=row[8] or 0.0,
+                block_id=row[9],
+                config_json=row[10] or "",
+                result_json=row[11] or "",
+                create_time=row[12],
+                modify_time=row[13],
+            )
+        finally:
+            conn.close()

@@ -3,12 +3,13 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Dict, List, Optional
+from typing import Dict, List
 from dacite import from_dict
 from dotenv import load_dotenv
 import cv2
 from PIL import Image, ImageDraw, ImageFont
-from videogen.pipeline.schema import ScriptBlock
+
+from videogen.schema.project_schema import ScriptBlock
 
 # ========== 配置项 ==========
 load_dotenv()

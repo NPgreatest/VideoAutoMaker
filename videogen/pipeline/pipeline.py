@@ -1,268 +1,214 @@
 #!/usr/bin/env python3
-from __future__ import annotations
+"""
+Final clean architecture for VideoGen pipeline.
 
+- Pipeline 负责 DAG 建立、job 调度、依赖检查、状态写入。
+- Worker 只负责执行方法（method.poll），不做调度或数据库操作。
+"""
+
+import json
 import os
-import random
-import time
-from datetime import datetime, timezone
-from pathlib import Path
+from typing import List, Optional
 
-import backoff
-from dacite import from_dict
-from dotenv import load_dotenv
-
-from videogen.methods.audio_engine.utils import get_total_audio_duration_ms
+from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.methods.registry import create_method
-from videogen.pipeline.schema import ScriptBlock, GenerationResult, ProjectStatus
-from videogen.pipeline.utils import read_json, write_json, set_project_status, get_project_status
-from videogen.router.decider import decide_generation_method
+from videogen.pipeline.worker import Worker
+from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from videogen.schema.project_schema import ScriptBlock
+from videogen.pipeline.utils import read_json, set_project_status
+from videogen.schema.project_schema import ProjectJSON, ProjectStatus
+from dacite import from_dict
 
-load_dotenv()
-PROJECT_NAME = os.getenv("PROJECT_NAME")
-
-# Backoff retry configuration from .env
-BACKOFF_MAX_TRIES = int(os.getenv("BACKOFF_MAX_TRIES", "5"))
-BACKOFF_MAX_TIME = int(os.getenv("BACKOFF_MAX_TIME", "120"))
-
-
-def _wait_for_video_completion(workdir: Path, project: str) -> None:
-    """Wait for all video downloads to complete using global worker."""
-    try:
-        from videogen.worker.global_worker import get_global_worker, start_global_worker, wait_for_global_worker_completion
-        
-        print("\n⏳ Starting global worker to process video generation...")
-        print("   → Worker will process WorkingBlocks from SQLite database...")
-        print("   → Worker uses method registry to process tasks automatically...")
-        
-        # Get the global worker instance
-        worker = get_global_worker()
-        
-        # Check if worker is already running
-        if worker.is_running:
-            print("   → Worker is already running, will wait for completion...")
-        else:
-            # Start the global worker
-            start_global_worker()
-            print("   → Worker started successfully")
-        
-        # Wait for completion
-        print(f"   → Waiting for all tasks in project '{project}' to complete...")
-        success = wait_for_global_worker_completion(project, timeout_seconds=6000)  # 100 minutes timeout
-        
-        if success:
-            print("✅ All video generation completed!")
-        else:
-            print("⚠️  Some video generation tasks may not have completed within timeout")
-            print("   → Check worker status or run worker manually to continue processing")
-            
-    except Exception as e:
-        print(f"⚠️  Error in global worker: {e}")
-        import traceback
-        traceback.print_exc()
-        print("   → Check logs for details")
-
-
-def run_pipeline(input_path: Path, workdir: Path) -> None:
+class Pipeline:
     """
-    Run pipeline to generate audio and video resources.
-    Automatically checks if resources exist and generates them if missing.
+    The central manager:
+    - Builds working blocks from ScriptBlock
+    - Selects runnable jobs
+    - Updates job execution results
     """
-    print(f"🚀 Starting pipeline for: {input_path}")
+
+    def __init__(self, project_name: str, dao: WorkingBlockDAO = None):
+        self.project_name = project_name
+        self.dao = dao or WorkingBlockDAO()
+
+    # ----------------------------------------------------------------------
+    # 1. Build WorkingBlocks from ScriptBlock
+    # ----------------------------------------------------------------------
+    def build(self, script_block: ScriptBlock) -> List[WorkingBlock]:
+        working_blocks = []
+
+        # 1. 从数据库恢复 action_id → working_block_id 的映射
+        # Get all working blocks for this project, then filter by action_ids in this script_block
+        all_blocks = self.dao.get_all(self.project_name)
+        script_action_ids = {action.id for action in script_block.actions}
+        existing_blocks = [wb for wb in all_blocks if wb.action_id in script_action_ids]
+        action_to_wb = {wb.action_id: wb.id for wb in existing_blocks}
+
+        # 2. 遍历 ScriptBlock.actions
+        for action in script_block.actions:
+
+            # 如果该 action 已经构建过 → 直接跳过
+            if action.id in action_to_wb:
+                continue
+
+            # 创建 method 实例
+            method = create_method(action.type)
+
+            # auto-fill config.project_name
+            action.config = action.config or {}
+            if "project_name" not in action.config:
+                action.config["project_name"] = self.project_name
+
+            # 3. 创建 WorkingBlock
+            wb = method.run(action)
+
+            # 设置 action_id（关键点）
+            wb.action_id = action.id
+
+            # 设置 block_id (target_name) 用于路径构建
+            # target_name 在 config 中，通常是 ScriptBlock.id
+            if "target_name" in action.config:
+                wb.block_id = action.config["target_name"]
+            else:
+                # 如果没有 target_name，使用 action_id 作为后备
+                wb.block_id = action.id
+
+            # 4. 构建 prev_wb_ids（DAG）
+            prev_wb_ids = []
+            for prev_action_id in action.prev_ids:
+                prev = action_to_wb.get(prev_action_id)
+                if prev:
+                    prev_wb_ids.append(prev)
+            wb.prev_ids = prev_wb_ids
+
+            # 5. 插入数据库
+            if not self.dao.insert(wb):
+                print(f"[Pipeline] ⚠️ Failed to insert WorkingBlock {wb.id}")
+                continue
+
+            # 6. 更新映射关系
+            action_to_wb[action.id] = wb.id
+            working_blocks.append(wb)
+
+        return working_blocks
+
+    # ----------------------------------------------------------------------
+    # 2. Dependency checking (DAG)
+    # ----------------------------------------------------------------------
+    def _deps_done(self, wb: WorkingBlock) -> bool:
+        """
+        All prev_ids must:
+        - exist
+        - have SUCCESS status
+        - have output_path file exist
+        """
+        for prev_id in wb.prev_ids:
+            prev_block = self.dao.get_working_block(prev_id)
+            if not prev_block:
+                return False
+
+            if prev_block.status != WorkingBlockStatus.SUCCESS:
+                return False
+
+            # check file correctness
+            try:
+                result = json.loads(prev_block.result_json or "{}")
+            except Exception:
+                return False
+
+            output_path = result.get("output_path")
+            if not output_path or not os.path.exists(output_path):
+                return False
+
+        return True
+
+    def get_next_runnable(self) -> Optional[WorkingBlock]:
+        """Return a PENDING block whose dependencies are all satisfied."""
+        for wb in self.dao.get_pending(self.project_name):
+            if self._deps_done(wb):
+                return wb
+        return None
+
+    # ----------------------------------------------------------------------
+    # 3. Update job results
+    # ----------------------------------------------------------------------
+    def update_job(self, wb: WorkingBlock, result):
+        """
+        result = MethodResult {
+            status: SUCCESS / PENDING / ERROR
+            output_path: str
+            duration_sec: float
+            error: str
+        }
+        """
+        # accumulated_duration_sec
+        if result.status == WorkingBlockStatus.SUCCESS:
+            if result.duration_sec:
+                wb.accumulated_duration_sec += result.duration_sec
+
+        wb.status = result.status
+        wb.result_json = json.dumps({
+            "status": result.status.value,
+            "output_path": result.output_path,
+            "duration_sec": result.duration_sec,
+            "error": result.error
+        })
+
+        self.dao.update(wb)
+
+# ----------------------------------------------------------------------
+# Pipeline Runner
+# ----------------------------------------------------------------------
+def run_pipeline(input_path):
+    """
+    Entry function.
+    - read project JSON
+    - build DAG
+    - run worker until done
+    """
+
     raw = read_json(input_path)
+    project_name = raw.get("project_name")
+    if not project_name:
+        raise RuntimeError("Missing project_name in JSON")
 
-    # Check if project is already marked as failed
-    project_status = get_project_status(raw)
-    if project_status == ProjectStatus.FAILED:
-        print(f"⚠️  Project is already marked as failed")
-        print(f"   → Skipping pipeline execution")
-        return
-
-    project = raw.get("project", "demo_project")
-    
-    # Set status to GENERATING when starting pipeline
+    # Set project status
     set_project_status(input_path, ProjectStatus.GENERATING)
 
-    blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
-
-    # Check if project has background_video
-    background_video = raw.get("background_video")
-    use_background_video = background_video and background_video.strip()
-
-    for block in blocks:
-        print(f"\n🎞️  Processing {block.id} | status={block.status}")
-
-        # Determine method based on background_video
-        # Force override decision if background_video is set, regardless of existing decision
-        if use_background_video:
-            block.decision = "extract_background_segment"
-            print(f"   → Using background video mode: {background_video}")
-        elif not block.decision or block.decision == "":
-            # Only set to text_video if decision is empty
-            block.decision = "text_video"
-            print(f"   → Using text-to-video mode")
-        else:
-            # Keep existing decision if it's already set and no background_video
-            print(f"   → Using existing decision: {block.decision}")
-        
-        print(f"   → Final decision: {block.decision}")
-
-        # process Audio part
-        totalDuration = None # duration is based from audio
-        if block.audio_generation and block.audio_generation.ok:
-            audioPath = block.audio_generation.meta['audio_path']
-            project_dir = workdir / "project" / project
-            fullPath = project_dir / audioPath
-            totalDuration = get_total_audio_duration_ms(fullPath)
-
-        # Check if audio exists, generate if missing
-        audio_exists = (
-            block.audio_generation and
-            'audio_path' in block.audio_generation.meta and
-            os.path.exists(block.audio_generation.meta['audio_path'])
-        )
-        
-        if not audio_exists:
-
-            audio_method = create_method('fish_audio')
-            result = audio_method.run(
-                    project=project,
-                    target_name=block.id,
-                    text=block.text,
-                    workdir=workdir,
-                    block=block,
-                )
-            block.audio_generation = GenerationResult(
-                ok=result.get("ok", False),
-                artifacts=result.get("artifacts", []),
-                meta=result.get("meta", {}),
-                error=result.get("error"),
-            )
-            if block.audio_generation.ok and 'total_duration' in block.audio_generation.meta:
-                totalDuration = block.audio_generation.meta['total_duration']
-            else:
-                raise Exception(f"⚠️  Audio generation failed or missing total_duration for {block.id}")
-
-
-        # --- Video Part ---
-        method = create_method(block.decision)
-
-        # prompt part (only for text_video, not for extract_background_segment)
-        if not block.prompt and block.decision == "text_video":
-            block.prompt = method.generate_prompt(block.text)
-
-        # Check if video exists, generate if missing
-        video_exists = (
-            block.video_generation and
-            'output_path' in block.video_generation.meta and
-            os.path.exists(block.video_generation.meta['output_path'])
-        )
-        
-        if not video_exists:
-
-            # Retry logic with backoff for API errors
-            @backoff.on_exception(
-                    backoff.expo,
-                    Exception,
-                    max_tries=BACKOFF_MAX_TRIES,
-                    max_time=BACKOFF_MAX_TIME,
-                    jitter=backoff.random_jitter
-            )
-            def _run_method_with_retry():
-                """Internal function that runs the method with retry logic."""
-                return method.run(
-                    project=project,
-                    target_name=block.id,
-                    text=block.text,
-                    workdir=workdir,
-                    duration_ms=totalDuration,
-                    block=block,
-                )
-                
-            try:
-                result = _run_method_with_retry()
-                if block.decision == "text_video":
-                    delay = random.uniform(5.0, 10.0)
-                    print(f"⏸️  Waiting {delay:.1f}s before next request to avoid rate limits...")
-                    time.sleep(delay)
-            except Exception as e:
-                print(f"❌ Error for {block.id} after all retries: {e}")
-                raise e
-
-            block.video_generation = GenerationResult(
-                ok=result.get("ok", False),
-                artifacts=result.get("artifacts", []),
-                meta=result.get("meta", {}),
-                error=result.get("error"),
-            )
-                
-            # Mark status based on method type
-            if block.video_generation.ok:
-                if block.decision == "text_video":
-                    block.status = "submitted"  # Will be updated to "done" by worker
-                else:
-                    # extract_background_segment completes immediately
-                    block.status = "done"
-            else:
-                block.status = "error"
-
-        remotion_exists = (
-            block.remotion_generation and
-            'output_path' in block.remotion_generation.meta and
-            os.path.exists(block.remotion_generation.meta['output_path'])
-        )
-        # Generate remotion if:
-        # 1. Remotion doesn't exist yet
-        # 2. Block has extra_info (image/picture information)
-        # 3. Video generation is complete (for both text_video and extract_background_segment)
-        video_ready = (
-            block.video_generation and
-            block.video_generation.ok and
-            'output_path' in block.video_generation.meta and
-            os.path.exists(block.video_generation.meta['output_path'])
-        )
-        if not remotion_exists and block.extra_info and video_ready:
-            print(f"   → Generating remotion video for {block.id} (has extra_info and video ready)")
-            remotion_method = create_method("remotion_picture")
-            remotion_result = remotion_method.run(
-                project=project,
-                target_name=block.id,
-                text=block.text,
-                workdir=workdir,
-                duration_ms=totalDuration,
-                block=block,
-            )
-            block.remotion_generation = GenerationResult(
-                ok=remotion_result.get("ok", False),
-                artifacts=remotion_result.get("artifacts", []),
-                meta=remotion_result.get("meta", {}),
-                error=remotion_result.get("error"),
-            )
-        elif block.extra_info and not video_ready:
-            print(f"   → Skipping remotion for {block.id} (video not ready yet)")
-        elif not block.extra_info:
-            print(f"   → Skipping remotion for {block.id} (no extra_info)")
-
-
-        # --- 写回更新 ---
-        raw["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-
-        for i, b in enumerate(raw["script"]):
-            if b["id"] == block.id:
-                raw["script"][i] = block.to_dict()
-                break
-
-        write_json(input_path, raw)
-        print(f"→ Updated JSON ({block.status})")
-        
-
-
-    print("\n✅ Pipeline finished.")
-
-    _wait_for_video_completion(workdir, project)
+    # Parse project JSON
+    # Convert project_status string to ProjectStatus enum before parsing
+    if "project_status" in raw and isinstance(raw["project_status"], str):
+        try:
+            raw["project_status"] = ProjectStatus(raw["project_status"])
+        except ValueError:
+            raw["project_status"] = ProjectStatus.CREATED
     
-    # After video generation completes, set status to RENDERING
-    set_project_status(input_path, ProjectStatus.RENDERING)
+    project = from_dict(ProjectJSON, raw)
 
+    # Create pipeline & worker
+    pipeline = Pipeline(project_name)
+    worker = Worker(pipeline)
 
-if __name__ == "__main__":
-    run_pipeline(Path(f"./project/{PROJECT_NAME}/{PROJECT_NAME}.json"), Path("."))
+    # Build DAG from script blocks
+    for script_block in project.script:
+        print(f"[Pipeline] Build DAG for ScriptBlock {script_block.id}")
+        pipeline.build(script_block)
+
+    # Execute
+    print("[Pipeline] Start execution…")
+    jobs = worker.run_until_complete()
+    print(f"[Pipeline] Completed {jobs} jobs")
+
+    # Final status
+    dao = WorkingBlockDAO()
+    errors = [wb for wb in dao.get_all(project_name) if wb.status == WorkingBlockStatus.ERROR]
+    pending = [wb for wb in dao.get_all(project_name) if wb.status == WorkingBlockStatus.PENDING]
+
+    if errors:
+        set_project_status(input_path, ProjectStatus.GENERATE_FAILED)
+    elif pending:
+        set_project_status(input_path, ProjectStatus.GENERATING)
+    else:
+        set_project_status(input_path, ProjectStatus.RENDERING)
+
+    print("[Pipeline] Finished.")

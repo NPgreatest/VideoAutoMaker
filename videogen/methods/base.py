@@ -1,107 +1,60 @@
 import abc
-from pathlib import Path
-from typing import Dict, Any, Optional
-from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus, ScriptBlock
+import json
+import os.path
+
 from videogen.dao.working_block_dao import WorkingBlockDAO
-import uuid
+from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from videogen.schema.action_spec import ActionSpec
+from videogen.schema.generation_result_schema import GenerationResult
+
+
+def check_previous_done(previous_id: str) -> WorkingBlockStatus:
+    dao = WorkingBlockDAO()
+    block = dao.get_working_block(previous_id)
+
+    # 1. 上一个 block 不存在 → DAG 损坏
+    if block is None:
+        return WorkingBlockStatus.ERROR
+    # 2. 上一个 block 明确失败
+    if block.status == WorkingBlockStatus.ERROR:
+        return WorkingBlockStatus.ERROR
+    # 3. JSON 校验
+    try:
+        result = json.loads(block.result_json or "{}")
+    except Exception:
+        return WorkingBlockStatus.ERROR
+    output_path = result.get("output_path")
+    # 4. 若状态成功但文件不存在 → 视为 PENDING（重新生成）
+    if block.status == WorkingBlockStatus.SUCCESS:
+        if output_path and os.path.exists(output_path):
+            return WorkingBlockStatus.SUCCESS
+        else:
+            return WorkingBlockStatus.PENDING
+    # 5. 若状态 Pending / Running
+    return block.status
+
 
 
 class BaseMethod(abc.ABC):
     NAME: str = "Base"        # Override
-    OUTPUT_KIND: str = "any"  # "audio" | "video" | "other"
 
     def __init__(self) -> None:
         super().__init__()
 
     @abc.abstractmethod
-    def run(self, *, project: str, target_name: str, text: str, workdir: Path, duration_ms: int | None = None, block) -> Dict[str, Any]:
-        """Execute the method and return a dict:
-        {
-          "ok": bool,
-          "artifacts": [<paths>],
-          "meta": {...},
-          "error": <str or None>
-        }
+    def run(self, spec: ActionSpec) -> WorkingBlock:
+        """
+        Create a new WorkingBlock for this action.
+        Does NOT execute heavy work - just creates and saves the block.
         """
         raise NotImplementedError
 
-    def generate_prompt(self, text: str, context: str = None) -> str:
-        """Execute the method and return a str:
-        prompt...
+    @abc.abstractmethod
+    def poll(self, wb: WorkingBlock) -> GenerationResult:
+        """
+        Do actual work; may run multiple times (async) or finish in one call (sync).
+        Must update wb.status, wb.output_path, wb.result_json.
         """
         raise NotImplementedError
-    
-    def supports_background_processing(self) -> bool:
-        """
-        Check if this method supports background processing.
-        Override this method to return True if the method supports background processing.
-        
-        Returns:
-            bool: True if this method supports background processing
-        """
-        return False
-    
-    def create_working_block(self, project: str, target_name: str, workdir: Path, block: Optional[ScriptBlock] = None) -> Optional[str]:
-        """
-        Create a WorkingBlock for background processing.
-        This method should be called by run() when the method supports background processing.
-        
-        Args:
-            project: Project name
-            target_name: Target name
-            workdir: Working directory
-            block: ScriptBlock (optional)
-            
-        Returns:
-            str: Working ID if successful, None otherwise
-        """
-        if not self.supports_background_processing():
-            return None
-        
-        working_id = str(uuid.uuid4())
-        
-        # Update block with working_id
-        if block:
-            block.working_id = working_id
-        
-        # Create WorkingBlock
-        working_block = WorkingBlock(
-            working_id=working_id,
-            project_id=project,
-            output_folder=str(workdir),
-            block=block,
-            status=WorkingBlockStatus.PENDING,
-            method_name=self.NAME  # Store the method name for processing
-        )
-        
-        # Store in SQLite database
-        dao = WorkingBlockDAO()
-        success = dao.create_working_block(working_block)
-        
-        if success:
-            return working_id
-        else:
-            return None
-    
-    def process_working_block(self, working_block: WorkingBlock) -> bool:
-        """
-        Process a WorkingBlock in the background.
-        This method should be overridden by methods that support background processing.
-        
-        Args:
-            working_block: The WorkingBlock to process
-            
-        Returns:
-            bool: True if successful, False otherwise
-        """
-        # Default implementation - methods should override this
-        return False
-    
-    def get_worker_name(self) -> str:
-        """
-        Get the name of this worker for registration.
-        
-        Returns:
-            str: Worker name (usually matches method NAME)
-        """
-        return self.NAME
+
+

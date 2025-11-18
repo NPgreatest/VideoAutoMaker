@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import os, json, re, subprocess, shutil
+import os, json, subprocess, shutil
 from pathlib import Path
 from collections import Counter
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
 from dotenv import load_dotenv
-from videogen.pipeline.schema import ScriptBlock
-from videogen.pipeline.utils import read_json, write_json, get_character_info, set_project_status
-from videogen.pipeline.schema import ProjectStatus
-from videogen.pipeline.add_picture import add_picture_overlay
+from videogen.pipeline.utils import read_json
 from videogen.pipeline.gen_cover import gen_cover
+from videogen.schema.project_schema import ScriptBlock
 
 # ========== 配置项 ==========
 CRF = "14"             # 画质（越低越好）
@@ -77,46 +75,41 @@ def ensure_muxed(project_dir: Path, idx: int, muxed_dir: Path, block: Optional[S
     audio = project_dir / f"audio/L{idx}.wav"
     
     if video.exists() and audio.exists():
-        # Resize video to match audio duration if block metadata is available
-        resized_video = video
-        if block and block.audio_generation:
-            audio_gen = block.audio_generation
-            if hasattr(audio_gen, 'ok') and audio_gen.ok:
-                # It's a GenerationResult object
-                target_dur_ms = audio_gen.meta.get('total_duration', None)
-            elif isinstance(audio_gen, dict) and audio_gen.get('ok', False):
-                # It's a dictionary
-                target_dur_ms = audio_gen.get('meta', {}).get('total_duration', None)
-            else:
-                target_dur_ms = None
-            
-            if target_dur_ms:
-                target_dur_sec = target_dur_ms / 1000.0
-                # Import resize function
-                from videogen.methods.text_video_silicon.utils import resize_video_duration
-                
-                # Resize video to target duration (store in _work/resized)
-                resized_dir = project_dir / "_work" / "resized"
-                resized_dir.mkdir(parents=True, exist_ok=True)
-                resized_path = resized_dir / f"L{idx}_resized.mp4"
-                
-                print(f"[resize] Resizing L{idx} to match audio duration ({target_dur_sec:.2f}s)...")
-                new_dur = resize_video_duration(video, resized_path, target_dur_sec)
-                
-                if new_dur > 0:
-                    resized_video = resized_path
-                    print(f"[resize] ✅ Resized to {new_dur:.2f}s")
-                else:
-                    print(f"[resize] ⚠️ Resize failed, using original video")
+        # Get audio duration to determine if we need to loop video
+        audio_info = ffprobe(audio)
+        audio_dur = float(audio_info.get("format", {}).get("duration", 0))
+        
+        # Get video duration
+        video_info = ffprobe(video)
+        video_dur = float(video_info.get("format", {}).get("duration", 0))
         
         print(f"[mux] Generating L{idx}_muxed.mp4 ...")
-        # Explicitly map video from first input and audio from second input
-        # This ensures we use the audio from audio folder, not from the video
-        ok = run([
-            "ffmpeg","-y","-i",str(resized_video),"-i",str(audio),
-            "-map","0:v:0","-map","1:a:0",  # Map video from input 0, audio from input 1
-            "-c:v","copy","-c:a","aac","-shortest",str(mux)
-        ])
+        print(f"[mux] Video duration: {video_dur:.2f}s, Audio duration: {audio_dur:.2f}s")
+        
+        # If video is shorter than audio, loop it until it reaches audio duration
+        if video_dur < audio_dur and video_dur > 0:
+            print(f"[mux] Video is shorter than audio, looping video to match audio duration...")
+            # Use stream_loop to loop the video input, then trim to audio duration
+            ok = run([
+                "ffmpeg", "-y",
+                "-stream_loop", "-1", "-i", str(video),  # Loop input video infinitely
+                "-i", str(audio),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+                "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
+                "-pix_fmt", PIX_FMT,
+                "-shortest",  # Use shortest to match audio duration (stops when audio ends)
+                str(mux)
+            ])
+        else:
+            # Video is longer or equal to audio, use shortest to match audio
+            ok = run([
+                "ffmpeg", "-y", "-i", str(video), "-i", str(audio),
+                "-map", "0:v:0", "-map", "1:a:0",
+                "-c:v", "copy", "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
+                "-shortest", str(mux)
+            ])
+        
         return mux if ok else None
     print(f"[mux] ⚠️ Missing L{idx}.mp4 or .wav, skipping")
     return None
@@ -266,45 +259,12 @@ def concat_pipeline(project_name:str):
             clip_blocks.append(block)
     if not clips: raise SystemExit("❌ no muxed clips found")
 
-    # ====== 阶段 6：逐段添加图片叠加 ======
-    picture_dir = work / "picture"
-    picture_dir.mkdir(exist_ok=True)
-
-    clips_with_picture = []
-    for clip_path, block in zip(clips, clip_blocks):
-        picture_output = picture_dir / f"{clip_path.stem}_picture.mp4"
-        character = getattr(block, "character", None)
-        picture_path = None
-
-        if character:
-            character_info = get_character_info(character)
-            if character_info:
-                image_path_str = character_info.get("image_path")
-                if image_path_str:
-                    candidate_path = Path(image_path_str)
-                    if not candidate_path.is_absolute():
-                        project_root = Path.cwd()
-                        candidate_path = (project_root / candidate_path).resolve()
-                    picture_path = candidate_path
-
-        print(f"[picture] 🎯 Processing clip {clip_path.name} (character={character})")
-        ok = add_picture_overlay(
-            clip_path,
-            picture_output,
-            picture_path=picture_path,
-        )
-        if ok:
-            clips_with_picture.append(picture_output)
-        else:
-            print(f"[picture] ⚠️ Falling back to original clip without overlay: {clip_path}")
-            clips_with_picture.append(clip_path)
-
-    infos=[get_clip_info(p) for p in clips_with_picture]
+    infos=[get_clip_info(p) for p in clips]
     w,h,fps=choose_target(infos, raw)
     print(f"[spec] Target {w}x{h}@{fps}fps")
 
     norm=[]
-    for c in clips_with_picture:
+    for c in clips:
         out=norm_dir/f"{c.stem}_norm.mp4"
         if normalize_clip(c,out,w,h,fps): norm.append(out)
     if not norm: raise SystemExit("❌ normalize failed")

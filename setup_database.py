@@ -4,7 +4,6 @@ Database setup script for videogen.
 Creates SQLite database for WorkingBlock storage.
 """
 
-import os
 import sys
 from pathlib import Path
 
@@ -34,7 +33,7 @@ def setup_database():
     print("\n🧪 Testing database...")
     
     # Test basic operations
-    from videogen.pipeline.schema import WorkingBlock, WorkingBlockStatus, ScriptBlock
+    from videogen.schema.schema import WorkingBlock, WorkingBlockStatus, ScriptBlock
     
     # Create a test working block
     test_block = ScriptBlock(

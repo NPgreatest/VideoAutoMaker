@@ -7,15 +7,21 @@ Follows the BaseMethod API for video generation
 import json
 import shutil
 import subprocess
+import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional
-from datetime import datetime, timezone
-import os
+from datetime import datetime
+from dacite import from_dict
 
 from videogen.methods.base import BaseMethod
-from videogen.pipeline.schema import WorkingBlock, ScriptBlock
 from videogen.methods.registry import register_method
-from videogen.pipeline.utils import read_json, write_json
+from videogen.methods.remotion_animation.schema import RemotionAnimationSchema
+from videogen.pipeline.utils import get_character_info
+from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from videogen.schema.action_spec import ActionSpec
+from videogen.schema.generation_result_schema import GenerationResult
+from videogen.schema.schema_registry import get_schema
+from videogen.dao.working_block_dao import WorkingBlockDAO
+from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 
 @register_method
@@ -34,6 +40,16 @@ class RemotionMethod(BaseMethod):
             "width": 1080,
             "height": 1920,
             "description": "TikTok format (9:16) with centered image and text overlay"
+        },
+        "OverlapCharacter": {
+            "width": 1920,
+            "height": 1080,
+            "description": "Character overlay with slide animation from left"
+        },
+        "OverlapCharacterTiktok": {
+            "width": 1080,
+            "height": 1920,
+            "description": "Character overlay with slide animation from left on Tiktok Format"
         }
     }
 
@@ -41,578 +57,343 @@ class RemotionMethod(BaseMethod):
     DEFAULT_IMAGE = "openai.png"
     DEFAULT_SOUND_EFFECT = ""
 
-    def supports_background_processing(self) -> bool:
-        """Remotion method supports background processing."""
-        return True
-    
-    def process_working_block(self, working_block: WorkingBlock) -> Optional[bool]:
+    def run(self, spec: ActionSpec) -> WorkingBlock:
         """
-        Process a WorkingBlock using Remotion method.
-        
-        Args:
-            working_block: The WorkingBlock to process
-            
-        Returns:
-            bool: True if successful, False if failed
-            None: if video_generation doesn't exist yet (keep pending)
+        Create a new WorkingBlock for Remotion video generation.
+        Does NOT execute heavy work - just creates and saves the block.
         """
-        if not working_block.block:
-            print(f"[RemotionMethod] WorkingBlock {working_block.working_id} has no block data")
-            return False
-        
-        # Load the latest block data from JSON file instead of using the stored block
-        # This ensures we have the most up-to-date video_generation information
-        try:
-            output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
-            json_path = output_folder / "project" / working_block.project_id / f"{working_block.project_id}.json"
-            
-            if json_path.exists():
-                raw = read_json(json_path)
-                script_blocks = raw.get("script", [])
-                
-                # Find the block with matching ID
-                block_id = working_block.block.id
-                block_dict = None
-                for b in script_blocks:
-                    if b.get("id") == block_id:
-                        block_dict = b
-                        break
-                
-                if block_dict:
-                    from dacite import from_dict
-                    block = from_dict(ScriptBlock, block_dict)
-                else:
-                    block = working_block.block
-            else:
-                block = working_block.block
-        except Exception as e:
-            print(f"[RemotionMethod] Error loading block from JSON: {e}, using stored block data")
-            block = working_block.block
-        
-        # Check if video_generation exists and is ready (prior job finished)
-        video_gen = block.video_generation
-        if not video_gen:
-            print(f"[RemotionMethod] Video generation not ready yet for {block.id}, keeping pending")
-            return None
-        
-        # Handle both GenerationResult object and dict cases
-        if hasattr(video_gen, 'ok'):
-            is_ok = video_gen.ok
-            meta = video_gen.meta
-        else:
-            is_ok = video_gen.get('ok', False)
-            meta = video_gen.get('meta', {})
-        
-        # Get video path from video_generation meta
-        video_path_str = meta.get('output_path') if meta else None
-        video_path = Path(video_path_str) if video_path_str else None
-        
-        # If prior job didn't finish, still waiting
-        if not is_ok or not video_path_str or not video_path or not video_path.exists():
-            print(f"[RemotionMethod] Video generation not ready yet for {block.id}, keeping pending")
-            return None
-        
-        # Get image path and title from extra_info
-        image_filename = None
-        title = ""
-        if hasattr(block, 'extra_info') and block.extra_info:
-            image_filename = block.extra_info.get("single_picture")
-            title = block.extra_info.get("title", "")
-
-        
-        # Determine template from block parameter
-        template_name = None
-        if hasattr(block, 'extra_info') and block.extra_info:
-            template_name = block.extra_info.get("template")
-        
-        # If no template specified, default to desktop
-        if not template_name:
-            template_name = "FilterDesktopSlide"
+        # Parse config using schema
+        schema_class = get_schema(self.NAME)
+        config = from_dict(schema_class, spec.config)
         
         # Validate template
+        template_name = config.animation_type if hasattr(config, 'animation_type') else spec.config.get("template", "FilterDesktopSlide")
         if template_name not in self.TEMPLATES:
-            print(f"[RemotionMethod] Invalid template '{template_name}'")
-            return False
+            raise ValueError(f"Invalid template '{template_name}'. Available: {list(self.TEMPLATES.keys())}")
         
-        # Calculate duration from video or audio (similar to extract_background_segment)
-        duration_ms = None
+        # Create WorkingBlock
+        working_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         
-        # First, try to get duration from video_generation meta (if available)
-        if hasattr(block, 'video_generation') and block.video_generation:
-            if hasattr(block.video_generation, 'meta'):
-                video_meta = block.video_generation.meta
-                # Check if video has duration info
-                if 'duration' in video_meta:
-                    try:
-                        # Duration might be in seconds (string or float)
-                        duration_str = str(video_meta['duration'])
-                        duration_sec = float(duration_str)
-                        duration_ms = int(duration_sec * 1000)
-                        print(f"[RemotionMethod] Using duration from video_generation: {duration_sec:.2f}s")
-                    except (ValueError, TypeError):
-                        pass
+        working_block = WorkingBlock(
+            id=working_id,
+            project_name=spec.config.get("project_name", "default"),
+            action_id=spec.id,
+            method_name=self.NAME,
+            status=WorkingBlockStatus.PENDING,
+            prev_ids=[],  # Will be set by PipelineBuilder
+            output_path=None,
+            config_json=json.dumps(spec.config),
+            result_json="",
+            create_time=now,
+            modify_time=now
+        )
         
-        # If not found, try to get from audio_generation
-        if not duration_ms and hasattr(block, 'audio_generation') and block.audio_generation:
-            # Handle both GenerationResult object and dict cases
-            if hasattr(block.audio_generation, 'ok'):
-                audio_ok = block.audio_generation.ok
-                audio_meta = block.audio_generation.meta
+        return working_block
+
+    def poll(self, wb: WorkingBlock) -> GenerationResult:
+        """
+        Execute Remotion video generation.
+        This method requires the previous job (video generation) to be completed.
+        """
+        try:
+            # Load config from config_json
+            config_dict = json.loads(wb.config_json)
+            schema_class = get_schema(self.NAME)
+            config = from_dict(schema_class, config_dict)
+            
+            # Check if previous jobs are completed
+            if wb.prev_ids:
+                dao = WorkingBlockDAO()
+                for prev_id in wb.prev_ids:
+                    prev_wb = dao.get_working_block(prev_id)
+                    if not prev_wb or prev_wb.status != WorkingBlockStatus.SUCCESS:
+                        # Previous job not ready yet
+                        print(f"[RemotionMethod] Previous job {prev_id} not ready yet")
+                        result = GenerationResult(status=WorkingBlockStatus.PENDING, output_path=None, duration_sec=None, error=None)
+                        return result
+                    
+                    # Get video path from previous job (use the first one found)
+                    if prev_wb.output_path and Path(prev_wb.output_path).exists():
+                        video_path = Path(prev_wb.output_path)
+                        break
+                else:
+                    # No valid previous job output found
+                    error_msg = f"Previous job outputs not found for {wb.prev_ids}"
+                    wb.status = WorkingBlockStatus.ERROR
+                    result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+                    wb.result_json = json.dumps({
+                        "status": result.status.value,
+                        "output_path": result.output_path,
+                        "duration_sec": result.duration_sec,
+                        "error": result.error
+                    })
+                    return result
+                
+                # video_path is set in the loop above
             else:
-                audio_ok = block.audio_generation.get('ok', False)
-                audio_meta = block.audio_generation.get('meta', {})
+                # Try to get video path from config
+                video_path_str = config_dict.get("video_path")
+                if not video_path_str:
+                    error_msg = "No previous job or video_path specified"
+                    wb.status = WorkingBlockStatus.ERROR
+                    result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+                    wb.result_json = json.dumps({
+                        "status": result.status.value,
+                        "output_path": result.output_path,
+                        "duration_sec": result.duration_sec,
+                        "error": result.error
+                    })
+                    return result
+                video_path = Path(video_path_str)
             
-            if audio_ok:
-                duration_ms = audio_meta.get('total_duration')
-                if duration_ms:
-                    print(f"[RemotionMethod] Using duration from audio_generation: {duration_ms/1000.0:.2f}s")
-        
-        # If still not found, try to get duration from the video file itself
-        if not duration_ms and video_path and video_path.exists():
-            try:
-                cmd = [
-                    "ffprobe", "-v", "error",
-                    "-show_entries", "format=duration",
-                    "-of", "default=noprint_wrappers=1:nokey=1",
-                    str(video_path)
-                ]
-                result = subprocess.run(cmd, capture_output=True, text=True)
-                if result.returncode == 0:
-                    duration_sec = float(result.stdout.strip())
-                    duration_ms = int(duration_sec * 1000)
-                    print(f"[RemotionMethod] Using duration from video file: {duration_sec:.2f}s")
-            except Exception as e:
-                print(f"[RemotionMethod] ⚠️  Failed to get duration from video file: {e}")
-        
-        # Create output directories
-        output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
-        project_dir = output_folder / "project" / working_block.project_id
-        project_dir.mkdir(parents=True, exist_ok=True)
-        video_dir = project_dir / "remotion_video"
-        video_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Generate output filename
-        output_filename = f"{block.id}.mp4"
-        output_path = video_dir / output_filename
-        
-        # Find the remotion_project directory
-        method_dir = Path(__file__).parent
-        remotion_project_path = method_dir / "remotion_project"
-        if not remotion_project_path.exists():
-            remotion_project_path = Path("remotion_project")
-        
-        # Create assets directory if it doesn't exist
-        assets_dir = remotion_project_path / "public" / "assets"
-        assets_dir.mkdir(parents=True, exist_ok=True)
-        
-        # Handle image file injection if single_picture is specified
-        injected_image_path = None
-        if image_filename:
-            # Source image path in project folder
-            source_image_path = project_dir / image_filename
+            if not video_path.exists():
+                error_msg = f"Video file not found: {video_path}"
+                wb.status = WorkingBlockStatus.ERROR
+                result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+                wb.result_json = json.dumps({
+                    "status": result.status.value,
+                    "output_path": result.output_path,
+                    "duration_sec": result.duration_sec,
+                    "error": result.error
+                })
+                return result
             
-            # Destination image path in remotion assets
-            injected_image_path = assets_dir / image_filename
+            # Get template and other config
+            template_name = config_dict.get("template")
+            if template_name not in self.TEMPLATES:
+                raise Exception(f"Template {template_name} not found")
             
-            if source_image_path.exists():
+            # Get image and title from config
+            image_filename = config_dict.get("image_filename") or self.DEFAULT_IMAGE
+            title = config_dict.get("title", "")
+            description = config_dict.get("description", "")
+            
+            # Calculate duration
+            duration_ms = config_dict.get("duration_ms")
+            if duration_ms:
+                duration_sec = duration_ms / 1000.0
+            else:
+                # Try to get from video file
                 try:
-                    # Copy image to remotion assets folder
-                    shutil.copy2(str(source_image_path), str(injected_image_path))
-                    print(f"[RemotionMethod] ✅ Copied image {image_filename} to remotion assets")
-                except Exception as e:
-                    print(f"[RemotionMethod] ❌ Failed to copy image {image_filename}: {str(e)}")
-                    image_filename = None  # Fall back to default image
-            else:
-                print(f"[RemotionMethod] ❌ Image file not found: {source_image_path}")
-                image_filename = None  # Fall back to default image
-        
-        # Copy video to remotion assets if needed
-        # We'll pass the video path as a prop, but we need to make it accessible
-        # For now, we'll copy it to assets or use absolute path
-        video_filename = f"{block.id}_video.mp4"
-        injected_video_path = assets_dir / video_filename
-        try:
-            shutil.copy2(str(video_path), str(injected_video_path))
-            print(f"[RemotionMethod] ✅ Copied video to remotion assets")
-        except Exception as e:
-            print(f"[RemotionMethod] ❌ Failed to copy video: {str(e)}")
-            return False
-        
-        description = ""  # Description can be empty or from extra_info
-        if hasattr(block, 'extra_info') and block.extra_info:
-            description = block.extra_info.get("description", "")
-        
-        # Calculate duration - use actual duration from block, not default
-        if duration_ms:
-            duration_sec = duration_ms / 1000.0
-            print(f"[RemotionMethod] ✅ Using block duration: {duration_sec:.2f}s ({duration_ms}ms)")
-        else:
-            duration_sec = self.DEFAULT_DURATION_SEC
-            print(f"[RemotionMethod] ⚠️  No duration found, using default: {duration_sec}s")
-        
-        # Ensure minimum duration (but don't cap maximum - use actual duration)
-        if duration_sec < 1:
-            print(f"[RemotionMethod] ⚠️  Duration too short ({duration_sec:.2f}s), setting minimum to 1s")
-            duration_sec = 1
-        
-        # Calculate durationInFrames for Remotion (30 fps)
-        REMOTION_FPS = 30
-        duration_in_frames = int(round(duration_sec * REMOTION_FPS))
-        print(f"[RemotionMethod] 📐 Calculated durationInFrames: {duration_in_frames} frames ({duration_sec:.2f}s × {REMOTION_FPS} fps)")
-        
-        # Create props for Remotion
-        props = {
-            "title": title,
-            "description": description,
-            "duration": duration_sec,
-            "imagePath": image_filename if image_filename else self.DEFAULT_IMAGE,
-            "videoPath": video_filename,  # Video file in assets folder
-            "titleStartTime": int(duration_sec * 0.5 * 1000),  # Start at 50% of duration
-            "soundEffect": self.DEFAULT_SOUND_EFFECT
-        }
-        
-        # Save props to JSON file for debugging
-        props_path = project_dir / "remotion_video" / f"{block.id}_props.json"
-        with open(props_path, 'w', encoding='utf-8') as f:
-            json.dump(props, f, indent=2)
-        
-        try:
-            # Find the remotion_project directory - it's located in the same directory as this method
+                    cmd = [
+                        "ffprobe", "-v", "error",
+                        "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1",
+                        str(video_path)
+                    ]
+                    result_probe = subprocess.run(cmd, capture_output=True, text=True)
+                    if result_probe.returncode == 0:
+                        duration_sec = float(result_probe.stdout.strip())
+                    else:
+                        duration_sec = self.DEFAULT_DURATION_SEC
+                except Exception:
+                    duration_sec = self.DEFAULT_DURATION_SEC
+            
+            if duration_sec < 1:
+                duration_sec = 1
+            
+            # Get action output directory using new path structure
+            workdir = Path(config_dict.get("workdir", "."))
+            project_root = workdir.resolve()
+            project_name = wb.project_name or config_dict.get("project_name", "default")
+            block_id = wb.block_id or config_dict.get("target_name", wb.action_id)
+            action_dir = get_action_output_dir(
+                project_root=project_root,
+                project_name=project_name,
+                block_id=block_id,
+                method_name=wb.method_name,
+                action_id=wb.action_id
+            )
+            action_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Find remotion project directory
             method_dir = Path(__file__).parent
             remotion_project_path = method_dir / "remotion_project"
             if not remotion_project_path.exists():
-                # If not found, try relative to the current working directory
                 remotion_project_path = Path("remotion_project")
             
-            # Use a temporary filename in remotion's output directory
-            temp_output_filename = f"temp_{block.id}.mp4"
+            # Create assets directory
+            assets_dir = remotion_project_path / "public" / "assets"
+            assets_dir.mkdir(parents=True, exist_ok=True)
+            
+            project_dir = project_root / "project" / project_name
+            copied_assets = []
+
+            def _copy_asset_if_needed(path_str: str | None) -> str | None:
+                if not path_str:
+                    return None
+                candidate_paths = []
+                user_path = Path(path_str)
+                if user_path.is_absolute():
+                    candidate_paths.append(user_path)
+                else:
+                    candidate_paths.extend([
+                        project_dir / path_str,
+                        Path.cwd() / path_str,
+                        user_path,
+                    ])
+                source = next((p for p in candidate_paths if p.exists()), None)
+                if not source:
+                    raise FileNotFoundError(
+                        f"Asset file not found: {path_str}. Tried: "
+                        + ", ".join(str(p) for p in candidate_paths)
+                    )
+                dest_name = source.name
+                dest_path = assets_dir / dest_name
+                dest_path.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(str(source), str(dest_path))
+                copied_assets.append(dest_path)
+                print(f"[RemotionMethod] ✅ Copied asset {source} → {dest_path}")
+                return dest_name
+            
+            image_asset_name = image_filename or self.DEFAULT_IMAGE
+            if image_filename and image_filename != self.DEFAULT_IMAGE:
+                image_asset_name = _copy_asset_if_needed(image_filename) or image_asset_name
+            
+            # Copy video to assets (use action_id for unique naming)
+            video_filename = f"{wb.action_id}_video.mp4"
+            injected_video_path = assets_dir / video_filename
+            shutil.copy2(str(video_path), str(injected_video_path))
+            print(f"[RemotionMethod] ✅ Copied video to remotion assets")
+            
+            # Calculate duration in frames (30 fps)
+            REMOTION_FPS = 30
+            duration_in_frames = int(round(duration_sec * REMOTION_FPS))
+            
+            if template_name in ("OverlapCharacter", "OverlapCharacterTiktok"):
+                character = config_dict.get("character")
+                char_info = get_character_info(character) or {}
+                char_image_path = char_info.get("image_path")
+                character_asset = None
+                if char_image_path:
+                    character_asset = _copy_asset_if_needed(char_image_path)
+                if not character_asset:
+                    # fallback to provided image asset
+                    if image_asset_name and image_asset_name != self.DEFAULT_IMAGE:
+                        character_asset = image_asset_name
+                    else:
+                        character_asset = self.DEFAULT_IMAGE
+                resize_ratio = config_dict.get("resize_ratio", 0.15)
+                position_x = config_dict.get("position_x", 0.02)
+                position_y = config_dict.get("position_y", 0.78)
+                appear = config_dict.get("appear", True)
+                props = {
+                    "imagePath": character_asset,
+                    "resizeRatio": resize_ratio,
+                    "position": {"x": position_x, "y": position_y},
+                    "appear": appear,
+                    "duration": duration_sec,
+                    "videoPath": video_filename
+                }
+            elif template_name in ("FilterDesktopSlide", "FilterTikTokSlide"):
+                props = {
+                    "title": title,
+                    "description": description,
+                    "duration": duration_sec,
+                    "imagePath": image_asset_name,
+                    "videoPath": video_filename,
+                    "titleStartTime": int(duration_sec * 0.5 * 1000),
+                    "soundEffect": self.DEFAULT_SOUND_EFFECT
+                }
+            else:
+                raise ValueError(f"Unsupported template '{template_name}'")
+
+            output_path = get_output_file_path(action_dir, "mp4")
+            
+            temp_output_filename = f"temp_{wb.action_id}.mp4"
             temp_output_path = remotion_project_path / "output" / temp_output_filename
-            # For the command, use a relative path from the remotion_project directory
             temp_output_path_for_cmd = Path("output") / temp_output_filename
             
-            # Render video using Remotion
-            # Use --frames with range format (0-based index: 0 to duration_in_frames-1)
-            # For example, 299 frames = 0-298 (frames 0, 1, 2, ..., 298)
             frames_range = f"0-{duration_in_frames - 1}"
             cmd = [
                 "npx", "remotion", "render",
                 template_name,
                 str(temp_output_path_for_cmd),
-                "--frames", frames_range,  # Override Composition's durationInFrames with range
+                "--frames", frames_range,
                 "--props", json.dumps(props)
             ]
-            print(f"[RemotionMethod] 🎞️  Frame range: {frames_range} ({duration_in_frames} frames total)")
             
-            print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {block.id}...")
-            print(f"[RemotionMethod] 📊 Props: {json.dumps(props, indent=2)}")
-            print(f"[RemotionMethod] 📁 Output: {output_path}")
-            
-            result = subprocess.run(
-                cmd, 
-                cwd=remotion_project_path, 
-                capture_output=True, 
+            print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {wb.action_id}...")
+            result_cmd = subprocess.run(
+                cmd,
+                cwd=remotion_project_path,
+                capture_output=True,
                 text=True,
-                timeout=300  # 5 minute timeout
+                timeout=300
             )
             
-            if result.returncode == 0:
-                # Move the video from temp location to final destination
-                if temp_output_path.exists():
-                    shutil.move(str(temp_output_path), str(output_path))
-                    print(f"[RemotionMethod] ✅ Video generated and moved successfully!")
-                    
-                    # Clean up injected image file if it exists
-                    if injected_image_path and injected_image_path.exists():
-                        try:
-                            injected_image_path.unlink()
-                            print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
-                        except Exception as e:
-                            print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
-                    
-                    # Update the block's remotion_generation result
-                    from videogen.pipeline.schema import GenerationResult
-                    block.remotion_generation = GenerationResult(
-                        ok=True,
-                        artifacts=[str(output_path), str(props_path)],
-                        meta={
-                            "template": template_name,
-                            "template_config": self.TEMPLATES[template_name],
-                            "duration_sec": duration_sec,
-                            "title": title,
-                            "description": description,
-                            "props": props,
-                            "output_path": str(output_path),
-                            "props_path": str(props_path),
-                            "source_video_path": str(video_path),
-                            "status": "done"
-                        },
-                        error=None,
-                    )
-                    block.status = "done"
-                    
-                    # Clean up copied video file
-                    if injected_video_path.exists():
-                        try:
-                            injected_video_path.unlink()
-                            print(f"[RemotionMethod] 🗑️ Cleaned up copied video: {video_filename}")
-                        except Exception as e:
-                            print(f"[RemotionMethod] ⚠️ Failed to clean up video {video_filename}: {str(e)}")
-                    
-                    # Save updated block to JSON file
-                    self._save_block_to_json(working_block, block)
-                    
-                    return True
-                else:
-                    print(f"[RemotionMethod] ❌ Video file not found at {temp_output_path}")
-                    # Clean up injected image file if it exists
-                    if injected_image_path and injected_image_path.exists():
-                        try:
-                            injected_image_path.unlink()
-                            print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
-                        except Exception as e:
-                            print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
-                    # Clean up copied video file
-                    if injected_video_path.exists():
-                        try:
-                            injected_video_path.unlink()
-                            print(f"[RemotionMethod] 🗑️ Cleaned up copied video: {video_filename}")
-                        except Exception as e:
-                            print(f"[RemotionMethod] ⚠️ Failed to clean up video {video_filename}: {str(e)}")
-                    return False
-            else:
-                error_msg = f"Remotion rendering failed: {result.stderr}"
-                print(f"[RemotionMethod] ❌ {error_msg}")
+            if result_cmd.returncode == 0 and temp_output_path.exists():
+                # Move to final location (action directory)
+                shutil.move(str(temp_output_path), str(output_path))
+                print(f"[RemotionMethod] ✅ Video generated successfully: {output_path}")
                 
-                # Clean up injected image file if it exists
-                if injected_image_path and injected_image_path.exists():
-                    try:
-                        injected_image_path.unlink()
-                        print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
-                    except Exception as e:
-                        print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
-                
-                # Update the block's remotion_generation result with error
-                from videogen.pipeline.schema import GenerationResult
-                block.remotion_generation = GenerationResult(
-                    ok=False,
-                    artifacts=[str(props_path)],
-                    meta={
-                        "status": "error"
-                    },
-                    error=error_msg,
-                )
-                block.status = "error"
-                
-                # Clean up copied video file
+                # Clean up injected assets
+                for asset_path in copied_assets:
+                    if asset_path.exists():
+                        asset_path.unlink()
                 if injected_video_path.exists():
-                    try:
-                        injected_video_path.unlink()
-                        print(f"[RemotionMethod] 🗑️ Cleaned up copied video: {video_filename}")
-                    except Exception as e:
-                        print(f"[RemotionMethod] ⚠️ Failed to clean up video {video_filename}: {str(e)}")
+                    injected_video_path.unlink()
                 
-                # Save updated block to JSON file
-                self._save_block_to_json(working_block, block)
+                # Get actual duration
+                try:
+                    cmd = [
+                        "ffprobe", "-v", "error",
+                        "-show_entries", "format=duration",
+                        "-of", "default=noprint_wrappers=1:nokey=1",
+                        str(output_path)
+                    ]
+                    result_probe = subprocess.run(cmd, capture_output=True, text=True)
+                    actual_duration = float(result_probe.stdout.strip()) if result_probe.returncode == 0 else duration_sec
+                except Exception:
+                    actual_duration = duration_sec
                 
-                return False
+                # Update WorkingBlock
+                wb.status = WorkingBlockStatus.SUCCESS
+                wb.output_path = str(output_path)
+                
+                result = GenerationResult(
+                    status=WorkingBlockStatus.SUCCESS,
+                    output_path=str(output_path),
+                    duration_sec=actual_duration,
+                    error=None
+                )
+                wb.result_json = json.dumps({
+                    "status": result.status.value,
+                    "output_path": result.output_path,
+                    "duration_sec": result.duration_sec,
+                    "error": result.error,
+                    "template": template_name,
+                    "props": props
+                })
+                
+                return result
+            else:
+                raise Exception(f"Remotion rendering failed: {result_cmd.stderr}")
                 
         except subprocess.TimeoutExpired:
             error_msg = "Remotion rendering timed out (5 minutes)"
-            print(f"[RemotionMethod] ❌ {error_msg}")
-            
-            # Clean up injected image file if it exists
-            if injected_image_path and injected_image_path.exists():
-                try:
-                    injected_image_path.unlink()
-                    print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
-                except Exception as e:
-                    print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(e)}")
-            
-            # Clean up copied video file
-            if injected_video_path.exists():
-                try:
-                    injected_video_path.unlink()
-                    print(f"[RemotionMethod] 🗑️ Cleaned up copied video: {video_filename}")
-                except Exception as e:
-                    print(f"[RemotionMethod] ⚠️ Failed to clean up video {video_filename}: {str(e)}")
-            
-            # Update the block's remotion_generation result with error
-            from videogen.pipeline.schema import GenerationResult
-            block.remotion_generation = GenerationResult(
-                ok=False,
-                artifacts=[str(props_path)],
-                meta={
-                    "status": "error"
-                },
-                error=error_msg,
-            )
-            block.status = "error"
-            
-            # Save updated block to JSON file
-            self._save_block_to_json(working_block, block)
-            
-            return False
+            wb.status = WorkingBlockStatus.ERROR
+            result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+            wb.result_json = json.dumps({
+                "status": result.status.value,
+                "output_path": result.output_path,
+                "duration_sec": result.duration_sec,
+                "error": result.error
+            })
+            return result
         except Exception as e:
-            error_msg = f"Error generating video: {str(e)}"
+            error_msg = f"Remotion generation error: {str(e)}"
             print(f"[RemotionMethod] ❌ {error_msg}")
+            import traceback
+            traceback.print_exc()
             
-            # Clean up injected image file if it exists
-            if injected_image_path and injected_image_path.exists():
-                try:
-                    injected_image_path.unlink()
-                    print(f"[RemotionMethod] 🗑️ Cleaned up injected image: {image_filename}")
-                except Exception as cleanup_e:
-                    print(f"[RemotionMethod] ⚠️ Failed to clean up image {image_filename}: {str(cleanup_e)}")
-            
-            # Clean up copied video file
-            if injected_video_path.exists():
-                try:
-                    injected_video_path.unlink()
-                    print(f"[RemotionMethod] 🗑️ Cleaned up copied video: {video_filename}")
-                except Exception as cleanup_e:
-                    print(f"[RemotionMethod] ⚠️ Failed to clean up video {video_filename}: {str(cleanup_e)}")
-            
-            # Update the block's remotion_generation result with error
-            from videogen.pipeline.schema import GenerationResult
-            block.remotion_generation = GenerationResult(
-                ok=False,
-                artifacts=[str(props_path)],
-                meta={
-                    "status": "error"
-                },
-                error=error_msg,
-            )
-            block.status = "error"
-            
-            # Save updated block to JSON file
-            self._save_block_to_json(working_block, block)
-            
-            return False
-
-    def _save_block_to_json(self, working_block: WorkingBlock, block: ScriptBlock) -> None:
-        """
-        Save the updated block back to the JSON file.
-        
-        Args:
-            working_block: The WorkingBlock containing output_folder and project_id
-            block: The updated ScriptBlock to save
-        """
-        try:
-            # Construct JSON file path: workdir / "project" / project_id / f"{project_id}.json"
-            output_folder = Path(working_block.output_folder) if working_block.output_folder else Path(".")
-            json_path = output_folder / "project" / working_block.project_id / f"{working_block.project_id}.json"
-            
-            if not json_path.exists():
-                print(f"[RemotionMethod] ⚠️ JSON file not found: {json_path}, skipping save")
-                return
-            
-            # Read existing JSON
-            raw = read_json(json_path)
-            
-            # Find and update the block
-            updated = False
-            for i, b in enumerate(raw.get("script", [])):
-                if b.get("id") == block.id:
-                    raw["script"][i] = block.to_dict()
-                    updated = True
-                    break
-            
-            if not updated:
-                print(f"[RemotionMethod] ⚠️ Block {block.id} not found in JSON file, skipping save")
-                return
-            
-            # Update timestamp
-            raw["updated_at"] = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            
-            # Write back to JSON file
-            write_json(json_path, raw)
-            print(f"[RemotionMethod] ✅ Saved block {block.id} to JSON: {json_path}")
-            
-        except Exception as e:
-            print(f"[RemotionMethod] ⚠️ Error saving block to JSON: {e}")
-            # Don't raise - this is a non-critical operation
-
-    def run(
-        self,
-        *,
-        project: str,
-        target_name: str,
-        text: str,
-        workdir: Path,
-        duration_ms: int | None = None,
-        block: Optional[ScriptBlock] = None,
-    ) -> Dict[str, Any]:
-        """
-        Create a WorkingBlock for video generation using Remotion templates.
-        The actual processing will be done by the global worker.
-        
-        Args:
-            project: Project name
-            target_name: Target video name
-            text: Text content for the video (can be title or description)
-            workdir: Working directory
-            duration_ms: Duration in milliseconds
-            block: Template block information (should contain template name)
-        """
-        
-        if not text.strip():
-            return {"ok": False, "error": "text cannot be empty"}
-
-        # Determine template from block parameter
-        template_name = block.extra_info.get("template") or "FilterDesktopSlide"
-        
-        # Validate template
-        if template_name not in self.TEMPLATES:
-            available_templates = list(self.TEMPLATES.keys())
-            return {
-                "ok": False, 
-                "error": f"Invalid template '{template_name}'. Available templates: {available_templates}"
-            }
-
-        # Update the block with template info
-        if block:
-            if not hasattr(block, 'extra_info') or block.extra_info is None:
-                block.extra_info = {}
-            block.extra_info["template"] = template_name
-
-        # Create WorkingBlock using base method
-        working_id = self.create_working_block(project, target_name, workdir, block)
-        
-        if not working_id:
-            return {
-                "ok": False,
-                "error": f"Failed to create WorkingBlock for {target_name}"
-            }
-        
-        print(f"📤 Remotion video generation queued for {target_name} (ID: {working_id})")
-        print(f"   → Task will be processed by global worker")
-        
-        # Return immediately with submitted status
-        return {
-            "ok": True,  # Submission was successful
-            "artifacts": [],
-            "meta": {
-                "working_id": working_id,
-                "project": project,
-                "target_name": target_name,
-                "status": "submitted",
-            },
-            "error": None,
-        }
-
-    def generate_prompt(self, text: str) -> str:
-        """
-        Generate a prompt for video creation based on text content
-        
-        Args:
-            text: Input text content
-            
-        Returns:
-            Generated prompt for video creation
-        """
-        # Simple prompt generation - can be enhanced with LLM integration
-        if "|" in text:
-            title, description = text.split("|", 1)
-            return f"Create a video with title '{title.strip()}' and description '{description.strip()}'"
-        else:
-            return f"Create a video with title '{text.strip()}'"
+            wb.status = WorkingBlockStatus.ERROR
+            result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+            wb.result_json = json.dumps({
+                "status": result.status.value,
+                "output_path": result.output_path,
+                "duration_sec": result.duration_sec,
+                "error": result.error
+            })
+            return result

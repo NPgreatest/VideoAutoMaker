@@ -5,7 +5,7 @@ import json
 from pathlib import Path
 
 from videogen.methods.audio_fish.method import FishAudioMethod
-from videogen.pipeline.schema import ScriptBlock
+from videogen.schema.schema import ScriptBlock
 
 
 def try_audio_engine():

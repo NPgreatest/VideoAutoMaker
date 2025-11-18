@@ -1,14 +1,23 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
+import json
 import subprocess
+import uuid
 from pathlib import Path
-from typing import Dict, Any, Optional
+from datetime import datetime
+from dacite import from_dict
 
+from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
-from videogen.pipeline.schema import ScriptBlock
+from videogen.methods.extract_background_segment.schema import ExtractBackgroundSegmentSchema
+from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from videogen.schema.action_spec import ActionSpec
+from videogen.schema.generation_result_schema import GenerationResult
+from videogen.schema.schema_registry import get_schema
+from videogen.pipeline.utils import read_json
+from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 
 def _run_ffmpeg(cmd: list[str]) -> bool:
@@ -65,112 +74,95 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
     def __init__(self) -> None:
         super().__init__()
 
-    def generate_prompt(self, text: str, context: str = None) -> str:
-        """Not used for background video extraction."""
-        return ""
-
-    def run(
-        self,
-        *,
-        project: str,
-        target_name: str,
-        text: str,
-        workdir: Path,
-        duration_ms: Optional[int] = None,
-        block: Optional[ScriptBlock] = None,
-    ) -> Dict[str, Any]:
+    def run(self, spec: ActionSpec) -> WorkingBlock:
         """
-        Extract a segment from the background video.
+        Create a new WorkingBlock for background video extraction.
+        Does NOT execute heavy work - just creates and saves the block.
+        """
+
+        # Create WorkingBlock
+        working_id = str(uuid.uuid4())
+        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         
-        The segment start time is calculated based on cumulative previous clip durations.
-        The segment duration matches the audio duration for this block.
+        working_block = WorkingBlock(
+            id=working_id,
+            project_name=spec.config.get("project_name", "default"),
+            action_id=spec.id,
+            method_name=self.NAME,
+            status=WorkingBlockStatus.PENDING,
+            prev_ids=spec.prev_ids,
+            output_path=None,
+            config_json=json.dumps(spec.config),
+            result_json="",
+            create_time=now,
+            modify_time=now
+        )
+        
+        return working_block
+
+    def poll(self, wb: WorkingBlock) -> GenerationResult:
+        """
+        Execute background video segment extraction.
+        This is a synchronous operation - completes in one call.
         """
         try:
-            # Get background video path from project JSON
-            project_dir = workdir / "project" / project
-            project_json_path = project_dir / f"{project}.json"
+            # Load config from config_json
+            config_dict = json.loads(wb.config_json)
+            schema_class = get_schema(self.NAME)
+            config = from_dict(schema_class, config_dict)
+            
+            # Get project info (still need project.json for background_video path)
+            project_name = wb.project_name
+            workdir = Path(config_dict.get("workdir", "."))
+            project_root = workdir.resolve()
+            project_dir = project_root / "project" / project_name
+            project_json_path = project_dir / f"{project_name}.json"
             
             if not project_json_path.exists():
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {},
-                    "error": f"Project JSON not found: {project_json_path}",
-                }
-
+                raise FileNotFoundError(f"Project {project_name} not found")
+            
             # Read project JSON to get background_video path
-            from videogen.pipeline.utils import read_json
             project_data = read_json(project_json_path)
             background_video_path = project_data.get("background_video")
             
             if not background_video_path:
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {},
-                    "error": "No background_video specified in project",
-                }
-
-            # Resolve background video path (can be relative or absolute)
+                error_msg = "No background_video specified in project"
+                result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+                wb.status = WorkingBlockStatus.ERROR
+                wb.result_json = json.dumps({
+                    "status": result.status.value,
+                    "output_path": result.output_path,
+                    "duration_sec": result.duration_sec,
+                    "error": result.error
+                })
+                return result
+            
+            # Resolve background video path
             bg_video = Path(background_video_path)
             if not bg_video.is_absolute():
-                # Resolve relative path from project root
                 project_root = Path.cwd()
                 bg_video = (project_root / bg_video).resolve()
             
             if not bg_video.exists():
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {},
-                    "error": f"Background video not found: {bg_video}",
-                }
+                raise FileNotFoundError(f"Background Video {bg_video} not found")
 
-            # Get audio duration in seconds
-            if not duration_ms:
-                # Try to get from block's audio_generation
-                if block and block.audio_generation and block.audio_generation.ok:
-                    duration_ms = block.audio_generation.meta.get('total_duration', None)
-                
-                if not duration_ms:
-                    return {
-                        "ok": False,
-                        "artifacts": [],
-                        "meta": {},
-                        "error": "No duration_ms provided and cannot get from audio_generation",
-                    }
 
-            duration_sec = duration_ms / 1000.0
+            dao = WorkingBlockDAO()
+            start_time_sec = 0
+            duration_sec = None
+            for prev_id in wb.prev_ids:
+                prev_working_block = dao.get_working_block(prev_id)
+                if prev_working_block and prev_working_block.method_name == "fish_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
+                    start_time_sec = prev_working_block.accumulated_duration_sec
+                    try:
+                        result_data = json.loads(prev_working_block.result_json or "{}")
+                        duration_sec = result_data.get("duration_sec")
+                    except (json.JSONDecodeError, TypeError):
+                        duration_sec = None
 
-            # Calculate start time based on cumulative previous clip durations
-            # Get all blocks before current one
-            script_blocks = project_data.get("script", [])
-            current_block_idx = None
-            for idx, b in enumerate(script_blocks):
-                if b.get("id") == target_name:
-                    current_block_idx = idx
-                    break
-            
-            if current_block_idx is None:
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {},
-                    "error": f"Block {target_name} not found in project script",
-                }
 
-            # Calculate cumulative duration of previous blocks
-            start_time_sec = 0.0
-            for i in range(current_block_idx):
-                prev_block = script_blocks[i]
-                # Try to get duration from audio_generation
-                audio_gen = prev_block.get("audio_generation")
-                if audio_gen and isinstance(audio_gen, dict) and audio_gen.get("ok"):
-                    prev_duration_ms = audio_gen.get("meta", {}).get("total_duration", 0)
-                    start_time_sec += prev_duration_ms / 1000.0
-                elif audio_gen and hasattr(audio_gen, 'ok') and audio_gen.ok:
-                    prev_duration_ms = audio_gen.meta.get("total_duration", 0)
-                    start_time_sec += prev_duration_ms / 1000.0
+            if duration_sec is None:
+                raise Exception("No duration_sec specified")
 
             # Get background video duration
             bg_video_duration = _get_video_duration_sec(bg_video)
@@ -181,20 +173,29 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
                 # Loop back to start if we exceed video length
                 print(f"[extract] ⚠️  Requested segment ({start_time_sec:.2f}s-{end_time_sec:.2f}s) exceeds video length ({bg_video_duration:.2f}s)")
                 print(f"[extract] → Wrapping to start of video")
-                # Use modulo to wrap around
                 start_time_sec = start_time_sec % bg_video_duration
                 end_time_sec = start_time_sec + duration_sec
-                # If still exceeds, just use what's available
                 if end_time_sec > bg_video_duration:
                     end_time_sec = bg_video_duration
                     duration_sec = end_time_sec - start_time_sec
                     print(f"[extract] → Adjusted to {start_time_sec:.2f}s-{end_time_sec:.2f}s")
-
-            # Create output directory
-            video_dir = project_dir / "video"
-            video_dir.mkdir(parents=True, exist_ok=True)
-            output_path = video_dir / f"{target_name}.mp4"
-
+            
+            # Get action output directory using new path structure
+            workdir = Path(config_dict.get("workdir", "."))
+            project_root = workdir.resolve()
+            block_id = wb.block_id or config_dict.get("target_name", wb.action_id)
+            action_dir = get_action_output_dir(
+                project_root=project_root,
+                project_name=project_name,
+                block_id=block_id,
+                method_name=wb.method_name,
+                action_id=wb.action_id
+            )
+            action_dir.mkdir(parents=True, exist_ok=True)
+            
+            # Get output file path
+            output_path = get_output_file_path(action_dir, "mp4")
+            
             # Extract segment using ffmpeg
             # Use -ss before -i for faster seeking (input seeking)
             cmd = [
@@ -205,75 +206,47 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
                 "-c", "copy",  # Use copy to avoid re-encoding (faster)
                 str(output_path)
             ]
-
+            
             if not _run_ffmpeg(cmd):
                 # If copy fails (e.g., keyframe issues), try with re-encoding
-                print("[extract] ⚠️  Copy mode failed, trying with re-encoding...")
-                
-                # Get original video resolution to maintain quality
-                orig_width, orig_height = _get_video_resolution(bg_video)
-                print(f"[extract] 📐 Original resolution: {orig_width}x{orig_height}")
-                
-                # Re-encode with high quality settings, maintaining original resolution
-                cmd = [
-                    "ffmpeg", "-y",
-                    "-ss", str(start_time_sec),
-                    "-i", str(bg_video),
-                    "-t", str(duration_sec),
-                    "-vf", f"scale={orig_width}:{orig_height}",  # Maintain original resolution
-                    "-c:v", "libx264",
-                    "-preset", "slow",  # Higher quality encoding (slower but better)
-                    "-crf", "18",  # High quality (lower = better quality, 18 is visually lossless)
-                    "-pix_fmt", "yuv420p",  # Ensure compatibility
-                    "-c:a", "aac",
-                    "-b:a", "192k",  # High quality audio bitrate
-                    str(output_path)
-                ]
-                if not _run_ffmpeg(cmd):
-                    return {
-                        "ok": False,
-                        "artifacts": [],
-                        "meta": {},
-                        "error": "Failed to extract video segment with ffmpeg",
-                    }
+                print("[extract] ⚠️  Copy mode failed ...")
+                raise Exception("ffmpeg failed")
 
-            # Verify output exists and get actual duration
-            if not output_path.exists():
-                return {
-                    "ok": False,
-                    "artifacts": [],
-                    "meta": {},
-                    "error": f"Output file was not created: {output_path}",
-                }
-
+            
             actual_duration = _get_video_duration_sec(output_path)
             print(f"[extract] ✅ Extracted segment: {output_path} ({actual_duration:.2f}s)")
+            
+            # Update WorkingBlock
+            wb.status = WorkingBlockStatus.SUCCESS
+            wb.output_path = str(output_path)
 
-            meta = {
-                "project": project,
-                "target_name": target_name,
-                "output_path": str(output_path),
-                "start_time_sec": start_time_sec,
-                "duration_sec": duration_sec,
-                "actual_duration_sec": actual_duration,
-                "source_video": str(bg_video),
-            }
-
-            return {
-                "ok": True,
-                "artifacts": [str(output_path)],
-                "meta": meta,
+            result = GenerationResult(
+                status=WorkingBlockStatus.SUCCESS,
+                output_path=str(output_path),
+                duration_sec=actual_duration,
+                error=None
+            )
+            wb.result_json = json.dumps({
+                "duration_sec": actual_duration,
                 "error": None,
-            }
-
+                "start_time_sec": start_time_sec,
+                "source_video": str(bg_video)
+            })
+            
+            return result
+            
         except Exception as e:
-            print(f"[extract] ❌ Error: {e}")
+            error_msg = f"Extraction error: {str(e)}"
+            print(f"[extract] ❌ {error_msg}")
             import traceback
             traceback.print_exc()
-            return {
-                "ok": False,
-                "artifacts": [],
-                "meta": {},
-                "error": str(e),
-            }
-
+            
+            wb.status = WorkingBlockStatus.ERROR
+            result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+            wb.result_json = json.dumps({
+                "status": result.status.value,
+                "output_path": result.output_path,
+                "duration_sec": result.duration_sec,
+                "error": result.error
+            })
+            return result

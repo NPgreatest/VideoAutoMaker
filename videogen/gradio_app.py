@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import threading
 import traceback
+from dataclasses import asdict
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
 
@@ -17,9 +18,8 @@ from videogen.pipeline.utils import (
     write_json,
     get_project_status,
 )
-from videogen.pipeline.schema import ProjectStatus
 from videogen.pipeline.parse_script import parse_script_lines
-
+from videogen.schema.project_schema import ProjectStatus
 
 PROJECT_ROOT = Path("project")
 BGM_ROOT = Path("assets/bgm")
@@ -144,7 +144,7 @@ def build_status_table(raw: Dict[str, Any]) -> pd.DataFrame:
 
 def format_project_info(raw: Dict[str, Any]) -> str:
     lines: List[str] = []
-    project_name = raw.get("project", "Unknown Project")
+    project_name = raw.get("project_name", "Unknown Project")
     size = raw.get("size", "unknown")
     total_blocks = len(raw.get("script", []))
     lines.append(f"### Project Information")
@@ -196,8 +196,7 @@ def save_project(project_name: str, size: str, default_character: str, script_te
     if not script_text.strip():
         return "❌ Script text cannot be empty", gr.update()
 
-    slide_template = "FilterDesktopSlide" if size == "landscape" else "FilterTikTokSlide"
-    blocks = parse_script_lines(script_text, default_character, slide_template)
+    blocks = parse_script_lines(script_text, default_character, size, background_video_path)
     if not blocks:
         return "❌ No valid script text parsed", gr.update()
 
@@ -206,10 +205,13 @@ def save_project(project_name: str, size: str, default_character: str, script_te
     # Normalize background_video_path: empty string becomes None
     background_video_path_value = background_video_path.strip() if background_video_path.strip() else None
 
+    # Convert ScriptBlock objects to dictionaries for JSON serialization
+    script_dicts = [asdict(block) for block in blocks]
+
     data = {
-        "project": project_name,
+        "project_name": project_name,
         "size": size,
-        "script": blocks,
+        "script": script_dicts,
         "project_status": ProjectStatus.CREATED.value,
         "bgm_path": bgm_path_value,
         "background_video": background_video_path_value,

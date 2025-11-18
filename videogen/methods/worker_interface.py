@@ -4,8 +4,8 @@ Methods that need background processing can implement this interface.
 """
 
 from abc import ABC, abstractmethod
-from typing import Dict, Any, Optional
-from videogen.pipeline.schema import WorkingBlock
+
+from videogen.pipeline.working_block import WorkingBlock
 
 
 class WorkerInterface(ABC):
