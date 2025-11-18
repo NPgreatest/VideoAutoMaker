@@ -274,7 +274,7 @@ class RemotionMethod(BaseMethod):
                         character_asset = image_asset_name
                     else:
                         character_asset = self.DEFAULT_IMAGE
-                resize_ratio = config_dict.get("resize_ratio", 0.15)
+                resize_ratio = config_dict.get("resize_ratio", 0.4)
                 position_x = config_dict.get("position_x", 0.02)
                 position_y = config_dict.get("position_y", 0.78)
                 appear = config_dict.get("appear", True)

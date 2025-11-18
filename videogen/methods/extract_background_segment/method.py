@@ -154,11 +154,9 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
                 prev_working_block = dao.get_working_block(prev_id)
                 if prev_working_block and prev_working_block.method_name == "fish_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
                     start_time_sec = prev_working_block.accumulated_duration_sec
-                    try:
-                        result_data = json.loads(prev_working_block.result_json or "{}")
-                        duration_sec = result_data.get("duration_sec")
-                    except (json.JSONDecodeError, TypeError):
-                        duration_sec = None
+                    result_data = json.loads(prev_working_block.result_json or "{}")
+                    duration_sec = result_data.get("duration_sec")
+                    wb.accumulated_duration_sec = prev_working_block.accumulated_duration_sec
 
 
             if duration_sec is None:

@@ -31,24 +31,40 @@ class Pipeline:
         self.project_name = project_name
         self.dao = dao or WorkingBlockDAO()
 
-    # ----------------------------------------------------------------------
-    # 1. Build WorkingBlocks from ScriptBlock
-    # ----------------------------------------------------------------------
     def build(self, script_block: ScriptBlock) -> List[WorkingBlock]:
-        working_blocks = []
+        working_blocks: List[WorkingBlock] = []
 
-        # 1. 从数据库恢复 action_id → working_block_id 的映射
-        # Get all working blocks for this project, then filter by action_ids in this script_block
+        # 1. 先把这个 project 下面所有的 working_block 都取出来
         all_blocks = self.dao.get_all(self.project_name)
+
+        # 当前这个 ScriptBlock 里的 action_id 集合
         script_action_ids = {action.id for action in script_block.actions}
+
+        # 已经存在于 DB 中、且属于这个 ScriptBlock 的 blocks
         existing_blocks = [wb for wb in all_blocks if wb.action_id in script_action_ids]
         action_to_wb = {wb.action_id: wb.id for wb in existing_blocks}
 
-        # 2. 遍历 ScriptBlock.actions
+        # ⭐ 找到「整个 project 里」最后一个 fish_audio 的 working_block.id
+        last_fish_audio_wb_id = None
+        for wb in all_blocks:
+            # 这里根据你的 WorkingBlock 字段名来改，
+            # screenshot 里列名是 method_name
+            if getattr(wb, "method_name", None) == "fish_audio":
+                last_fish_audio_wb_id = wb.id
+
+        # ------------------------------------------------------------------
+        # 2. 遍历当前 ScriptBlock 的 actions，边构建边设置依赖
+        # ------------------------------------------------------------------
         for action in script_block.actions:
 
-            # 如果该 action 已经构建过 → 直接跳过
+            # 如果这个 action 对应的 WorkingBlock 已经存在，跳过构建
+            # 但要注意：如果它是 fish_audio，需要把 last_fish_audio_wb_id 更新一下
             if action.id in action_to_wb:
+                wb_id = action_to_wb[action.id]
+
+                if action.type == "fish_audio":
+                    last_fish_audio_wb_id = wb_id
+
                 continue
 
             # 创建 method 实例
@@ -59,35 +75,54 @@ class Pipeline:
             if "project_name" not in action.config:
                 action.config["project_name"] = self.project_name
 
-            # 3. 创建 WorkingBlock
+            # ------------------------------------------------------------------
+            # 3. 构建 WorkingBlock
+            # ------------------------------------------------------------------
             wb = method.run(action)
 
-            # 设置 action_id（关键点）
+            # 绑定 action_id
             wb.action_id = action.id
 
-            # 设置 block_id (target_name) 用于路径构建
-            # target_name 在 config 中，通常是 ScriptBlock.id
+            # block_id 用于路径构建，优先用 target_name
             if "target_name" in action.config:
                 wb.block_id = action.config["target_name"]
             else:
-                # 如果没有 target_name，使用 action_id 作为后备
                 wb.block_id = action.id
 
-            # 4. 构建 prev_wb_ids（DAG）
-            prev_wb_ids = []
-            for prev_action_id in action.prev_ids:
-                prev = action_to_wb.get(prev_action_id)
-                if prev:
-                    prev_wb_ids.append(prev)
+            # ------------------------------------------------------------------
+            # 4. 构建 prev_wb_ids（DAG 依赖）
+            # ------------------------------------------------------------------
+            prev_wb_ids: List[str] = []
+
+            # 4.1 先处理 action 自带的 prev_ids（同一行内部的依赖）
+            for prev_action_id in action.prev_ids or []:
+                prev_wb_id = action_to_wb.get(prev_action_id)
+                if prev_wb_id:
+                    prev_wb_ids.append(prev_wb_id)
+
+            # 4.2 如果这是一个新的 fish_audio，并且项目里已经有上一条 fish_audio，
+            #     就让它依赖上一条 fish_audio 的 working_block.id
+            if action.type == "fish_audio" and last_fish_audio_wb_id:
+                if last_fish_audio_wb_id not in prev_wb_ids:
+                    prev_wb_ids.append(last_fish_audio_wb_id)
+
             wb.prev_ids = prev_wb_ids
 
+            # ------------------------------------------------------------------
             # 5. 插入数据库
+            # ------------------------------------------------------------------
             if not self.dao.insert(wb):
                 print(f"[Pipeline] ⚠️ Failed to insert WorkingBlock {wb.id}")
                 continue
 
-            # 6. 更新映射关系
+            # ------------------------------------------------------------------
+            # 6. 更新映射关系 / last_fish_audio_wb_id
+            # ------------------------------------------------------------------
             action_to_wb[action.id] = wb.id
+
+            if action.type == "fish_audio":
+                last_fish_audio_wb_id = wb.id
+
             working_blocks.append(wb)
 
         return working_blocks
@@ -141,10 +176,6 @@ class Pipeline:
             error: str
         }
         """
-        # accumulated_duration_sec
-        if result.status == WorkingBlockStatus.SUCCESS:
-            if result.duration_sec:
-                wb.accumulated_duration_sec += result.duration_sec
 
         wb.status = result.status
         wb.result_json = json.dumps({
