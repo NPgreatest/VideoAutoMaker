@@ -8,20 +8,20 @@ import json
 import shutil
 import subprocess
 import uuid
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
+
 from dacite import from_dict
 
+from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
-from videogen.methods.remotion_animation.schema import RemotionAnimationSchema
+from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 from videogen.pipeline.utils import get_character_info
 from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 from videogen.schema.action_spec import ActionSpec
 from videogen.schema.generation_result_schema import GenerationResult
 from videogen.schema.schema_registry import get_schema
-from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 
 @register_method
@@ -274,7 +274,7 @@ class RemotionMethod(BaseMethod):
                         character_asset = image_asset_name
                     else:
                         character_asset = self.DEFAULT_IMAGE
-                resize_ratio = config_dict.get("resize_ratio", 0.15)
+                resize_ratio = config_dict.get("resize_ratio", 0.4)
                 position_x = config_dict.get("position_x", 0.02)
                 position_y = config_dict.get("position_y", 0.78)
                 appear = config_dict.get("appear", True)

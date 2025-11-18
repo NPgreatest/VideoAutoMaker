@@ -221,12 +221,17 @@ class FishAudioMethod(BaseMethod):
 
             dao = WorkingBlockDAO()
             start_time_sec = 0
+            prev_duration = 0
             for prev_id in wb.prev_ids:
                 prev_working_block = dao.get_working_block(prev_id)
+                print(f"have prev_id, prev_working_block = {prev_working_block}")
                 if prev_working_block and prev_working_block.method_name == "fish_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
                     start_time_sec = prev_working_block.accumulated_duration_sec
+                    prev_result = json.loads(prev_working_block.result_json or "{}")
+                    prev_duration = prev_result.get("duration_sec",0)
+                    print(f"find prev fish audio {prev_id} , {prev_duration}")
 
-            wb.accumulated_duration_sec = start_time_sec + total_duration
+            wb.accumulated_duration_sec = start_time_sec + prev_duration
             wb.result_json = json.dumps({
                 "status": result.status.value,
                 "output_path": result.output_path,

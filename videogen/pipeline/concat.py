@@ -2,7 +2,7 @@
 from __future__ import annotations
 import os, json, subprocess, shutil
 from pathlib import Path
-from collections import Counter
+from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
@@ -10,6 +10,8 @@ from dotenv import load_dotenv
 from videogen.pipeline.utils import read_json
 from videogen.pipeline.gen_cover import gen_cover
 from videogen.schema.project_schema import ScriptBlock
+from videogen.dao.working_block_dao import WorkingBlockDAO
+from videogen.pipeline.working_block import WorkingBlockStatus
 
 # ========== 配置项 ==========
 CRF = "14"             # 画质（越低越好）
@@ -58,61 +60,130 @@ def get_clip_info(p: Path) -> ClipInfo:
     fps = parse_fps(v.get("r_frame_rate") or v.get("avg_frame_rate"))
     return ClipInfo(p,w,h,fps,bool(a))
 
-# ========== 阶段 1：收集并补齐 muxed ==========
-def ensure_muxed(project_dir: Path, idx: int, muxed_dir: Path, block: Optional[ScriptBlock] = None) -> Optional[Path]:
+# ========== 阶段 1：从 WorkingBlockDAO 获取 block 的最后一个节点 ==========
+def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
+    """
+    Find the last node (leaf node) in the chain for a given block_id.
+    The last node is the one that has no other nodes depending on it (not in any prev_ids).
+    """
+    # Get all working blocks for this project and block_id
+    all_blocks = dao.get_all(project_name)
+    block_blocks = [wb for wb in all_blocks if wb.block_id == block_id and wb.status == WorkingBlockStatus.SUCCESS]
+    
+    if not block_blocks:
+        return None
+    
+    # Build a set of all working block IDs that are referenced as prev_ids
+    referenced_ids = set()
+    for wb in all_blocks:
+        referenced_ids.update(wb.prev_ids or [])
+    
+    # Find blocks that are not referenced by any other block (leaf nodes)
+    leaf_nodes = [wb for wb in block_blocks if wb.id not in referenced_ids]
+    
+    if not leaf_nodes:
+        # If no leaf nodes found, use the one with the latest create_time
+        leaf_nodes = sorted(block_blocks, key=lambda wb: wb.create_time or "", reverse=True)
+    
+    # Return the first leaf node (or the latest one if no leaf found)
+    return leaf_nodes[0].id if leaf_nodes else None
+
+def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
+    """Find the fish_audio working block for a given block_id."""
+    all_blocks = dao.get_all(project_name)
+    audio_blocks = [
+        wb for wb in all_blocks 
+        if wb.block_id == block_id 
+        and wb.method_name == "fish_audio" 
+        and wb.status == WorkingBlockStatus.SUCCESS
+    ]
+    
+    if not audio_blocks:
+        return None
+    
+    # Return the first one (should be only one per block)
+    return audio_blocks[0].id
+
+def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: WorkingBlockDAO, project_name: str) -> Optional[Path]:
+    """
+    Generate muxed video from the last node in chain for a block_id.
+    Uses WorkingBlockDAO to find the last node and audio source.
+    """
     # Check and generate in muxed_dir
-    mux = muxed_dir / f"L{idx}_muxed.mp4"
-    if mux.exists(): return mux
+    mux = muxed_dir / f"{block_id}_muxed.mp4"
+    if mux.exists(): 
+        return mux
     
-    # Check remotion_video folder first (stores raw videos like video folder)
-    video = project_dir / "remotion_video" / f"L{idx}.mp4"
-    if not video.exists():
-        # Fallback to video/ subdirectory, then project root
-        video = project_dir / "video" / f"L{idx}.mp4"
-        if not video.exists():
-            video = project_dir / f"L{idx}.mp4"
+    # Get the last node in chain for this block
+    last_node_id = get_last_node_in_chain(dao, project_name, block_id)
+    if not last_node_id:
+        print(f"[mux] ⚠️ No last node found for block {block_id}, skipping")
+        return None
     
-    audio = project_dir / f"audio/L{idx}.wav"
+    last_node = dao.get_working_block(last_node_id)
+    if not last_node or not last_node.output_path:
+        print(f"[mux] ⚠️ Last node {last_node_id} has no output_path, skipping")
+        return None
     
-    if video.exists() and audio.exists():
-        # Get audio duration to determine if we need to loop video
-        audio_info = ffprobe(audio)
-        audio_dur = float(audio_info.get("format", {}).get("duration", 0))
-        
-        # Get video duration
-        video_info = ffprobe(video)
-        video_dur = float(video_info.get("format", {}).get("duration", 0))
-        
-        print(f"[mux] Generating L{idx}_muxed.mp4 ...")
-        print(f"[mux] Video duration: {video_dur:.2f}s, Audio duration: {audio_dur:.2f}s")
-        
-        # If video is shorter than audio, loop it until it reaches audio duration
-        if video_dur < audio_dur and video_dur > 0:
-            print(f"[mux] Video is shorter than audio, looping video to match audio duration...")
-            # Use stream_loop to loop the video input, then trim to audio duration
-            ok = run([
-                "ffmpeg", "-y",
-                "-stream_loop", "-1", "-i", str(video),  # Loop input video infinitely
-                "-i", str(audio),
-                "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
-                "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
-                "-pix_fmt", PIX_FMT,
-                "-shortest",  # Use shortest to match audio duration (stops when audio ends)
-                str(mux)
-            ])
-        else:
-            # Video is longer or equal to audio, use shortest to match audio
-            ok = run([
-                "ffmpeg", "-y", "-i", str(video), "-i", str(audio),
-                "-map", "0:v:0", "-map", "1:a:0",
-                "-c:v", "copy", "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
-                "-shortest", str(mux)
-            ])
-        
-        return mux if ok else None
-    print(f"[mux] ⚠️ Missing L{idx}.mp4 or .wav, skipping")
-    return None
+    video_path = Path(last_node.output_path)
+    if not video_path.exists():
+        print(f"[mux] ⚠️ Video file not found: {video_path}, skipping")
+        return None
+    
+    # Get audio block for this block_id
+    audio_node_id = get_audio_block_for_block_id(dao, project_name, block_id)
+    if not audio_node_id:
+        print(f"[mux] ⚠️ No audio block found for block {block_id}, skipping")
+        return None
+    
+    audio_node = dao.get_working_block(audio_node_id)
+    if not audio_node or not audio_node.output_path:
+        print(f"[mux] ⚠️ Audio node {audio_node_id} has no output_path, skipping")
+        return None
+    
+    audio_path = Path(audio_node.output_path)
+    if not audio_path.exists():
+        print(f"[mux] ⚠️ Audio file not found: {audio_path}, skipping")
+        return None
+    
+    # Get audio duration to determine if we need to loop video
+    audio_info = ffprobe(audio_path)
+    audio_dur = float(audio_info.get("format", {}).get("duration", 0))
+    
+    # Get video duration
+    video_info = ffprobe(video_path)
+    video_dur = float(video_info.get("format", {}).get("duration", 0))
+    
+    print(f"[mux] Generating {block_id}_muxed.mp4 from last node {last_node_id}...")
+    print(f"[mux] Video: {video_path}")
+    print(f"[mux] Audio: {audio_path}")
+    print(f"[mux] Video duration: {video_dur:.2f}s, Audio duration: {audio_dur:.2f}s")
+    
+    # If video is shorter than audio, loop it until it reaches audio duration
+    if video_dur < audio_dur and video_dur > 0:
+        print(f"[mux] Video is shorter than audio, looping video to match audio duration...")
+        # Use stream_loop to loop the video input, then trim to audio duration
+        ok = run([
+            "ffmpeg", "-y",
+            "-stream_loop", "-1", "-i", str(video_path),  # Loop input video infinitely
+            "-i", str(audio_path),
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+            "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
+            "-pix_fmt", PIX_FMT,
+            "-shortest",  # Use shortest to match audio duration (stops when audio ends)
+            str(mux)
+        ])
+    else:
+        # Video is longer or equal to audio, use shortest to match audio
+        ok = run([
+            "ffmpeg", "-y", "-i", str(video_path), "-i", str(audio_path),
+            "-map", "0:v:0", "-map", "1:a:0",
+            "-c:v", "copy", "-c:a", "aac", "-ar", AUDIO_RATE, "-b:a", AUDIO_BR,
+            "-shortest", str(mux)
+        ])
+    
+    return mux if ok else None
 
 # ========== 阶段 2：选择统一规格 ==========
 def choose_target(infos: List[ClipInfo], project_config: Dict = None) -> Tuple[int,int,int]:
@@ -162,30 +233,36 @@ def fmt_time(x: float) -> str:
     ms = int(round((x - int(x)) * 1000))
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
-def generate_srt_from_json(raw: Dict, clips: List[Path], out_path: Path) -> None:
+def generate_srt_from_blocks(dao: WorkingBlockDAO, project_name: str, block_ids: List[str], clips: List[Path], out_path: Path) -> None:
     """
-    Generate SRT file from JSON.
-    优先使用 block.meta['segments'] 里的短句字幕，
-    否则 fallback 到原有 block.text + clip 时长。
+    Generate SRT file from WorkingBlockDAO data.
+    优先使用 audio block 的 result_json 里的 segments，
+    否则 fallback 到 block text + clip 时长。
     每个 segment 都会单独显示，时间戳会加上前面所有 clips 的累计时长。
     """
-    blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
-    assert len(blocks) == len(clips), f"Script blocks ({len(blocks)}) != clips ({len(clips)})"
-
     idx = 1
     lines = []
     block_index = 0  # Track current block index for calculating offset
 
-    for block, clip in zip(blocks, clips):
+    for block_id, clip in zip(block_ids, clips):
         # 计算当前 block 在整个视频中的起始时间（前面所有 clips 的累计时长）
         block_offset = sum(float(get_duration(c)) for c in clips[:block_index])
         
-        # 从 audio_generation.meta.segments 获取 segments
+        # 获取该 block 的 audio block
+        audio_node_id = get_audio_block_for_block_id(dao, project_name, block_id)
         segments = None
-        if block.audio_generation and block.audio_generation.ok:
-            audio_meta = block.audio_generation.meta
-            if isinstance(audio_meta, dict):
-                segments = audio_meta.get("segments")
+        block_text = None
+        
+        if audio_node_id:
+            audio_node = dao.get_working_block(audio_node_id)
+            if audio_node and audio_node.result_json:
+                try:
+                    result_data = json.loads(audio_node.result_json)
+                    # Try to get segments from result_json
+                    if isinstance(result_data, dict):
+                        segments = result_data.get("segments")
+                except (json.JSONDecodeError, TypeError):
+                    pass
         
         # 如果 segments 存在，为每个 segment 单独生成字幕
         if segments and isinstance(segments, list) and len(segments) > 0:
@@ -212,9 +289,22 @@ def generate_srt_from_json(raw: Dict, clips: List[Path], out_path: Path) -> None
             block_index += 1
             continue
 
-        # fallback: 原逻辑（整个 clip 一条字幕）
+        # fallback: 使用整个 clip 时长，尝试从 config_json 获取 text
         dur = get_duration(clip)
-        text = (block.text or "").strip()
+        text = ""
+        
+        # Try to get text from any working block's config_json for this block_id
+        all_blocks = dao.get_all(project_name)
+        for wb in all_blocks:
+            if wb.block_id == block_id:
+                try:
+                    config = json.loads(wb.config_json or "{}")
+                    if "text" in config:
+                        text = config["text"].strip()
+                        break
+                except (json.JSONDecodeError, TypeError):
+                    pass
+        
         if text:
             start = block_offset
             end = start + dur
@@ -242,25 +332,44 @@ def concat_videos(files: List[Path], out: Path)->bool:
 # ========== 主函数 ==========
 def concat_pipeline(project_name:str):
     project_dir=Path(f"project/{project_name}")
-    raw=read_json(project_dir/f"{project_name}.json")
     work=project_dir/"_work"; work.mkdir(exist_ok=True)
     muxed_dir=work/"muxed"; muxed_dir.mkdir(exist_ok=True)
     norm_dir=work/"norm"; norm_dir.mkdir(exist_ok=True)
 
-    # Parse blocks for metadata access
-    blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
+    # Get working blocks from DAO
+    dao = WorkingBlockDAO()
+    all_blocks = dao.get_all(project_name)
+    
+    # Group by block_id and get unique block_ids
+    block_ids_set = {wb.block_id for wb in all_blocks if wb.block_id}
+    # Sort block_ids (e.g., L1, L2, L3...)
+    block_ids = sorted(block_ids_set, key=lambda x: (x[0], int(x[1:]) if len(x) > 1 and x[1:].isdigit() else 0))
+    
+    if not block_ids:
+        raise SystemExit("❌ no blocks found in database")
+    
+    print(f"[concat] Found {len(block_ids)} blocks: {block_ids}")
     
     clips=[]
-    clip_blocks=[]
-    for i, block in enumerate(blocks, start=1):
-        p=ensure_muxed(project_dir, i, muxed_dir, block)
+    clip_block_ids=[]
+    for block_id in block_ids:
+        p=ensure_muxed(project_dir, block_id, muxed_dir, dao, project_name)
         if p:
             clips.append(p)
-            clip_blocks.append(block)
+            clip_block_ids.append(block_id)
     if not clips: raise SystemExit("❌ no muxed clips found")
 
+    # Try to get project config for choose_target
+    project_config = None
+    project_json_path = project_dir / f"{project_name}.json"
+    if project_json_path.exists():
+        try:
+            project_config = read_json(project_json_path)
+        except Exception:
+            pass
+
     infos=[get_clip_info(p) for p in clips]
-    w,h,fps=choose_target(infos, raw)
+    w,h,fps=choose_target(infos, project_config)
     print(f"[spec] Target {w}x{h}@{fps}fps")
 
     norm=[]
@@ -277,7 +386,7 @@ def concat_pipeline(project_name:str):
     out_srt = work / f"{project_name}.srt"
     # First generate raw SRT to a temp file
     temp_srt = work / "temp_srt.srt"
-    generate_srt_from_json(raw, norm, temp_srt)
+    generate_srt_from_blocks(dao, project_name, clip_block_ids, norm, temp_srt)
     # Beautify and save directly to final location
     try:
         from videogen.pipeline.beautify_srt import beautify_srt_at_path
@@ -297,7 +406,15 @@ def concat_pipeline(project_name:str):
     burn_out = project_dir / f"{project_name}_nobgm.mp4"
 
     # Check if subtitle burning is enabled (default to True for backward compatibility)
-    burn_subtitle = raw.get("burn_subtitle", True)
+    # Try to get from project JSON if exists, otherwise default to True
+    burn_subtitle = True
+    project_json_path = project_dir / f"{project_name}.json"
+    if project_json_path.exists():
+        try:
+            raw = read_json(project_json_path)
+            burn_subtitle = raw.get("burn_subtitle", True)
+        except Exception:
+            pass
     
     if not burn_subtitle:
         print("[burn] ⏭️  Subtitle burning is disabled, skipping burn-in step.")
@@ -359,7 +476,14 @@ def concat_pipeline(project_name:str):
     input_video = burn_out if burn_out.exists() else final
     
     # Get BGM path from JSON, fallback to environment variable if not set
-    bgm_path_str = raw.get("bgm_path")
+    bgm_path_str = None
+    if project_json_path.exists():
+        try:
+            raw = read_json(project_json_path)
+            bgm_path_str = raw.get("bgm_path")
+        except Exception:
+            pass
+    
     if bgm_path_str:
         # Use BGM path from JSON (relative to project root)
         bgm_path = Path(bgm_path_str)
@@ -429,6 +553,15 @@ def concat_pipeline(project_name:str):
 
     # ====== 阶段 10：生成封面照片 ======
     # 使用 _work/norm/*.mp4 的第一帧作为背景
+    # Try to get project JSON for gen_cover
+    raw = {}
+    blocks = []
+    if project_json_path.exists():
+        try:
+            raw = read_json(project_json_path)
+            blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
+        except Exception:
+            pass
     gen_cover(project_dir, project_name, raw, blocks)
 
     # ====== 阶段 9：清理临时目录 ======
