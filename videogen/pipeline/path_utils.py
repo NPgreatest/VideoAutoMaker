@@ -12,21 +12,21 @@ def get_action_output_dir(
     project_name: str,
     block_id: str,
     method_name: str,
-    action_id: str
+    working_block_id: str
 ) -> Path:
     """
-    Get the deterministic working directory for an action under:
-    {project_root}/project/{project_name}/blocks/{block_id}/{method_name}/{action_id}/
+    Get the deterministic working directory for a working block under:
+    {project_root}/project/{project_name}/blocks/{block_id}/{method_name}/{working_block_id}/
     
     Args:
         project_root: Root directory (usually workdir)
         project_name: Project identifier under /project/
         block_id: ScriptBlock.id (e.g., "L1")
         method_name: BaseMethod.NAME (e.g., "fish_audio", "remotion_picture")
-        action_id: ActionSpec.id
+        working_block_id: WorkingBlock.id (unique UUID)
         
     Returns:
-        Path to the action output directory
+        Path to the working block output directory
     """
     action_dir = (
         project_root
@@ -35,7 +35,7 @@ def get_action_output_dir(
         / "blocks"
         / block_id
         / method_name
-        / action_id
+        / working_block_id
     )
     return action_dir
 

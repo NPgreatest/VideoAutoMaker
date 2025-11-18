@@ -43,8 +43,8 @@ class Worker:
         workdir = Path(config_dict.get("workdir", "."))
         project_root = workdir.resolve()
         
-        # Get block_id (fallback to action_id if not set)
-        block_id = wb.block_id or wb.action_id
+        # Get block_id (fallback to working_block.id if not set)
+        block_id = wb.block_id or wb.id
         
         # Create action directory
         action_dir = get_action_output_dir(
@@ -52,7 +52,7 @@ class Worker:
             project_name=wb.project_name,
             block_id=block_id,
             method_name=wb.method_name,
-            action_id=wb.action_id
+            working_block_id=wb.id
         )
         action_dir.mkdir(parents=True, exist_ok=True)
         
@@ -77,9 +77,9 @@ class Worker:
                 output_file_name = output_path.name
         
         meta = {
-            "action_id": wb.action_id,
+            "working_block_id": wb.id,
             "method": wb.method_name,
-            "block_id": wb.block_id or wb.action_id,
+            "block_id": wb.block_id or wb.id,
             "config": config_dict,
             "output": output_file_name,
             "status": result.status.value,

@@ -120,10 +120,9 @@ class TextVideoSilicon(BaseMethod):
         working_block = WorkingBlock(
             id=working_id,
             project_name=project_name,
-            action_id=spec.id,
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
-            prev_ids=[],  # Will be set by PipelineBuilder
+            prev_ids=[],  # Will be set by Pipeline
             output_path=None,
             config_json=json.dumps(spec.config),
             result_json="",
@@ -196,7 +195,7 @@ class TextVideoSilicon(BaseMethod):
             resp = check_status(request_id)
             new_status = resp.get("status") or STATUS_ERROR
             
-            print(f"[TextVideoSilicon] Checking status for {wb.action_id}: {new_status}")
+            print(f"[TextVideoSilicon] Checking status for {wb.id}: {new_status}")
             
             if new_status == STATUS_SUCCEED:
                 # Video is ready - download it
@@ -221,13 +220,13 @@ class TextVideoSilicon(BaseMethod):
                 workdir = Path(config_dict.get("workdir", "."))
                 project_root = workdir.resolve()
                 project_name = wb.project_name or config_dict.get("project_name", "default")
-                block_id = wb.block_id or config_dict.get("target_name", wb.action_id)
+                block_id = wb.block_id or config_dict.get("target_name", wb.id)
                 action_dir = get_action_output_dir(
                     project_root=project_root,
                     project_name=project_name,
                     block_id=block_id,
                     method_name=wb.method_name,
-                    action_id=wb.action_id
+                    working_block_id=wb.id
                 )
                 action_dir.mkdir(parents=True, exist_ok=True)
                 

@@ -75,7 +75,6 @@ class JSONValidator(BaseValidator):
             wb_warnings: List[str] = []
             wb_info: Dict[str, Any] = {
                 "working_block_id": wb.id,
-                "action_id": wb.action_id,
                 "method": wb.method_name,
                 "block_id": wb.block_id,
                 "status": wb.status.value if wb.status else None,
@@ -91,7 +90,7 @@ class JSONValidator(BaseValidator):
             
             expected_action_dir = None
             if wb.block_id:
-                expected_action_dir = blocks_root / wb.block_id / wb.method_name / wb.action_id
+                expected_action_dir = blocks_root / wb.block_id / wb.method_name / wb.id
                 wb_info["expected_action_dir"] = str(expected_action_dir)
                 if not expected_action_dir.exists():
                     wb_warnings.append(f"Action directory not found: {expected_action_dir}")

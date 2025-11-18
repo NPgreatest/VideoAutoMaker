@@ -13,7 +13,6 @@ class WorkingBlockStatus(Enum):
 class WorkingBlock:
     id: str                     # unique working block uuid
     project_name: str
-    action_id: str              # ActionSpec.id
     method_name: str            # associated method name
     status: WorkingBlockStatus  # pending / success / error
     retries: int = 0

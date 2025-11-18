@@ -8,20 +8,20 @@ import json
 import shutil
 import subprocess
 import uuid
-from datetime import datetime
 from pathlib import Path
-
+from datetime import datetime
 from dacite import from_dict
 
-from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
-from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
+from videogen.methods.remotion_animation.schema import RemotionAnimationSchema
 from videogen.pipeline.utils import get_character_info
 from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 from videogen.schema.action_spec import ActionSpec
 from videogen.schema.generation_result_schema import GenerationResult
 from videogen.schema.schema_registry import get_schema
+from videogen.dao.working_block_dao import WorkingBlockDAO
+from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 
 @register_method
@@ -78,10 +78,9 @@ class RemotionMethod(BaseMethod):
         working_block = WorkingBlock(
             id=working_id,
             project_name=spec.config.get("project_name", "default"),
-            action_id=spec.id,
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
-            prev_ids=[],  # Will be set by PipelineBuilder
+            prev_ids=[],  # Will be set by Pipeline
             output_path=None,
             config_json=json.dumps(spec.config),
             result_json="",
@@ -197,13 +196,13 @@ class RemotionMethod(BaseMethod):
             workdir = Path(config_dict.get("workdir", "."))
             project_root = workdir.resolve()
             project_name = wb.project_name or config_dict.get("project_name", "default")
-            block_id = wb.block_id or config_dict.get("target_name", wb.action_id)
+            block_id = wb.block_id or config_dict.get("target_name", wb.id)
             action_dir = get_action_output_dir(
                 project_root=project_root,
                 project_name=project_name,
                 block_id=block_id,
                 method_name=wb.method_name,
-                action_id=wb.action_id
+                working_block_id=wb.id
             )
             action_dir.mkdir(parents=True, exist_ok=True)
             
@@ -251,8 +250,8 @@ class RemotionMethod(BaseMethod):
             if image_filename and image_filename != self.DEFAULT_IMAGE:
                 image_asset_name = _copy_asset_if_needed(image_filename) or image_asset_name
             
-            # Copy video to assets (use action_id for unique naming)
-            video_filename = f"{wb.action_id}_video.mp4"
+            # Copy video to assets (use working_block.id for unique naming)
+            video_filename = f"{wb.id}_video.mp4"
             injected_video_path = assets_dir / video_filename
             shutil.copy2(str(video_path), str(injected_video_path))
             print(f"[RemotionMethod] ✅ Copied video to remotion assets")
@@ -301,7 +300,7 @@ class RemotionMethod(BaseMethod):
 
             output_path = get_output_file_path(action_dir, "mp4")
             
-            temp_output_filename = f"temp_{wb.action_id}.mp4"
+            temp_output_filename = f"temp_{wb.id}.mp4"
             temp_output_path = remotion_project_path / "output" / temp_output_filename
             temp_output_path_for_cmd = Path("output") / temp_output_filename
             
@@ -314,7 +313,7 @@ class RemotionMethod(BaseMethod):
                 "--props", json.dumps(props)
             ]
             
-            print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {wb.action_id}...")
+            print(f"[RemotionMethod] 🎬 Rendering {template_name} video for {wb.id}...")
             result_cmd = subprocess.run(
                 cmd,
                 cwd=remotion_project_path,

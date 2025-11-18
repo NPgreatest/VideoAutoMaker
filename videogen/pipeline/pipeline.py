@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+# !/usr/bin/env python3
 """
 Final clean architecture for VideoGen pipeline.
 
@@ -19,6 +19,7 @@ from videogen.pipeline.utils import read_json, set_project_status
 from videogen.schema.project_schema import ProjectJSON, ProjectStatus
 from dacite import from_dict
 
+
 class Pipeline:
     """
     The central manager:
@@ -31,101 +32,84 @@ class Pipeline:
         self.project_name = project_name
         self.dao = dao or WorkingBlockDAO()
 
-    def build(self, script_block: ScriptBlock) -> List[WorkingBlock]:
-        working_blocks: List[WorkingBlock] = []
+    def build(self, script_block: ScriptBlock, prev_fish_audio_id: Optional[str]) -> Optional[str]:
+        working_blocks = []
 
-        # 1. 先把这个 project 下面所有的 working_block 都取出来
+        block_id = script_block.id
+
+        # ---- 获取本 block 所有旧节点（按 action_index 匹配） ----
+        existing_by_index = {}
         all_blocks = self.dao.get_all(self.project_name)
-
-        # 当前这个 ScriptBlock 里的 action_id 集合
-        script_action_ids = {action.id for action in script_block.actions}
-
-        # 已经存在于 DB 中、且属于这个 ScriptBlock 的 blocks
-        existing_blocks = [wb for wb in all_blocks if wb.action_id in script_action_ids]
-        action_to_wb = {wb.action_id: wb.id for wb in existing_blocks}
-
-        # ⭐ 找到「整个 project 里」最后一个 fish_audio 的 working_block.id
-        last_fish_audio_wb_id = None
         for wb in all_blocks:
-            # 这里根据你的 WorkingBlock 字段名来改，
-            # screenshot 里列名是 method_name
-            if getattr(wb, "method_name", None) == "fish_audio":
-                last_fish_audio_wb_id = wb.id
+            if wb.block_id == block_id:
+                existing_by_index[wb.action_index] = wb
 
-        # ------------------------------------------------------------------
-        # 2. 遍历当前 ScriptBlock 的 actions，边构建边设置依赖
-        # ------------------------------------------------------------------
-        for action in script_block.actions:
+        action_to_wb_id = {}  # (action_index → working_block.id)
 
-            # 如果这个 action 对应的 WorkingBlock 已经存在，跳过构建
-            # 但要注意：如果它是 fish_audio，需要把 last_fish_audio_wb_id 更新一下
-            if action.id in action_to_wb:
-                wb_id = action_to_wb[action.id]
+        # ---- 遍历 ActionSpec ----
+        last_wb_id = None
+        fish_audio_wb_id = None
 
-                if action.type == "fish_audio":
-                    last_fish_audio_wb_id = wb_id
+        for action_index, action in enumerate(script_block.actions):
 
-                continue
-
-            # 创建 method 实例
-            method = create_method(action.type)
-
-            # auto-fill config.project_name
+            # normalize config
             action.config = action.config or {}
-            if "project_name" not in action.config:
-                action.config["project_name"] = self.project_name
+            action.config.setdefault("project_name", self.project_name)
+            config_json = json.dumps(action.config, sort_keys=True)
 
-            # ------------------------------------------------------------------
-            # 3. 构建 WorkingBlock
-            # ------------------------------------------------------------------
+            old_wb = existing_by_index.get(action_index)
+
+            need_rebuild = False
+            if old_wb:
+                config_changed = old_wb.config_json != config_json
+                method_changed = old_wb.method_name != action.type
+                need_rebuild = config_changed or method_changed
+
+                if need_rebuild:
+                    self.dao.delete(old_wb.id)
+                else:
+                    # 复用旧节点
+                    last_wb_id = old_wb.id
+                    action_to_wb_id[action_index] = old_wb.id
+
+                    # 保存 fish_audio id（供下一 block 用）
+                    if action.type == "fish_audio":
+                        fish_audio_wb_id = old_wb.id
+
+                    continue
+
+            # ---- 生成新的 WorkingBlock ----
+            method = create_method(action.type)
             wb = method.run(action)
 
-            # 绑定 action_id
-            wb.action_id = action.id
+            wb.project_name = self.project_name
+            wb.block_id = block_id
+            wb.method_name = action.type
+            wb.action_index = action_index
+            wb.config_json = config_json
 
-            # block_id 用于路径构建，优先用 target_name
-            if "target_name" in action.config:
-                wb.block_id = action.config["target_name"]
+            # ---- 构建 prev_ids ----
+            if action_index == 0 and action.type == "fish_audio":
+                # ★ 第一 action 且是 fish_audio → 跨 block 依赖
+                if prev_fish_audio_id:
+                    wb.prev_ids = [prev_fish_audio_id]
+                else:
+                    wb.prev_ids = []
             else:
-                wb.block_id = action.id
+                # ★ 本 block 内链式依赖
+                wb.prev_ids = [last_wb_id] if last_wb_id else []
 
-            # ------------------------------------------------------------------
-            # 4. 构建 prev_wb_ids（DAG 依赖）
-            # ------------------------------------------------------------------
-            prev_wb_ids: List[str] = []
+            # ---- 插 DB ----
+            if self.dao.insert(wb):
+                last_wb_id = wb.id
+                action_to_wb_id[action_index] = wb.id
+                working_blocks.append(wb)
 
-            # 4.1 先处理 action 自带的 prev_ids（同一行内部的依赖）
-            for prev_action_id in action.prev_ids or []:
-                prev_wb_id = action_to_wb.get(prev_action_id)
-                if prev_wb_id:
-                    prev_wb_ids.append(prev_wb_id)
+                if action.type == "fish_audio":
+                    fish_audio_wb_id = wb.id
 
-            # 4.2 如果这是一个新的 fish_audio，并且项目里已经有上一条 fish_audio，
-            #     就让它依赖上一条 fish_audio 的 working_block.id
-            if action.type == "fish_audio" and last_fish_audio_wb_id:
-                if last_fish_audio_wb_id not in prev_wb_ids:
-                    prev_wb_ids.append(last_fish_audio_wb_id)
-
-            wb.prev_ids = prev_wb_ids
-
-            # ------------------------------------------------------------------
-            # 5. 插入数据库
-            # ------------------------------------------------------------------
-            if not self.dao.insert(wb):
-                print(f"[Pipeline] ⚠️ Failed to insert WorkingBlock {wb.id}")
-                continue
-
-            # ------------------------------------------------------------------
-            # 6. 更新映射关系 / last_fish_audio_wb_id
-            # ------------------------------------------------------------------
-            action_to_wb[action.id] = wb.id
-
-            if action.type == "fish_audio":
-                last_fish_audio_wb_id = wb.id
-
-            working_blocks.append(wb)
-
-        return working_blocks
+        # 返回本 block 的 fish_audio working_block.id
+        return fish_audio_wb_id
 
     # ----------------------------------------------------------------------
     # 2. Dependency checking (DAG)
@@ -187,6 +171,7 @@ class Pipeline:
 
         self.dao.update(wb)
 
+
 # ----------------------------------------------------------------------
 # Pipeline Runner
 # ----------------------------------------------------------------------
@@ -213,17 +198,17 @@ def run_pipeline(input_path):
             raw["project_status"] = ProjectStatus(raw["project_status"])
         except ValueError:
             raw["project_status"] = ProjectStatus.CREATED
-    
+
     project = from_dict(ProjectJSON, raw)
 
     # Create pipeline & worker
     pipeline = Pipeline(project_name)
     worker = Worker(pipeline)
 
-    # Build DAG from script blocks
+    prev_audio = None
     for script_block in project.script:
         print(f"[Pipeline] Build DAG for ScriptBlock {script_block.id}")
-        pipeline.build(script_block)
+        prev_audio = pipeline.build(script_block, prev_audio)
 
     # Execute
     print("[Pipeline] Start execution…")

@@ -17,7 +17,7 @@ class WorkingBlockDAO:
     
     _lock = threading.Lock()
     SELECT_FIELDS = (
-        "id, project_name, action_id, method_name, status, retries, "
+        "id, project_name, method_name, status, retries, "
         "prev_ids, output_path, accumulated_duration_sec, block_id, "
         "config_json, result_json, create_time, modify_time"
     )
@@ -48,7 +48,6 @@ class WorkingBlockDAO:
                 CREATE TABLE IF NOT EXISTS working_blocks (
                     id TEXT PRIMARY KEY,
                     project_name TEXT NOT NULL,
-                    action_id TEXT NOT NULL,
                     method_name TEXT NOT NULL,
                     status TEXT DEFAULT 'pending',
                     retries INTEGER DEFAULT 0,
@@ -66,10 +65,42 @@ class WorkingBlockDAO:
             # Ensure new columns exist for legacy DBs
             self._ensure_block_id_column(cursor)
             
+            # Drop old action_id column if exists (migration)
+            cursor.execute("PRAGMA table_info(working_blocks)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "action_id" in columns:
+                # SQLite doesn't support DROP COLUMN directly, so we'll create a new table
+                cursor.execute("""
+                    CREATE TABLE IF NOT EXISTS working_blocks_new (
+                        id TEXT PRIMARY KEY,
+                        project_name TEXT NOT NULL,
+                        method_name TEXT NOT NULL,
+                        status TEXT DEFAULT 'pending',
+                        retries INTEGER DEFAULT 0,
+                        prev_ids TEXT,
+                        output_path TEXT,
+                        accumulated_duration_sec REAL DEFAULT 0.0,
+                        block_id TEXT,
+                        config_json TEXT DEFAULT '',
+                        result_json TEXT DEFAULT '',
+                        create_time TEXT,
+                        modify_time TEXT
+                    )
+                """)
+                cursor.execute("""
+                    INSERT INTO working_blocks_new 
+                    (id, project_name, method_name, status, retries, prev_ids, output_path, 
+                     accumulated_duration_sec, block_id, config_json, result_json, create_time, modify_time)
+                    SELECT id, project_name, method_name, status, retries, prev_ids, output_path,
+                           accumulated_duration_sec, block_id, config_json, result_json, create_time, modify_time
+                    FROM working_blocks
+                """)
+                cursor.execute("DROP TABLE working_blocks")
+                cursor.execute("ALTER TABLE working_blocks_new RENAME TO working_blocks")
+            
             # Create indexes
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_id ON working_blocks(id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_project_name ON working_blocks(project_name)")
-            cursor.execute("CREATE INDEX IF NOT EXISTS idx_action_id ON working_blocks(action_id)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_status ON working_blocks(status)")
             cursor.execute("CREATE INDEX IF NOT EXISTS idx_create_time ON working_blocks(create_time)")
             
@@ -91,14 +122,13 @@ class WorkingBlockDAO:
                 
                 cursor.execute("""
                     INSERT INTO working_blocks 
-                    (id, project_name, action_id, method_name, status, retries,
+                    (id, project_name, method_name, status, retries,
                      prev_ids, output_path, accumulated_duration_sec, block_id,
                      config_json, result_json, create_time, modify_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     working_block.id,
                     working_block.project_name,
-                    working_block.action_id,
                     working_block.method_name,
                     working_block.status.value,
                     working_block.retries,
@@ -142,27 +172,26 @@ class WorkingBlockDAO:
             
             # Parse prev_ids from JSON
             prev_ids = []
-            if row[6]:
+            if row[5]:
                 try:
-                    prev_ids = json.loads(row[6])
+                    prev_ids = json.loads(row[5])
                 except (json.JSONDecodeError, TypeError):
                     prev_ids = []
             
             return WorkingBlock(
                 id=row[0],
                 project_name=row[1],
-                action_id=row[2],
-                method_name=row[3],
-                status=WorkingBlockStatus(row[4]),
-                retries=row[5] or 0,
+                method_name=row[2],
+                status=WorkingBlockStatus(row[3]),
+                retries=row[4] or 0,
                 prev_ids=prev_ids,
-                output_path=row[7],
-                accumulated_duration_sec=row[8] or 0.0,
-                block_id=row[9],
-                config_json=row[10] or "",
-                result_json=row[11] or "",
-                create_time=row[12],
-                modify_time=row[13]
+                output_path=row[6],
+                accumulated_duration_sec=row[7] or 0.0,
+                block_id=row[8],
+                config_json=row[9] or "",
+                result_json=row[10] or "",
+                create_time=row[11],
+                modify_time=row[12]
             )
         finally:
             conn.close()
@@ -197,27 +226,26 @@ class WorkingBlockDAO:
             for row in rows:
                 # Parse prev_ids from JSON
                 prev_ids = []
-                if row[6]:
+                if row[5]:
                     try:
-                        prev_ids = json.loads(row[6])
+                        prev_ids = json.loads(row[5])
                     except (json.JSONDecodeError, TypeError):
                         prev_ids = []
                 
                 working_blocks.append(WorkingBlock(
                     id=row[0],
                     project_name=row[1],
-                    action_id=row[2],
-                    method_name=row[3],
-                    status=WorkingBlockStatus(row[4]),
-                    retries=row[5] or 0,
+                    method_name=row[2],
+                    status=WorkingBlockStatus(row[3]),
+                    retries=row[4] or 0,
                     prev_ids=prev_ids,
-                    output_path=row[7],
-                    accumulated_duration_sec=row[8] or 0.0,
-                    block_id=row[9],
-                    config_json=row[10] or "",
-                    result_json=row[11] or "",
-                    create_time=row[12],
-                    modify_time=row[13]
+                    output_path=row[6],
+                    accumulated_duration_sec=row[7] or 0.0,
+                    block_id=row[8],
+                    config_json=row[9] or "",
+                    result_json=row[10] or "",
+                    create_time=row[11],
+                    modify_time=row[12]
                 ))
             
             return working_blocks
@@ -240,12 +268,11 @@ class WorkingBlockDAO:
                 
                 cursor.execute("""
                     UPDATE working_blocks 
-                    SET project_name = ?, action_id = ?, method_name = ?, status = ?, retries = ?,
+                    SET project_name = ?, method_name = ?, status = ?, retries = ?,
                         prev_ids = ?, output_path = ?, accumulated_duration_sec = ?, block_id = ?, config_json = ?, result_json = ?, modify_time = ?
                     WHERE id = ?
                 """, (
                     working_block.project_name,
-                    working_block.action_id,
                     working_block.method_name,
                     working_block.status.value,
                     working_block.retries,
@@ -310,8 +337,8 @@ class WorkingBlockDAO:
         """Alias for get_completed() for backward compatibility."""
         return self.get_completed()
 
-    def get_by_action_id(self, project_name: str, action_id: str) -> Optional[WorkingBlock]:
-        """Return a WorkingBlock for the given project_name + action_id."""
+    def get_by_method_name(self, project_name: str, block_id: str, method_name: str) -> Optional[WorkingBlock]:
+        """Return a WorkingBlock for the given project_name + block_id + method_name."""
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -320,35 +347,35 @@ class WorkingBlockDAO:
                            SELECT {self.SELECT_FIELDS}
                            FROM working_blocks
                            WHERE project_name = ?
-                             AND action_id = ? LIMIT 1
-                           """, (project_name, action_id))
+                             AND block_id = ?
+                             AND method_name = ? LIMIT 1
+                           """, (project_name, block_id, method_name))
 
             row = cursor.fetchone()
             if not row:
                 return None
 
             prev_ids = []
-            if row[6]:
+            if row[5]:
                 try:
-                    prev_ids = json.loads(row[6])
+                    prev_ids = json.loads(row[5])
                 except:
                     prev_ids = []
 
             return WorkingBlock(
                 id=row[0],
                 project_name=row[1],
-                action_id=row[2],
-                method_name=row[3],
-                status=WorkingBlockStatus(row[4]),
-                retries=row[5] or 0,
+                method_name=row[2],
+                status=WorkingBlockStatus(row[3]),
+                retries=row[4] or 0,
                 prev_ids=prev_ids,
-                output_path=row[7],
-                accumulated_duration_sec=row[8] or 0.0,
-                block_id=row[9],
-                config_json=row[10] or "",
-                result_json=row[11] or "",
-                create_time=row[12],
-                modify_time=row[13],
+                output_path=row[6],
+                accumulated_duration_sec=row[7] or 0.0,
+                block_id=row[8],
+                config_json=row[9] or "",
+                result_json=row[10] or "",
+                create_time=row[11],
+                modify_time=row[12],
             )
         finally:
             conn.close()

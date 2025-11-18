@@ -26,6 +26,9 @@ def parse_script_lines(
     line_index = 1
     lines = script_text.splitlines()
 
+    # 👇 新增：用于判断角色变化
+    prev_character = None
+
     for raw_line in lines:
         line = raw_line.strip()
         if not line:
@@ -34,11 +37,27 @@ def parse_script_lines(
         # ------------------------------------------------
         # 1. Picture-only line: [img.png:title]
         # ------------------------------------------------
-        picture_match = re.match(r'^\[([^:]+):(.+)\]$', line)
+        picture_match = re.match(r'^\[([^:]+):(.*)\]$', line)
         if picture_match:
             picture_filename = picture_match.group(1).strip()
             picture_title = picture_match.group(2).strip()
 
+            # ⭐ title 为空 → 附加到上一行，不生成新 block
+            if picture_title == "" and len(script_blocks) > 0:
+                last_sb = script_blocks[-1]
+                last_sb.actions.append(ActionSpec(
+                    type="remotion_picture",
+                    config={
+                        "template": "FilterTikTokSlide" if size=="tiktok" else "FilterDesktopSlide",
+                        "image_filename": picture_filename,
+                        "title": picture_title,
+                        "target_name": last_sb.id,
+                        "workdir": ".",
+                    }
+                ))
+                continue
+
+            # ⭐ title 非空 → 正常生成 picture block
             sb = ScriptBlock(
                 id=f"L{line_index}",
                 text=picture_title,
@@ -59,6 +78,7 @@ def parse_script_lines(
             script_blocks.append(sb)
             line_index += 1
             continue
+
 
         # ------------------------------------------------
         # 2. Normal text line
@@ -87,7 +107,7 @@ def parse_script_lines(
         )
 
         # ------------------------------------
-        # Step 1: fish_audio  (NO ids, NO prev)
+        # Step 1: fish_audio
         # ------------------------------------
         sb.actions.append(ActionSpec(
             type="fish_audio",
@@ -123,22 +143,32 @@ def parse_script_lines(
             ))
 
         # ------------------------------------
-        # Step 3: remotion_picture (still chained by pipeline)
+        # Step 3: remotion_picture
+        # 加规则：如果上一句角色 != 当前角色 → appear: true
         # ------------------------------------
         slide_template = "OverlapCharacterTiktok" if size == "tiktok" else "OverlapCharacter"
 
+        # 🔥 动态生成 config
+        picture_config = {
+            "template": slide_template,
+            "text": text,
+            "character": character,
+            "target_name": sb.id,
+            "workdir": ".",
+        }
+
+        # 👇 角色变化 → 加 appear: true
+        if prev_character is not None and prev_character != character:
+            picture_config["appear"] = True
+
         sb.actions.append(ActionSpec(
             type="remotion_picture",
-            config={
-                "template": slide_template,
-                "text": text,
-                "character": character,
-                "target_name": sb.id,
-                "workdir": ".",
-            }
+            config=picture_config
         ))
 
+        # 收尾
         script_blocks.append(sb)
+        prev_character = character  # 👈 更新上一行角色
         line_index += 1
 
     return script_blocks
