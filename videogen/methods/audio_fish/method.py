@@ -73,9 +73,6 @@ def _tts_fish_request_internal(text: str, out_path: Path, model_id: str) -> byte
     return bytes(audio_buffer)
 
 
-# -------------------------------
-# 主方法
-# -------------------------------
 @register_method
 class FishAudioMethod(BaseMethod):
     NAME = "fish_audio"
@@ -201,7 +198,7 @@ class FishAudioMethod(BaseMethod):
                 raise Exception("Audio segments cannot be empty")
 
             # Merge audio segments to output file
-            output_path = get_output_file_path(action_dir, "wav")
+            output_path = get_output_file_path(action_dir, block_id,"wav")
             combined_audio.export(output_path, format="wav")
             total_duration = len(combined_audio) / 1000.0  # Convert to seconds
             

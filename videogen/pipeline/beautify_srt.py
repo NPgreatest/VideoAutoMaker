@@ -306,6 +306,134 @@ def beautify_text_block(text_block: str) -> str:
     return "\n".join([l for l in final if l])
 
 
+def parse_timing(timing_str: str) -> Tuple[float, float]:
+    """Parse SRT timing string (HH:MM:SS,mmm --> HH:MM:SS,mmm) into (start, end) seconds."""
+    try:
+        parts = timing_str.split(" --> ")
+        if len(parts) != 2:
+            return 0.0, 0.0
+        
+        def parse_time(time_str: str) -> float:
+            # Format: HH:MM:SS,mmm or HH:MM:SS.mmm
+            time_str = time_str.strip().replace(",", ".")
+            hms, ms = time_str.rsplit(".", 1) if "." in time_str else (time_str, "0")
+            h, m, s = map(int, hms.split(":"))
+            return h * 3600 + m * 60 + s + float("0." + ms)
+        
+        start = parse_time(parts[0])
+        end = parse_time(parts[1])
+        return start, end
+    except Exception:
+        return 0.0, 0.0
+
+
+def format_timing(start: float, end: float) -> str:
+    """Format (start, end) seconds into SRT timing string."""
+    def fmt_time(seconds: float) -> str:
+        h = int(seconds // 3600)
+        m = int((seconds % 3600) // 60)
+        s = int(seconds % 60)
+        ms = int(round((seconds - int(seconds)) * 1000))
+        return f"{h:02}:{m:02}:{s:02},{ms:03}"
+    
+    return f"{fmt_time(start)} --> {fmt_time(end)}"
+
+
+def split_into_sentences(text: str) -> List[str]:
+    """Split text into sentences based on sentence-ending punctuation.
+    Sentence endings: 。！？.?! and their combinations.
+    """
+    # Normalize text first
+    text = re.sub(r"\s+", " ", text.strip())
+    if not text:
+        return []
+    
+    # Pattern for sentence endings: 。！？.?! (Chinese and English sentence endings)
+    # Split by sentence-ending punctuation, keeping the punctuation with the sentence
+    # Use positive lookahead to split but keep the delimiter
+    sentence_end_pattern = r"[。！？.?!]+"
+    
+    # Split the text by sentence endings, but keep the endings
+    parts = re.split(f"({sentence_end_pattern})", text)
+    
+    sentences = []
+    current = ""
+    
+    for part in parts:
+        if not part:
+            continue
+        current += part
+        # Check if current part ends with sentence-ending punctuation
+        if re.search(sentence_end_pattern, part):
+            # Found a complete sentence
+            sentence = current.strip()
+            if sentence:
+                sentences.append(sentence)
+            current = ""
+    
+    # Add remaining text as last sentence if any
+    if current.strip():
+        sentences.append(current.strip())
+    
+    # Filter out empty sentences
+    return [s for s in sentences if s]
+
+
+def split_block_into_sentences(idx: str, timing: str, text: str) -> List[Tuple[str, str, str]]:
+    """Split a single SRT block into multiple blocks, one per sentence.
+    Time is distributed proportionally based on text length.
+    """
+    sentences = split_into_sentences(text)
+    
+    if len(sentences) <= 1:
+        # No splitting needed, just beautify and return
+        pretty = beautify_text_block(text)
+        return [(idx, timing, pretty)]
+    
+    # Parse timing
+    start_sec, end_sec = parse_timing(timing)
+    duration = end_sec - start_sec
+    
+    # Calculate total text length (for proportional distribution)
+    total_length = sum(len(s) for s in sentences)
+    if total_length == 0:
+        # Fallback: equal distribution
+        time_per_sentence = duration / len(sentences)
+    else:
+        # Proportional distribution
+        time_per_sentence = None
+    
+    # Create blocks for each sentence
+    result = []
+    current_start = start_sec
+    current_idx = int(idx)
+    
+    for i, sentence in enumerate(sentences):
+        if i == len(sentences) - 1:
+            # Last sentence gets remaining time
+            current_end = end_sec
+        else:
+            if time_per_sentence is None:
+                # Proportional distribution
+                sentence_ratio = len(sentence) / total_length
+                current_end = current_start + duration * sentence_ratio
+            else:
+                # Equal distribution
+                current_end = current_start + time_per_sentence
+        
+        # Beautify the sentence
+        pretty = beautify_text_block(sentence)
+        
+        # Create new block
+        new_timing = format_timing(current_start, current_end)
+        result.append((str(current_idx), new_timing, pretty))
+        
+        current_start = current_end
+        current_idx += 1
+    
+    return result
+
+
 def parse_srt_blocks(content: str) -> List[Tuple[str, str, str]]:
     """Parse SRT content into list of (index, timing, text) blocks."""
     blocks: List[Tuple[str, str, str]] = []
@@ -335,9 +463,21 @@ def beautify_srt_at_path(srt_path: Path, dest_path: Path | None = None) -> Path:
     raw = srt_path.read_text(encoding="utf-8")
     blocks = parse_srt_blocks(raw)
     new_blocks: List[Tuple[str, str, str]] = []
+    
+    # Track index for renumbering after splitting
+    next_idx = 1
+    
     for idx, timing, text in blocks:
-        pretty = beautify_text_block(text)
-        new_blocks.append((idx, timing, pretty))
+        # Split block into sentences if it contains multiple sentences
+        # Pass the starting index, and the function will handle incrementing
+        split_blocks = split_block_into_sentences(str(next_idx), timing, text)
+        
+        # Add all split blocks (they already have correct indices)
+        new_blocks.extend(split_blocks)
+        
+        # Update next index for next block
+        next_idx += len(split_blocks)
+    
     out_path = dest_path if dest_path is not None else srt_path
     out_path.write_text(render_srt_blocks(new_blocks), encoding="utf-8")
     return out_path

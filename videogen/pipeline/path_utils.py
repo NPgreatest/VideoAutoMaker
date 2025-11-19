@@ -42,19 +42,13 @@ def get_action_output_dir(
 
 def get_output_file_path(
     action_dir: Path,
+    block_id: str,
     extension: str = "mp4"
 ) -> Path:
     """
     Get the standard output file path within an action directory.
-    
-    Args:
-        action_dir: Action output directory (from get_action_output_dir)
-        extension: File extension (without dot), e.g., "mp4", "wav", "json"
-        
-    Returns:
-        Path to output file: {action_dir}/out.{extension}
     """
-    return action_dir / f"out.{extension}"
+    return action_dir / f"{block_id}.{extension}"
 
 
 def get_meta_file_path(action_dir: Path) -> Path:

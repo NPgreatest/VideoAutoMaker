@@ -18,7 +18,7 @@ class WorkingBlockDAO:
     _lock = threading.Lock()
     SELECT_FIELDS = (
         "id, project_name, method_name, status, retries, "
-        "prev_ids, output_path, accumulated_duration_sec, block_id, "
+        "prev_ids, output_path, accumulated_duration_sec, block_id, action_index, "
         "config_json, result_json, create_time, modify_time"
     )
     
@@ -36,6 +36,13 @@ class WorkingBlockDAO:
         columns = [row[1] for row in cursor.fetchall()]
         if "block_id" not in columns:
             cursor.execute("ALTER TABLE working_blocks ADD COLUMN block_id TEXT")
+    
+    def _ensure_action_index_column(self, cursor):
+        """Ensure the action_index column exists for legacy databases."""
+        cursor.execute("PRAGMA table_info(working_blocks)")
+        columns = [row[1] for row in cursor.fetchall()]
+        if "action_index" not in columns:
+            cursor.execute("ALTER TABLE working_blocks ADD COLUMN action_index INTEGER")
     
     def _init_database(self):
         """Initialize the SQLite database with required tables."""
@@ -55,6 +62,7 @@ class WorkingBlockDAO:
                     output_path TEXT,
                     accumulated_duration_sec REAL DEFAULT 0.0,
                     block_id TEXT,
+                    action_index INTEGER,
                     config_json TEXT DEFAULT '',
                     result_json TEXT DEFAULT '',
                     create_time TEXT,
@@ -64,6 +72,7 @@ class WorkingBlockDAO:
             
             # Ensure new columns exist for legacy DBs
             self._ensure_block_id_column(cursor)
+            self._ensure_action_index_column(cursor)
             
             # Drop old action_id column if exists (migration)
             cursor.execute("PRAGMA table_info(working_blocks)")
@@ -123,9 +132,9 @@ class WorkingBlockDAO:
                 cursor.execute("""
                     INSERT INTO working_blocks 
                     (id, project_name, method_name, status, retries,
-                     prev_ids, output_path, accumulated_duration_sec, block_id,
+                     prev_ids, output_path, accumulated_duration_sec, block_id, action_index,
                      config_json, result_json, create_time, modify_time)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 """, (
                     working_block.id,
                     working_block.project_name,
@@ -136,6 +145,7 @@ class WorkingBlockDAO:
                     working_block.output_path,
                     working_block.accumulated_duration_sec,
                     working_block.block_id,
+                    working_block.action_index,
                     working_block.config_json,
                     working_block.result_json,
                     working_block.create_time,
@@ -188,10 +198,11 @@ class WorkingBlockDAO:
                 output_path=row[6],
                 accumulated_duration_sec=row[7] or 0.0,
                 block_id=row[8],
-                config_json=row[9] or "",
-                result_json=row[10] or "",
-                create_time=row[11],
-                modify_time=row[12]
+                action_index=row[9] if len(row) > 9 and row[9] is not None else None,
+                config_json=row[10] or "" if len(row) > 10 else "",
+                result_json=row[11] or "" if len(row) > 11 else "",
+                create_time=row[12] if len(row) > 12 else None,
+                modify_time=row[13] if len(row) > 13 else None
             )
         finally:
             conn.close()
@@ -242,10 +253,11 @@ class WorkingBlockDAO:
                     output_path=row[6],
                     accumulated_duration_sec=row[7] or 0.0,
                     block_id=row[8],
-                    config_json=row[9] or "",
-                    result_json=row[10] or "",
-                    create_time=row[11],
-                    modify_time=row[12]
+                    action_index=row[9] if len(row) > 9 and row[9] is not None else None,
+                    config_json=row[10] or "" if len(row) > 10 else "",
+                    result_json=row[11] or "" if len(row) > 11 else "",
+                    create_time=row[12] if len(row) > 12 else None,
+                    modify_time=row[13] if len(row) > 13 else None
                 ))
             
             return working_blocks
@@ -269,7 +281,7 @@ class WorkingBlockDAO:
                 cursor.execute("""
                     UPDATE working_blocks 
                     SET project_name = ?, method_name = ?, status = ?, retries = ?,
-                        prev_ids = ?, output_path = ?, accumulated_duration_sec = ?, block_id = ?, config_json = ?, result_json = ?, modify_time = ?
+                        prev_ids = ?, output_path = ?, accumulated_duration_sec = ?, block_id = ?, action_index = ?, config_json = ?, result_json = ?, modify_time = ?
                     WHERE id = ?
                 """, (
                     working_block.project_name,
@@ -280,6 +292,7 @@ class WorkingBlockDAO:
                     working_block.output_path,
                     working_block.accumulated_duration_sec,
                     working_block.block_id,
+                    working_block.action_index,
                     working_block.config_json,
                     working_block.result_json,
                     working_block.modify_time,
@@ -338,7 +351,9 @@ class WorkingBlockDAO:
         return self.get_completed()
 
     def get_by_method_name(self, project_name: str, block_id: str, method_name: str) -> Optional[WorkingBlock]:
-        """Return a WorkingBlock for the given project_name + block_id + method_name."""
+        """Return a WorkingBlock for the given project_name + block_id + method_name.
+        If multiple blocks match, returns the one with the lowest action_index (first action).
+        """
         conn = sqlite3.connect(self.db_path)
         cursor = conn.cursor()
 
@@ -348,7 +363,9 @@ class WorkingBlockDAO:
                            FROM working_blocks
                            WHERE project_name = ?
                              AND block_id = ?
-                             AND method_name = ? LIMIT 1
+                             AND method_name = ?
+                           ORDER BY action_index ASC NULLS LAST
+                           LIMIT 1
                            """, (project_name, block_id, method_name))
 
             row = cursor.fetchone()
@@ -372,10 +389,102 @@ class WorkingBlockDAO:
                 output_path=row[6],
                 accumulated_duration_sec=row[7] or 0.0,
                 block_id=row[8],
-                config_json=row[9] or "",
-                result_json=row[10] or "",
-                create_time=row[11],
-                modify_time=row[12],
+                action_index=row[9] if len(row) > 9 and row[9] is not None else None,
+                config_json=row[10] or "" if len(row) > 10 else "",
+                result_json=row[11] or "" if len(row) > 11 else "",
+                create_time=row[12] if len(row) > 12 else None,
+                modify_time=row[13] if len(row) > 13 else None,
             )
+        finally:
+            conn.close()
+    
+    def get_by_action_index(self, project_name: str, block_id: str, action_index: int) -> Optional[WorkingBlock]:
+        """Return a WorkingBlock for the given project_name + block_id + action_index."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(f"""
+                           SELECT {self.SELECT_FIELDS}
+                           FROM working_blocks
+                           WHERE project_name = ?
+                             AND block_id = ?
+                             AND action_index = ?
+                           LIMIT 1
+                           """, (project_name, block_id, action_index))
+
+            row = cursor.fetchone()
+            if not row:
+                return None
+
+            prev_ids = []
+            if row[5]:
+                try:
+                    prev_ids = json.loads(row[5])
+                except:
+                    prev_ids = []
+
+            return WorkingBlock(
+                id=row[0],
+                project_name=row[1],
+                method_name=row[2],
+                status=WorkingBlockStatus(row[3]),
+                retries=row[4] or 0,
+                prev_ids=prev_ids,
+                output_path=row[6],
+                accumulated_duration_sec=row[7] or 0.0,
+                block_id=row[8],
+                action_index=row[9] if len(row) > 9 and row[9] is not None else None,
+                config_json=row[10] or "" if len(row) > 10 else "",
+                result_json=row[11] or "" if len(row) > 11 else "",
+                create_time=row[12] if len(row) > 12 else None,
+                modify_time=row[13] if len(row) > 13 else None,
+            )
+        finally:
+            conn.close()
+    
+    def get_by_block_id(self, project_name: str, block_id: str) -> List[WorkingBlock]:
+        """Return all WorkingBlocks for the given project_name + block_id, ordered by action_index."""
+        conn = sqlite3.connect(self.db_path)
+        cursor = conn.cursor()
+
+        try:
+            cursor.execute(f"""
+                           SELECT {self.SELECT_FIELDS}
+                           FROM working_blocks
+                           WHERE project_name = ?
+                             AND block_id = ?
+                           ORDER BY action_index ASC NULLS LAST
+                           """, (project_name, block_id))
+
+            rows = cursor.fetchall()
+            working_blocks = []
+
+            for row in rows:
+                prev_ids = []
+                if row[5]:
+                    try:
+                        prev_ids = json.loads(row[5])
+                    except:
+                        prev_ids = []
+
+                working_blocks.append(WorkingBlock(
+                    id=row[0],
+                    project_name=row[1],
+                    method_name=row[2],
+                    status=WorkingBlockStatus(row[3]),
+                    retries=row[4] or 0,
+                    prev_ids=prev_ids,
+                    output_path=row[6],
+                    accumulated_duration_sec=row[7] or 0.0,
+                    block_id=row[8],
+                    action_index=row[9] if len(row) > 9 and row[9] is not None else None,
+                    config_json=row[10] or "" if len(row) > 10 else "",
+                    result_json=row[11] or "" if len(row) > 11 else "",
+                    create_time=row[12] if len(row) > 12 else None,
+                    modify_time=row[13] if len(row) > 13 else None,
+                ))
+
+            return working_blocks
         finally:
             conn.close()

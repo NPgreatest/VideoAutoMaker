@@ -89,7 +89,15 @@ def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: st
     return leaf_nodes[0].id if leaf_nodes else None
 
 def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
-    """Find the fish_audio working block for a given block_id."""
+    """Find the fish_audio working block for a given block_id.
+    Uses action_index to find the first fish_audio action (typically action_index=0).
+    """
+    # Try to get by method_name first (optimized query)
+    audio_block = dao.get_by_method_name(project_name, block_id, "fish_audio")
+    if audio_block and audio_block.status == WorkingBlockStatus.SUCCESS:
+        return audio_block.id
+    
+    # Fallback: search all blocks (for backward compatibility)
     all_blocks = dao.get_all(project_name)
     audio_blocks = [
         wb for wb in all_blocks 
@@ -101,7 +109,8 @@ def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_
     if not audio_blocks:
         return None
     
-    # Return the first one (should be only one per block)
+    # Return the one with the lowest action_index (first action)
+    audio_blocks.sort(key=lambda wb: wb.action_index if wb.action_index is not None else 999)
     return audio_blocks[0].id
 
 def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: WorkingBlockDAO, project_name: str) -> Optional[Path]:

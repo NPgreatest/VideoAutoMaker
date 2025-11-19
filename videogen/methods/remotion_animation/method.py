@@ -219,24 +219,51 @@ class RemotionMethod(BaseMethod):
             project_dir = project_root / "project" / project_name
             copied_assets = []
 
+            dao = WorkingBlockDAO()
+            for prev_id in wb.prev_ids:
+                prev_working_block = dao.get_working_block(prev_id)
+                if prev_working_block and prev_working_block.status == WorkingBlockStatus.SUCCESS:
+                    wb.accumulated_duration_sec = prev_working_block.accumulated_duration_sec
+
+
             def _copy_asset_if_needed(path_str: str | None) -> str | None:
                 if not path_str:
                     return None
                 candidate_paths = []
                 user_path = Path(path_str)
-                if user_path.is_absolute():
-                    candidate_paths.append(user_path)
+                
+                # If path has no extension, try common image extensions
+                if not user_path.suffix:
+                    image_extensions = ['.png', '.jpg', '.jpeg', '.gif', '.webp']
+                    base_name = path_str
                 else:
-                    candidate_paths.extend([
-                        project_dir / path_str,
-                        Path.cwd() / path_str,
-                        user_path,
-                    ])
-                source = next((p for p in candidate_paths if p.exists()), None)
+                    image_extensions = ['']
+                    base_name = path_str
+                
+                # Build candidate paths
+                if user_path.is_absolute():
+                    # Absolute path - try with and without extensions
+                    for ext in image_extensions:
+                        candidate_paths.append(user_path if not ext else Path(str(user_path) + ext))
+                else:
+                    # Relative paths - try multiple locations
+                    for ext in image_extensions:
+                        full_path = base_name + ext if ext else base_name
+                        candidate_paths.extend([
+                            project_dir / full_path,
+                            project_dir / "pic" / full_path,
+                            project_root / "assets" / "pic" / full_path,
+                            Path.cwd() / full_path,
+                            Path.cwd() / "assets" / "pic" / full_path,
+                            Path(full_path),
+                        ])
+                
+                # Try to find existing file
+                source = next((p for p in candidate_paths if p.exists() and p.is_file()), None)
                 if not source:
                     raise FileNotFoundError(
                         f"Asset file not found: {path_str}. Tried: "
-                        + ", ".join(str(p) for p in candidate_paths)
+                        + ", ".join(str(p) for p in candidate_paths[:10])  # Limit to first 10 for readability
                     )
                 dest_name = source.name
                 dest_path = assets_dir / dest_name

@@ -27,7 +27,7 @@ def build_working_blocks(action_specs: List[ActionSpec]) -> List[WorkingBlock]:
     working_blocks = []
     prev_working_id = None
     
-    for action in action_specs:
+    for action_index, action in enumerate(action_specs):
         # Build prev_ids (chain dependency)
         prev_working_ids = []
         if prev_working_id:
@@ -41,6 +41,7 @@ def build_working_blocks(action_specs: List[ActionSpec]) -> List[WorkingBlock]:
             retries=0,
             output_path=None,
             prev_ids=prev_working_ids,
+            action_index=action_index,  # Add action_index support
             config_json=json.dumps(action.config or {}, ensure_ascii=False)
         )
         

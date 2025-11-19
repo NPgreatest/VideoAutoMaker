@@ -21,6 +21,7 @@ class WorkingBlock:
     output_path: Optional[str] = None
     accumulated_duration_sec: float = 0.0  # Timeline position (seconds)
     block_id: Optional[str] = None  # ScriptBlock.id (e.g., "L1") for path construction
+    action_index: Optional[int] = None  # Index of action within the script block
 
     config_json: str = ""
     result_json: str = ""

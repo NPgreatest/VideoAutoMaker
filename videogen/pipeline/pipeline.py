@@ -37,14 +37,8 @@ class Pipeline:
 
         block_id = script_block.id
 
-        # ---- 获取本 block 所有旧节点（按 action_index 匹配） ----
-        existing_by_index = {}
+        # ---- 预先加载所有 blocks 以提高效率 ----
         all_blocks = self.dao.get_all(self.project_name)
-        for wb in all_blocks:
-            if wb.block_id == block_id:
-                existing_by_index[wb.action_index] = wb
-
-        action_to_wb_id = {}  # (action_index → working_block.id)
 
         # ---- 遍历 ActionSpec ----
         last_wb_id = None
@@ -57,26 +51,32 @@ class Pipeline:
             action.config.setdefault("project_name", self.project_name)
             config_json = json.dumps(action.config, sort_keys=True)
 
-            old_wb = existing_by_index.get(action_index)
+            # ---- 检查是否已存在相同 project_name 和 config_json 的 working block ----
+            existing_wb = None
+            for wb in all_blocks:
+                if (wb.project_name == self.project_name and 
+                    wb.config_json == config_json and
+                    wb.status == WorkingBlockStatus.SUCCESS):
+                    # 检查输出文件是否存在
+                    try:
+                        result = json.loads(wb.result_json or "{}")
+                        output_path = result.get("output_path")
+                        if output_path and os.path.exists(output_path):
+                            existing_wb = wb
+                            break
+                    except Exception:
+                        continue
 
-            need_rebuild = False
-            if old_wb:
-                config_changed = old_wb.config_json != config_json
-                method_changed = old_wb.method_name != action.type
-                need_rebuild = config_changed or method_changed
-
-                if need_rebuild:
-                    self.dao.delete(old_wb.id)
-                else:
-                    # 复用旧节点
-                    last_wb_id = old_wb.id
-                    action_to_wb_id[action_index] = old_wb.id
-
-                    # 保存 fish_audio id（供下一 block 用）
-                    if action.type == "fish_audio":
-                        fish_audio_wb_id = old_wb.id
-
-                    continue
+            if existing_wb:
+                # 找到重复的 working block，直接跳过
+                print(f"[Pipeline] ⏭️  Skipping action {action_index} ({action.type}) - duplicate config found (wb.id: {existing_wb.id})")
+                last_wb_id = existing_wb.id
+                
+                # 保存 fish_audio id（供下一 block 用）
+                if action.type == "fish_audio":
+                    fish_audio_wb_id = existing_wb.id
+                
+                continue
 
             # ---- 生成新的 WorkingBlock ----
             method = create_method(action.type)
@@ -102,7 +102,6 @@ class Pipeline:
             # ---- 插 DB ----
             if self.dao.insert(wb):
                 last_wb_id = wb.id
-                action_to_wb_id[action_index] = wb.id
                 working_blocks.append(wb)
 
                 if action.type == "fish_audio":
