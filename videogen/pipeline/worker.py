@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Optional, Set
 from datetime import datetime
 
 from videogen.methods.registry import create_method
@@ -94,8 +94,8 @@ class Worker:
         
         print(f"[Worker] ✅ Wrote meta.json to {meta_path}")
 
-    def run_once(self) -> bool:
-        wb = self.pipeline.get_next_runnable()
+    def run_once(self, allowed_methods: Optional[Set[str]] = None) -> bool:
+        wb = self.pipeline.get_next_runnable(allowed_methods=allowed_methods)
         if not wb:
             return False
 
@@ -130,10 +130,10 @@ class Worker:
         self.pipeline.update_job(wb, result)
         return True
 
-    def run_until_complete(self, max_iter=999999):
+    def run_until_complete(self, max_iter=999999, allowed_methods: Optional[Set[str]] = None):
         count = 0
         while count < max_iter:
-            if not self.run_once():
+            if not self.run_once(allowed_methods=allowed_methods):
                 break
             count += 1
         return count

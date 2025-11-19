@@ -8,14 +8,16 @@ Final clean architecture for VideoGen pipeline.
 
 import json
 import os
-from typing import List, Optional
+from pathlib import Path
+from typing import List, Optional, Set
 
 from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.methods.registry import create_method
+from videogen.pipeline.concat import concat_pipeline
 from videogen.pipeline.worker import Worker
 from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 from videogen.schema.project_schema import ScriptBlock
-from videogen.pipeline.utils import read_json, set_project_status
+from videogen.pipeline.utils import get_project_status, read_json, set_project_status
 from videogen.schema.project_schema import ProjectJSON, ProjectStatus
 from dacite import from_dict
 
@@ -54,18 +56,26 @@ class Pipeline:
             # ---- 检查是否已存在相同 project_name 和 config_json 的 working block ----
             existing_wb = None
             for wb in all_blocks:
-                if (wb.project_name == self.project_name and 
-                    wb.config_json == config_json and
-                    wb.status == WorkingBlockStatus.SUCCESS):
-                    # 检查输出文件是否存在
+                if wb.project_name != self.project_name:
+                    continue
+                if wb.config_json != config_json:
+                    continue
+
+                if wb.status == WorkingBlockStatus.SUCCESS:
                     try:
                         result = json.loads(wb.result_json or "{}")
                         output_path = result.get("output_path")
                         if output_path and os.path.exists(output_path):
                             existing_wb = wb
                             break
+                        # 成功但输出文件缺失，继续寻找其他 block
+                        continue
                     except Exception:
                         continue
+
+                # PENDING/ERROR → 复用原记录，避免重复插入
+                existing_wb = wb
+                break
 
             if existing_wb:
                 # 找到重复的 working block，直接跳过
@@ -140,9 +150,11 @@ class Pipeline:
 
         return True
 
-    def get_next_runnable(self) -> Optional[WorkingBlock]:
+    def get_next_runnable(self, allowed_methods: Optional[Set[str]] = None) -> Optional[WorkingBlock]:
         """Return a PENDING block whose dependencies are all satisfied."""
         for wb in self.dao.get_pending(self.project_name):
+            if allowed_methods and wb.method_name not in allowed_methods:
+                continue
             if self._deps_done(wb):
                 return wb
         return None
@@ -189,26 +201,20 @@ class Pipeline:
 
 
 # ----------------------------------------------------------------------
-# Pipeline Runner
+# Pipeline Runner Helpers
 # ----------------------------------------------------------------------
-def run_pipeline(input_path):
-    """
-    Entry function.
-    - read project JSON
-    - build DAG
-    - run worker until done
-    """
+def _coerce_input_path(input_path) -> Path:
+    if isinstance(input_path, Path):
+        return input_path
+    return Path(input_path)
 
+
+def _parse_project(input_path: Path) -> ProjectJSON:
     raw = read_json(input_path)
     project_name = raw.get("project_name")
     if not project_name:
         raise RuntimeError("Missing project_name in JSON")
 
-    # Set project status
-    set_project_status(input_path, ProjectStatus.GENERATING)
-
-    # Parse project JSON
-    # Convert project_status string to ProjectStatus enum before parsing
     if "project_status" in raw and isinstance(raw["project_status"], str):
         try:
             raw["project_status"] = ProjectStatus(raw["project_status"])
@@ -216,31 +222,179 @@ def run_pipeline(input_path):
             raw["project_status"] = ProjectStatus.CREATED
 
     project = from_dict(ProjectJSON, raw)
+    return project
 
-    # Create pipeline & worker
-    pipeline = Pipeline(project_name)
-    worker = Worker(pipeline)
 
+def _build_full_dag(project: ProjectJSON) -> Pipeline:
+    pipeline = Pipeline(project.project_name)
     prev_audio = None
     for script_block in project.script:
         print(f"[Pipeline] Build DAG for ScriptBlock {script_block.id}")
         prev_audio = pipeline.build(script_block, prev_audio)
+    return pipeline
 
-    # Execute
-    print("[Pipeline] Start execution…")
-    jobs = worker.run_until_complete()
-    print(f"[Pipeline] Completed {jobs} jobs")
 
-    # Final status
+def rebuild_audio_timeline(project_name: str):
+    """
+    Rebuild accumulate_duration_sec for all fish_audio working blocks.
+    Ensures timeline continuity even after partial retries.
+    """
     dao = WorkingBlockDAO()
-    errors = [wb for wb in dao.get_all(project_name) if wb.status == WorkingBlockStatus.ERROR]
-    pending = [wb for wb in dao.get_all(project_name) if wb.status == WorkingBlockStatus.PENDING]
+    blocks = dao.get_all(project_name)
 
-    if errors:
-        set_project_status(input_path, ProjectStatus.GENERATE_FAILED)
-    elif pending:
-        set_project_status(input_path, ProjectStatus.GENERATING)
+    audio_blocks = [wb for wb in blocks if wb.method_name == "fish_audio"]
+    if not audio_blocks:
+        return
+
+    def _block_sort_key(wb: WorkingBlock):
+        block_id = wb.block_id or ""
+        action_index = wb.action_index if wb.action_index is not None else 0
+        return (block_id, action_index)
+
+    audio_blocks.sort(key=_block_sort_key)
+
+    current_acc = 0.0
+    last_block_id = None
+    block_acc = 0.0
+
+    for wb in audio_blocks:
+        block_id = wb.block_id or ""
+        if block_id != last_block_id:
+            block_acc = current_acc
+            last_block_id = block_id
+
+        try:
+            result = json.loads(wb.result_json or "{}")
+            if not isinstance(result, dict):
+                result = {}
+        except Exception:
+            result = {}
+
+        dur = result.get("duration_sec") or 0.0
+        try:
+            dur = float(dur)
+        except (TypeError, ValueError):
+            dur = 0.0
+
+        result["accumulate_duration_sec"] = block_acc
+        wb.result_json = json.dumps(result)
+        wb.accumulated_duration_sec = block_acc
+        dao.update(wb)
+
+        current_acc = block_acc + max(dur, 0.0)
+
+
+def run_audio_pipeline(input_path):
+    """
+    Stage A: execute fish_audio actions only.
+    """
+    path = _coerce_input_path(input_path)
+    raw = read_json(path)
+    project_status = get_project_status(raw)
+
+    project = _parse_project(path)
+    set_project_status(path, ProjectStatus.AUDIO_GENERATING)
+    print("[Audio Pipeline] Status -> AUDIO_GENERATING")
+
+    pipeline = _build_full_dag(project)
+    worker = Worker(pipeline)
+
+    print("[Audio Pipeline] Running fish_audio blocks…")
+    jobs = worker.run_until_complete(allowed_methods={"fish_audio"})
+    print(f"[Audio Pipeline] Completed {jobs} jobs")
+
+    rebuild_audio_timeline(project.project_name)
+
+    dao = WorkingBlockDAO()
+    audio_blocks = [
+        wb for wb in dao.get_all(project.project_name)
+        if wb.method_name == "fish_audio"
+    ]
+
+    if not audio_blocks:
+        set_project_status(path, ProjectStatus.AUDIO_READY)
+        print("[Audio Pipeline] ⚠️ No audio blocks found. Status -> AUDIO_READY")
+        return
+
+    if all(wb.status == WorkingBlockStatus.SUCCESS for wb in audio_blocks):
+        set_project_status(path, ProjectStatus.AUDIO_READY)
+        print("[Audio Pipeline] ✅ Status -> AUDIO_READY")
     else:
-        set_project_status(input_path, ProjectStatus.RENDERING)
+        set_project_status(path, ProjectStatus.FAILED)
+        print("[Audio Pipeline] ❌ Status -> FAILED")
 
-    print("[Pipeline] Finished.")
+
+def run_video_pipeline(input_path):
+    """
+    Stage B: execute non-audio actions once audio is locked.
+    """
+    path = _coerce_input_path(input_path)
+    raw = read_json(path)
+    project_status = get_project_status(raw)
+
+    if project_status != ProjectStatus.AUDIO_READY:
+        raise RuntimeError("Project must be AUDIO_READY before running video pipeline.")
+
+    project = _parse_project(path)
+    set_project_status(path, ProjectStatus.VIDEO_GENERATING)
+    print("[Video Pipeline] Status -> VIDEO_GENERATING")
+
+    pipeline = _build_full_dag(project)
+    worker = Worker(pipeline)
+
+    allowed_methods: Set[str] = {
+        action.type
+        for block in project.script
+        for action in block.actions
+        if action.type != "fish_audio"
+    }
+
+    if not allowed_methods:
+        print("[Video Pipeline] No video actions detected. Marking finished.")
+        set_project_status(path, ProjectStatus.FINISHED)
+        return
+
+    print("[Video Pipeline] Running non-audio blocks…")
+    jobs = worker.run_until_complete(allowed_methods=allowed_methods)
+    print(f"[Video Pipeline] Completed {jobs} jobs")
+
+    dao = WorkingBlockDAO()
+    blocks = dao.get_all(project.project_name)
+    errors = [
+        wb for wb in blocks
+        if wb.method_name != "fish_audio" and wb.status == WorkingBlockStatus.ERROR
+    ]
+    pending = [
+        wb for wb in blocks
+        if wb.method_name != "fish_audio" and wb.status == WorkingBlockStatus.PENDING
+    ]
+
+    if errors or pending:
+        set_project_status(path, ProjectStatus.FAILED)
+        print("[Video Pipeline] ❌ Status -> FAILED")
+        return
+
+    try:
+        concat_pipeline(project.project_name)
+    except Exception as exc:
+        set_project_status(path, ProjectStatus.FAILED)
+        print(f"[Video Pipeline] ❌ Concat failed: {exc}")
+        raise
+
+    set_project_status(path, ProjectStatus.FINISHED)
+    print("[Video Pipeline] 🎉 Status -> FINISHED")
+
+
+def run_pipeline(input_path):
+    """
+    Backwards-compatible helper that executes audio stage then video stage.
+    """
+    path = _coerce_input_path(input_path)
+    status = get_project_status(read_json(path))
+
+    if status in (ProjectStatus.CREATED, ProjectStatus.AUDIO_GENERATING, ProjectStatus.FAILED):
+        run_audio_pipeline(path)
+        status = get_project_status(read_json(path))
+
+    if status == ProjectStatus.AUDIO_READY:
+        run_video_pipeline(path)

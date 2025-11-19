@@ -27,9 +27,9 @@ class ScriptBlock:
 class ProjectStatus(Enum):
     """Status enum for Project instances."""
     CREATED = "created"
-    GENERATING = "generating"
-    GENERATE_FAILED = "generate_failed"
-    RENDERING = "rendering"
+    AUDIO_GENERATING = "audio_generating"
+    AUDIO_READY = "audio_ready"
+    VIDEO_GENERATING = "video_generating"
     FINISHED = "finished"
     FAILED = "failed"
 
