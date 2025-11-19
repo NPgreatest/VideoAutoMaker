@@ -379,10 +379,37 @@ def split_into_sentences(text: str) -> List[str]:
     return [s for s in sentences if s]
 
 
-def split_block_into_sentences(idx: str, timing: str, text: str) -> List[Tuple[str, str, str]]:
+def split_block_into_sentences(idx: str, timing: str, text: str):
+    # 如果是 segment → 一律不处理
+    if text.startswith("__SEG__:"):
+        pure = text.replace("__SEG__:", "", 1).strip()
+        return [(idx, timing, pure)]
     """Split a single SRT block into multiple blocks, one per sentence.
     Time is distributed proportionally based on text length.
+    
+    Note: If the text is from a segment (already split), we should not split it again.
+    We detect this by checking if the text is relatively short (likely a single phrase).
     """
+    # 检测是否是来自 segment 的短语
+    # segment 文本通常较短，且可能以标点结尾（但不会包含多个句子）
+    # 如果文本较短（<= 30 字符）且只包含一个句末标点（在末尾），可能是 segment，不分割
+    text_stripped = text.strip()
+    text_len = len(text_stripped)
+    
+    # 检查是否只有一个句末标点，且在末尾
+    sentence_ends = re.findall(r"[。！？.?!]+", text_stripped)
+    has_single_end_at_tail = (
+        len(sentence_ends) == 1 and 
+        text_stripped.rstrip().endswith(tuple("。！？.?!"))
+    )
+    
+    # 如果文本较短且只有一个句末标点在末尾，可能是 segment 短语，不分割
+    # 这样可以保留 segment 的原始时间戳
+    if text_len <= 30 and (has_single_end_at_tail or not sentence_ends):
+        # 只美化，不分割，保留原始时间戳
+        pretty = beautify_text_block(text)
+        return [(idx, timing, pretty)]
+    
     sentences = split_into_sentences(text)
     
     if len(sentences) <= 1:

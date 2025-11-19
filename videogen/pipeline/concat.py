@@ -317,7 +317,7 @@ def generate_srt_from_blocks(dao: WorkingBlockDAO, project_name: str, block_ids:
         if text:
             start = block_offset
             end = start + dur
-            lines.append(f"{idx}\n{fmt_time(start)} --> {fmt_time(end)}\n{text}\n\n")
+            lines.append(f"{idx}\n{fmt_time(start)} --> {fmt_time(end)}\n__SEG__:{text}\n\n")
             idx += 1
         block_index += 1
 

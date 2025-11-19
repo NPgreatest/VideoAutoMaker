@@ -127,7 +127,6 @@ def parse_script_lines(
                 type="extract_background_segment",
                 config={
                     "background_video": background_video,
-                    "text": text,
                     "target_name": sb.id,
                     "workdir": ".",
                 }
@@ -151,7 +150,6 @@ def parse_script_lines(
         # 🔥 动态生成 config
         picture_config = {
             "template": slide_template,
-            "text": text,
             "character": character,
             "target_name": sb.id,
             "workdir": ".",

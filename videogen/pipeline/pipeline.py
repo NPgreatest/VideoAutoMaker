@@ -161,12 +161,29 @@ class Pipeline:
         """
 
         wb.status = result.status
-        wb.result_json = json.dumps({
+        
+        # 保留已有的 result_json 中的额外字段（如 segments）
+        existing_result = {}
+        if wb.result_json:
+            try:
+                existing_result = json.loads(wb.result_json)
+            except (json.JSONDecodeError, TypeError):
+                existing_result = {}
+        
+        # 更新基本字段
+        new_result = {
             "status": result.status.value,
             "output_path": result.output_path,
             "duration_sec": result.duration_sec,
             "error": result.error
-        })
+        }
+        
+        # 保留已有的额外字段（如 segments）
+        for key in existing_result:
+            if key not in new_result:
+                new_result[key] = existing_result[key]
+        
+        wb.result_json = json.dumps(new_result)
 
         self.dao.update(wb)
 

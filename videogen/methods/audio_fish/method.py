@@ -232,7 +232,8 @@ class FishAudioMethod(BaseMethod):
                 "status": result.status.value,
                 "output_path": result.output_path,
                 "duration_sec": result.duration_sec,
-                "error": result.error
+                "error": result.error,
+                "segments": segments_meta  # 保存 segments 信息供字幕生成使用
             })
 
             return result
