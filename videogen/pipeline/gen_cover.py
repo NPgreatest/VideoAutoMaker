@@ -148,10 +148,31 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
             else:
                 w_c = h_c = 0
 
+            # 处理标题B部分：如果超过12个字，自动换行
+            # 注意：title_text 是【A】B格式中的B部分，只对B部分进行换行处理
+            title_lines = []
             if title_text:
-                w_t, h_t = measure_text(draw, title_text, font_title)
+                if len(title_text) > 12:
+                    # 每行最多12个字，按12个字切分
+                    for i in range(0, len(title_text), 12):
+                        title_lines.append(title_text[i:i+12])
+                else:
+                    title_lines = [title_text]
             else:
-                w_t = h_t = 0
+                title_lines = []
+
+            # 计算标题每行的尺寸和总高度
+            title_line_info = []  # [(width, height), ...]
+            title_total_height = 0
+            if title_lines:
+                for line in title_lines:
+                    w_t, h_t = measure_text(draw, line, font_title)
+                    title_line_info.append((w_t, h_t))
+                    title_total_height += h_t
+                # 添加行间距（行高的一半）
+                if len(title_lines) > 1:
+                    line_spacing = int(title_line_info[0][1] * 0.5)
+                    title_total_height += line_spacing * (len(title_lines) - 1)
 
             stroke_width = max(4, int(4 * font_scale))
 
@@ -168,18 +189,35 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
                     stroke_fill="black",
                 )
 
-            # 绘制标题文字
-            if title_text:
-                x_t = (canvas.width - w_t) // 2
-                y_t = canvas.height - h_t - int(150 * font_scale)
-                draw.text(
-                    (x_t, y_t),
-                    title_text,
-                    font=font_title,
-                    fill=(255, 255, 0),
-                    stroke_width=stroke_width,
-                    stroke_fill="black",
-                )
+            # 绘制标题文字（支持多行，靠右下方显示，避免遮挡人脸）
+            if title_lines:
+                # 向右偏移量（避免遮挡左侧人脸）
+                x_offset_right = int(100 * font_scale)  # 向右偏移
+                
+                # 计算起始Y坐标（从底部向上，但更靠下）
+                y_bottom = canvas.height - int(80 * font_scale)  # 减少底部边距，让文字更靠下
+                y_start = y_bottom - title_total_height
+                
+                # 行间距
+                line_spacing = int(title_line_info[0][1] * 0.5) if len(title_lines) > 1 else 0
+                
+                # 逐行绘制（靠右对齐）
+                current_y = y_start
+                for line_idx, line in enumerate(title_lines):
+                    w_t, h_t = title_line_info[line_idx]
+                    # 靠右对齐，并向右偏移
+                    x_t = canvas.width - w_t - x_offset_right
+                    
+                    draw.text(
+                        (x_t, current_y),
+                        line,
+                        font=font_title,
+                        fill=(255, 255, 0),
+                        stroke_width=stroke_width,
+                        stroke_fill="black",
+                    )
+                    # 移动到下一行
+                    current_y += h_t + line_spacing
 
             # 输出文件
             output_path = project_dir / f"{project_name}_cover_{idx}.jpg"
