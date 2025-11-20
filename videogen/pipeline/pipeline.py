@@ -233,7 +233,6 @@ def _build_full_dag(project: ProjectJSON) -> Pipeline:
         prev_audio = pipeline.build(script_block, prev_audio)
     return pipeline
 
-
 def rebuild_audio_timeline(project_name: str):
     """
     Rebuild accumulate_duration_sec for all fish_audio working blocks.
@@ -246,13 +245,32 @@ def rebuild_audio_timeline(project_name: str):
     if not audio_blocks:
         return
 
+    # ----------------------------
+    # FIX: numeric block_id sorting (L1, L2, L10...)
+    # ----------------------------
+    import re
+    def _extract_block_num(block_id: str):
+        """
+        Extract numeric part from L1 / B23 / etc.
+        'L10' → 10, 'L2' → 2
+        If no number exists, return large value to push it back.
+        """
+        if not block_id:
+            return 10**9
+        m = re.search(r"(\d+)$", block_id)
+        return int(m.group(1)) if m else 10**9
+
     def _block_sort_key(wb: WorkingBlock):
         block_id = wb.block_id or ""
+        block_num = _extract_block_num(block_id)
         action_index = wb.action_index if wb.action_index is not None else 0
-        return (block_id, action_index)
+        return (block_num, action_index)
 
     audio_blocks.sort(key=_block_sort_key)
 
+    # ----------------------------
+    # rebuild accumulate_duration_sec
+    # ----------------------------
     current_acc = 0.0
     last_block_id = None
     block_acc = 0.0
@@ -276,12 +294,14 @@ def rebuild_audio_timeline(project_name: str):
         except (TypeError, ValueError):
             dur = 0.0
 
+        # update result json
         result["accumulate_duration_sec"] = block_acc
         wb.result_json = json.dumps(result)
         wb.accumulated_duration_sec = block_acc
         dao.update(wb)
 
         current_acc = block_acc + max(dur, 0.0)
+
 
 
 def run_audio_pipeline(input_path):

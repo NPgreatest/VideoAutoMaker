@@ -12,6 +12,7 @@ from pathlib import Path
 from datetime import datetime
 from dacite import from_dict
 
+from videogen.core.config_manager import ConfigManager
 from videogen.methods.base import BaseMethod
 from videogen.methods.registry import register_method
 from videogen.methods.remotion_animation.schema import RemotionAnimationSchema
@@ -56,6 +57,17 @@ class RemotionMethod(BaseMethod):
     DEFAULT_DURATION_SEC = 5
     DEFAULT_IMAGE = "openai.png"
     DEFAULT_SOUND_EFFECT = ""
+
+    @staticmethod
+    def _coalesce_numeric(*values, default: float = 0.0) -> float:
+        for value in values:
+            try:
+                if value is None or value == "":
+                    continue
+                return float(value)
+            except (TypeError, ValueError):
+                continue
+        return default
 
     def run(self, spec: ActionSpec) -> WorkingBlock:
         """
@@ -300,9 +312,25 @@ class RemotionMethod(BaseMethod):
                         character_asset = image_asset_name
                     else:
                         character_asset = self.DEFAULT_IMAGE
-                resize_ratio = config_dict.get("resize_ratio", 0.4)
-                position_x = config_dict.get("position_x", 0.02)
-                position_y = config_dict.get("position_y", 0.78)
+                prefix = "TIKTOK" if "Tiktok" in template_name else "LANDSCAPE"
+                resize_ratio = self._coalesce_numeric(
+                    config_dict.get("resize_ratio"),
+                    ConfigManager.get(f"{prefix}_FORMAT_PICTURE_WIDTH_RATIO"),
+                )
+                position_x = self._coalesce_numeric(
+                    config_dict.get("position_x"),
+                    ConfigManager.get(f"{prefix}_FORMAT_PICTURE_X_RATIO"),
+                )
+                position_y = self._coalesce_numeric(
+                    config_dict.get("position_y"),
+                    ConfigManager.get(f"{prefix}_FORMAT_PICTURE_Y_RATIO"),
+                )
+                bottom_margin = self._coalesce_numeric(
+                    config_dict.get("bottom_margin_ratio"),
+                    ConfigManager.get(f"{prefix}_FORMAT_PICTURE_BOTTOM_MARGIN_RATIO"),
+                )
+                if bottom_margin > 0:
+                    position_y = min(position_y, max(0.0, 1.0 - bottom_margin))
                 appear = config_dict.get("appear", True)
                 props = {
                     "imagePath": character_asset,
