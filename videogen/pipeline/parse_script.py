@@ -42,10 +42,8 @@ def parse_script_lines(
             picture_filename = picture_match.group(1).strip()
             picture_title = picture_match.group(2).strip()
 
-            # ⭐ title 为空 → 附加到上一行，不生成新 block
-            if picture_title == "" and len(script_blocks) > 0:
-                last_sb = script_blocks[-1]
-                last_sb.actions.append(ActionSpec(
+            last_sb = script_blocks[-1]
+            last_sb.actions.append(ActionSpec(
                     type="remotion_picture",
                     config={
                         "template": "FilterTikTokSlide" if size=="tiktok" else "FilterDesktopSlide",
@@ -55,30 +53,7 @@ def parse_script_lines(
                         "workdir": ".",
                     }
                 ))
-                continue
-
-            # ⭐ title 非空 → 正常生成 picture block
-            sb = ScriptBlock(
-                id=f"L{line_index}",
-                text=picture_title,
-                actions=[
-                    ActionSpec(
-                        type="remotion_picture",
-                        config={
-                            "template": "FilterTikTokSlide" if size=="tiktok" else "FilterDesktopSlide",
-                            "image_filename": picture_filename,
-                            "title": picture_title,
-                            "target_name": f"L{line_index}",
-                            "workdir": ".",
-                        }
-                    )
-                ]
-            )
-
-            script_blocks.append(sb)
-            line_index += 1
             continue
-
 
         # ------------------------------------------------
         # 2. Normal text line

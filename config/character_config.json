@@ -38,5 +38,15 @@
       "name": "孙笑川",
     "model_id": "434c2fec2e0d4e47ab003c1ecefc24ef",
     "image_path": "./assets/pic/sun.png"
+  },
+    "stewie": {
+        "name": "Stewie Griffin(饺子)",
+    "model_id": "7fc7ee55e20b425c85e630c8abf6a92c",
+    "image_path": "./assets/pic/stewie.png"
+  },
+    "peter": {
+      "name": "Peter Griffin",
+    "model_id": "981795f0720646e7b99cefa86602e9b8",
+    "image_path": "./assets/pic/peter.png"
   }
 }
