@@ -3,9 +3,11 @@ from __future__ import annotations
 
 import gradio as gr
 from dataclasses import asdict
-from typing import Any, Dict
+from typing import Any, Dict, List, Tuple
 
 from videogen.dao.working_block_dao import WorkingBlockDAO
+from videogen.llm_agent.agents.auto_script import AutoScriptAgent
+from videogen.llm_agent.utils.markdown_loader import MarkdownPromptLoader
 from videogen.pipeline.parse_script import parse_script_lines
 from videogen.pipeline.utils import write_json
 from videogen.schema.project_schema import ProjectStatus
@@ -15,6 +17,47 @@ from videogen.ui.shared import (
     get_bgm_choices,
     get_character_choices,
 )
+
+
+PROMPT_LOADER = MarkdownPromptLoader()
+AUTO_SCRIPT_AGENT = AutoScriptAgent()
+
+
+def _get_prompt_choices(category: str, default_key: str) -> List[Tuple[str, str]]:
+    registry = PROMPT_LOADER.list_registry()
+    category_data = registry.get(category, {})
+    if not category_data:
+        return [(default_key, default_key)]
+    return [
+        (f"{key} · {relative_path}", key)
+        for key, relative_path in category_data.items()
+    ]
+
+
+def generate_script_from_agent(
+    topic: str,
+    size: str,
+    default_character: str,
+    info_query_key: str,
+    script_structure_key: str,
+) -> Tuple[Any, str]:
+    topic = (topic or "").strip()
+    if not topic:
+        return gr.update(), "❌ 视频主题不能为空"
+
+    style = (default_character or "").strip() or "通用风格"
+
+    try:
+        result = AUTO_SCRIPT_AGENT.run(
+            topic=topic,
+            style=style,
+            prompt1_key=info_query_key or AutoScriptAgent.PROMPT_1_DEFAULT_KEY,
+            prompt2_key=script_structure_key or AutoScriptAgent.PROMPT_2_DEFAULT_KEY,
+        )
+    except Exception as exc:  # pragma: no cover - UI 调用链路
+        return gr.update(), f"❌ 生成剧本失败：{exc}"
+
+    return result.final_script, "✅ 剧本已自动生成，可直接微调后创建项目。"
 
 
 def _save_project_assets(
@@ -57,6 +100,7 @@ def create_project(
     project_name: str,
     size: str,
     default_character: str,
+    video_topic: str,
     script_text: str,
     bgm_path: str,
     background_video_path: str,
@@ -65,6 +109,8 @@ def create_project(
     project_name = (project_name or "").strip()
     if not project_name:
         return "❌ Project name cannot be empty"
+    if not video_topic or not video_topic.strip():
+        return "❌ Video topic cannot be empty"
     if not script_text or not script_text.strip():
         return "❌ Script text cannot be empty"
 
@@ -96,10 +142,21 @@ def build_create_project_page() -> None:
     default_character_value = character_choices[0][1] if character_choices else ""
     bgm_choices = get_bgm_choices()
     background_video_choices = get_background_video_choices()
+    info_query_choices = _get_prompt_choices(
+        AutoScriptAgent.PROMPT_1_CATEGORY, AutoScriptAgent.PROMPT_1_DEFAULT_KEY
+    )
+    script_structure_choices = _get_prompt_choices(
+        AutoScriptAgent.PROMPT_2_CATEGORY, AutoScriptAgent.PROMPT_2_DEFAULT_KEY
+    )
 
     with gr.Column():
         gr.Markdown("### 🆕 Create Project\n为项目输入名称和脚本，系统会自动解析为脚本块并初始化数据库。")
         project_name = gr.Textbox(label="Project Name", placeholder="e.g., tech_demo", max_lines=1)
+        video_topic = gr.Textbox(
+            label="Video Topic",
+            placeholder="例如：为什么 B+ 树在数据库里无处不在？",
+            max_lines=1,
+        )
         with gr.Row():
             size = gr.Radio(
                 label="Video Format",
@@ -111,6 +168,19 @@ def build_create_project_page() -> None:
                 choices=character_choices or [("Not Set", "")],
                 value=default_character_value,
                 allow_custom_value=True,
+            )
+        with gr.Row():
+            info_query_prompt = gr.Dropdown(
+                label="Info Query Prompt",
+                choices=info_query_choices,
+                value=info_query_choices[0][1] if info_query_choices else "",
+            )
+            script_structure_prompt = gr.Dropdown(
+                label="Script Structure Prompt",
+                choices=script_structure_choices,
+                value=script_structure_choices[0][1]
+                if script_structure_choices
+                else "",
             )
         bgm_dropdown = gr.Dropdown(
             label="Background Music (BGM)",
@@ -129,14 +199,27 @@ def build_create_project_page() -> None:
             lines=12,
         )
         status = gr.Markdown("")
+        generate_btn = gr.Button("Generate Script", variant="secondary")
         create_btn = gr.Button("Create Project", variant="primary")
 
+    generate_btn.click(
+        fn=generate_script_from_agent,
+        inputs=[
+            video_topic,
+            size,
+            default_character,
+            info_query_prompt,
+            script_structure_prompt,
+        ],
+        outputs=[script_text, status],
+    )
     create_btn.click(
         fn=create_project,
         inputs=[
             project_name,
             size,
             default_character,
+            video_topic,
             script_text,
             bgm_dropdown,
             background_video_dropdown,

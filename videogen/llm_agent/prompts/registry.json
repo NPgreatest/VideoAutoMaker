@@ -1,0 +1,13 @@
+{
+  "info_query": {
+    "direction_baolun": "categories/info_query/direction_baolun.md",
+    "direction_cs_education": "categories/info_query/direction_cs_education.md",
+    "direction_story": "categories/info_query/direction_story.md"
+  },
+  "script_structure": {
+    "solo": "categories/script_structure/solo.md",
+    "elon_trump": "categories/script_structure/elon_trump.md",
+    "stewie_peter": "categories/script_structure/stewie_peter.md",
+    "leijun_dingzhen": "categories/script_structure/leijun_dingzhen.md"
+  }
+}

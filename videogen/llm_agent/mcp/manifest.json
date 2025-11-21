@@ -1,0 +1,6 @@
+{
+  "schema_version": "1.0",
+  "name": "videogen-mcp",
+  "description": "Shared MCP tools for videogen agents",
+  "tools": []
+}

@@ -125,9 +125,6 @@ def start_video_pipeline(project_name: str):
     raw = load_project_raw(project_name)
     if not raw:
         return f"❌ 未找到项目：{project_name}", gr.update()
-    status = get_project_status(raw)
-    if status != ProjectStatus.AUDIO_READY:
-        return "⚠️ 需要先完成所有音频 (Audio Ready)。", gr.update()
 
     def _runner():
         run_video_pipeline(json_path)

@@ -376,8 +376,8 @@ def run_video_pipeline(input_path):
     raw = read_json(path)
     project_status = get_project_status(raw)
 
-    if project_status != ProjectStatus.AUDIO_READY:
-        raise RuntimeError("Project must be AUDIO_READY before running video pipeline.")
+    # if project_status != ProjectStatus.AUDIO_READY:
+    #     raise RuntimeError("Project must be AUDIO_READY before running video pipeline.")
 
     project = _parse_project(path)
     set_project_status(path, ProjectStatus.VIDEO_GENERATING)
