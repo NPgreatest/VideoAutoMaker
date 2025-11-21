@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import gradio as gr
 from dataclasses import asdict
-from typing import Any, Dict, Tuple
+from typing import Any, Dict
 
 from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.pipeline.parse_script import parse_script_lines
@@ -26,21 +26,9 @@ def _save_project_assets(
     background_video_path: str,
     burn_subtitle: bool,
     blocks: list,
-) -> Tuple[str, str]:
+) -> str:
     project_dir = PROJECT_ROOT / project_name
     project_dir.mkdir(parents=True, exist_ok=True)
-
-    raw_payload: Dict[str, Any] = {
-        "project_name": project_name,
-        "size": size,
-        "default_character": default_character,
-        "script_text": script_text,
-        "bgm_path": bgm_path or "",
-        "background_video": background_video_path or "",
-        "burn_subtitle": burn_subtitle,
-    }
-    raw_path = project_dir / "raw.json"
-    write_json(raw_path, raw_payload)
 
     script_dicts = [asdict(block) for block in blocks]
 
@@ -55,7 +43,7 @@ def _save_project_assets(
     }
     project_json_path = project_dir / f"{project_name}.json"
     write_json(project_json_path, project_payload)
-    return str(raw_path), str(project_json_path)
+    return str(project_json_path)
 
 
 def _reset_project_blocks(project_name: str) -> None:
@@ -85,7 +73,7 @@ def create_project(
         return "❌ No valid script lines parsed."
 
     _reset_project_blocks(project_name)
-    raw_path, project_json_path = _save_project_assets(
+    project_json_path = _save_project_assets(
         project_name,
         size,
         default_character,
@@ -98,7 +86,6 @@ def create_project(
 
     message = (
         f"✅ 项目 `{project_name}` 已创建。\n\n"
-        f"- raw.json: `{raw_path}`\n"
         f"- project JSON: `{project_json_path}`"
     )
     return message

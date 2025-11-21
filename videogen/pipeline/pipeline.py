@@ -225,6 +225,30 @@ def _parse_project(input_path: Path) -> ProjectJSON:
     return project
 
 
+def _reset_video_error_blocks(project_name: str) -> int:
+    """
+    Reset all video (non fish_audio) blocks that are in ERROR status back to PENDING.
+    Returns the count of blocks reset.
+    """
+    dao = WorkingBlockDAO()
+    blocks = dao.get_all(project_name)
+    reset_count = 0
+
+    for wb in blocks:
+        if wb.method_name == "fish_audio":
+            continue
+        if wb.status != WorkingBlockStatus.ERROR:
+            continue
+
+        wb.status = WorkingBlockStatus.PENDING
+        wb.output_path = None
+        wb.result_json = ""
+        dao.update(wb)
+        reset_count += 1
+
+    return reset_count
+
+
 def _build_full_dag(project: ProjectJSON) -> Pipeline:
     pipeline = Pipeline(project.project_name)
     prev_audio = None
@@ -358,6 +382,10 @@ def run_video_pipeline(input_path):
     project = _parse_project(path)
     set_project_status(path, ProjectStatus.VIDEO_GENERATING)
     print("[Video Pipeline] Status -> VIDEO_GENERATING")
+
+    reset_count = _reset_video_error_blocks(project.project_name)
+    if reset_count:
+        print(f"[Video Pipeline] 🔁 Reset {reset_count} error blocks to pending")
 
     pipeline = _build_full_dag(project)
     worker = Worker(pipeline)

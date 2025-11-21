@@ -268,9 +268,9 @@ def beautify_text_block(text_block: str) -> str:
 
     # Remove punctuation but keep spaces and English/Chinese characters
     def keep_cjk_english_spaces(s: str) -> str:
-        # keep A-Za-z0-9, \u4e00-\u9fff, %, and spaces
+        # keep A-Za-z0-9, \u4e00-\u9fff, %, +, and spaces
         # Remove punctuation but preserve word separators
-        return re.sub(r"[^A-Za-z0-9\u4e00-\u9fff%\s]", "", s)
+        return re.sub(r"[^A-Za-z0-9\u4e00-\u9fff%\s+]", "", s)
 
     cleaned = [keep_cjk_english_spaces(l) for l in lines]
     # Normalize spaces: compress multiple spaces to single, but keep single spaces

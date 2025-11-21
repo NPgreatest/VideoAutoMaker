@@ -1,12 +1,9 @@
 from __future__ import annotations
 
 import json
-import os
 import subprocess
-import time
 import uuid
 from pathlib import Path
-from typing import Optional
 from datetime import datetime
 from dacite import from_dict
 
@@ -22,7 +19,6 @@ from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 from videogen.schema.action_spec import ActionSpec
 from videogen.schema.generation_result_schema import GenerationResult
 from videogen.schema.schema_registry import get_schema
-from videogen.methods.text_video_silicon.schema import TextToVideoSchema
 from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 
@@ -82,44 +78,13 @@ class TextVideoSilicon(BaseMethod):
         Create a new WorkingBlock for video generation.
         Does NOT execute heavy work - just creates and saves the block.
         """
-        if not SILICONFLOW_API_TOKEN:
-            raise ValueError("Missing SILICONFLOW_API_TOKEN")
-        
-        # Parse config using schema
-        schema_class = get_schema(self.NAME)
-        config = from_dict(schema_class, spec.config)
-        
-        # Generate prompt if not provided
-        if not config.prompt:
-            config.prompt = self.generate_prompt(config.text)
-            spec.config["prompt"] = config.prompt
-        
-        # Get video format from project config
-        project_name = spec.config.get("project_name", "default")
-        workdir = Path(spec.config.get("workdir", "."))
-        project_config_path = workdir / "project" / project_name / f"{project_name}.json"
-        video_format = "landscape"  # default
-        image_size = "1280x720"  # default
-        
-        if project_config_path.exists():
-            try:
-                with open(project_config_path, 'r', encoding='utf-8') as f:
-                    project_config = json.load(f)
-                    video_format = project_config.get("size", "landscape")
-                    image_size = FORMATS.get(video_format, "1280x720")
-            except Exception as e:
-                print(f"[TextVideoSilicon] Warning: Could not read project config: {e}")
-        
-        # Store image_size in config for poll() to use
-        spec.config["image_size"] = image_size
-        
         # Create WorkingBlock
         working_id = str(uuid.uuid4())
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         
         working_block = WorkingBlock(
             id=working_id,
-            project_name=project_name,
+            project_name=spec.config.get("project_name", "default"),
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
             prev_ids=[],  # Will be set by Pipeline
@@ -135,7 +100,8 @@ class TextVideoSilicon(BaseMethod):
     def poll(self, wb: WorkingBlock) -> GenerationResult:
         """
         Execute video generation (async - may run multiple times).
-        Checks status and downloads video when ready.
+        First call: generates prompt if needed, submits video request.
+        Subsequent calls: polls status and downloads video when ready.
         """
         try:
             # Load config from config_json
@@ -159,8 +125,30 @@ class TextVideoSilicon(BaseMethod):
             request_id = config_dict.get("request_id")
             
             if not request_id:
-                # First poll - submit the video generation request
-                image_size = config_dict.get("image_size", "1280x720")
+                # First poll - generate prompt if needed, then submit the video generation request
+                
+                # Generate prompt if not provided
+                if not config.prompt:
+                    config.prompt = self.generate_prompt(config.text)
+                    config_dict["prompt"] = config.prompt
+                
+                # Get video format from project config
+                project_name = wb.project_name or config_dict.get("project_name", "default")
+                workdir = Path(config_dict.get("workdir", "."))
+                project_config_path = workdir / "project" / project_name / f"{project_name}.json"
+                video_format = "landscape"  # default
+                image_size = "1280x720"  # default
+                
+                if project_config_path.exists():
+                    try:
+                        with open(project_config_path, 'r', encoding='utf-8') as f:
+                            project_config = json.load(f)
+                            video_format = project_config.get("size", "landscape")
+                            image_size = FORMATS.get(video_format, "1280x720")
+                    except Exception as e:
+                        print(f"[TextVideoSilicon] Warning: Could not read project config: {e}")
+                
+                # Submit video generation request
                 request_id = submit_video(config.prompt, image_size)
                 
                 if not request_id:
@@ -175,10 +163,12 @@ class TextVideoSilicon(BaseMethod):
                     })
                     return result
                 
-                # Store request_id in config for next poll
+                # Store request_id and updated config for next poll
                 config_dict["request_id"] = request_id
+                config_dict["image_size"] = image_size
                 wb.config_json = json.dumps(config_dict)
                 print(f"[TextVideoSilicon] ✅ Video submitted, requestId: {request_id}")
+                
                 # Return result to indicate still processing
                 result = GenerationResult(status=WorkingBlockStatus.PENDING, output_path=None, duration_sec=None, error=None)
                 wb.result_json = json.dumps({
