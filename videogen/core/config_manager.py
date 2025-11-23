@@ -24,6 +24,8 @@ class ConfigManager:
         "SILICONFLOW_API_TOKEN": "",
         "LLM_DEFAULT_MODEL": "deepseek-ai/DeepSeek-V3",
         "AUDIO_FISH_API_KEY": "",
+        "GOOGLE_API_KEY": "",
+        "GOOGLE_CX_KEY": "",
         "TIKTOK_FORMAT_PICTURE_WIDTH_RATIO": "0.4",
         "TIKTOK_FORMAT_PICTURE_X_RATIO": "0.02",
         "TIKTOK_FORMAT_PICTURE_Y_RATIO": "0.78",

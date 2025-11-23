@@ -1,10 +1,12 @@
 """AutoScriptAgent：串联 Prompt1/Prompt2 生成短视频剧本。"""
 from __future__ import annotations
 
+import re
 from dataclasses import dataclass, asdict
 from typing import Any, Dict
 
 from ....llm_engine.client import LLMEngine, get_engine
+from ...mcp.tools.image_search.tool import ImageSearchTool
 from ...utils.markdown_loader import MarkdownPromptLoader
 
 
@@ -45,6 +47,7 @@ class AutoScriptAgent:
         style: str = None,
         prompt1_key: str | None = None,
         prompt2_key: str | None = None,
+        project_name: str | None = None,
     ) -> AutoScriptAgentResult:
         topic = topic.strip()
         style = style.strip()
@@ -74,6 +77,10 @@ class AutoScriptAgent:
         )
         final_script = self._ask_llm(script_prompt)
         self._log_llm_output("Prompt2 剧本", final_script)
+
+        # 自动处理脚本中的图片标记
+        if project_name:
+            self._process_image_markers(final_script, project_name)
 
         return AutoScriptAgentResult(
             topic=topic,
@@ -123,6 +130,53 @@ class AutoScriptAgent:
         - 当前任务仅定义接口，具体逻辑待后续迭代实现。
         """
         return self.prompt_loader.load_from_registry(category, key)
+
+    def _process_image_markers(self, script: str, project_name: str) -> None:
+        """
+        解析脚本中的图片标记并自动搜索下载图片。
+        
+        图片标记格式: [filename: search query]
+        例如: [TokenDiagram.png: token-to-ID mapping diagram]
+        """
+        # 匹配格式: [filename: search query]
+        pattern = r'\[([^\]:]+):\s*([^\]]+)\]'
+        matches = re.findall(pattern, script)
+        
+        if not matches:
+            print("[AutoScriptAgent] 未发现图片标记，跳过图片搜索。")
+            return
+        
+        print(f"[AutoScriptAgent] 发现 {len(matches)} 个图片标记，开始搜索下载...")
+        image_tool = ImageSearchTool()
+        
+        for filename, search_query in matches:
+            filename = filename.strip()
+            search_query = search_query.strip()
+            
+            if not filename or not search_query:
+                print(f"[AutoScriptAgent] ⚠️ 跳过无效的图片标记: [{filename}: {search_query}]")
+                continue
+            
+            try:
+                print(f"[AutoScriptAgent] 🔍 搜索图片: {search_query} → {filename}")
+                result = image_tool.run({
+                    "query": search_query,
+                    "project_name": project_name,
+                    "target_name": filename,
+                })
+                
+                if "error" in result:
+                    print(f"[AutoScriptAgent] ❌ 图片搜索失败 ({filename}): {result['error']}")
+                else:
+                    print(f"[AutoScriptAgent] ✅ 图片已保存: {result['best']}")
+                    if result.get("alternatives"):
+                        print(f"[AutoScriptAgent]   备选图片: {len(result['alternatives'])} 张")
+                        
+            except Exception as exc:
+                print(f"[AutoScriptAgent] ❌ 处理图片标记失败 ({filename}): {exc}")
+                continue
+        
+        print(f"[AutoScriptAgent] 图片处理完成。")
 
 
 __all__ = ["AutoScriptAgent", "AutoScriptAgentResult"]

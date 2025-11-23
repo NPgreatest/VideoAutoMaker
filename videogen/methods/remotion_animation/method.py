@@ -262,6 +262,7 @@ class RemotionMethod(BaseMethod):
                     for ext in image_extensions:
                         full_path = base_name + ext if ext else base_name
                         candidate_paths.extend([
+                            project_dir / "images" / full_path,
                             project_dir / full_path,
                             project_dir / "pic" / full_path,
                             project_root / "assets" / "pic" / full_path,

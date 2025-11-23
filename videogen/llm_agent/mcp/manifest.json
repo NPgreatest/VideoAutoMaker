@@ -2,5 +2,19 @@
   "schema_version": "1.0",
   "name": "videogen-mcp",
   "description": "Shared MCP tools for videogen agents",
-  "tools": []
+  "tools": [
+    {
+      "name": "image_search",
+      "description": "Search images using Google Custom Search and pick top-ranked results",
+      "input_schema": {
+        "type": "object",
+        "properties": {
+          "query": { "type": "string" },
+          "project_name": { "type": "string" },
+          "target_name": { "type": "string" }
+        },
+        "required": ["query", "project_name", "target_name"]
+      }
+    }
+  ]
 }
