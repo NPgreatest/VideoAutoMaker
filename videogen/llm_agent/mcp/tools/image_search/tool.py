@@ -31,39 +31,28 @@ class ImageSearchTool:
         if not urls:
             return {"error": "No Google results"}
 
-        # 2. Download top results
-        downloaded_paths = download_images(urls, images_root)
+        target_path = Path(target_name)
+        suffix = target_path.suffix or ".jpg"
+        stem = target_path.stem if target_path.suffix else target_path.name
+        main_filename = f"{stem}{suffix}"
+        alt_filenames = [f"{stem}_{i}{suffix}" for i in range(1, 4)]  # top 3 alternatives
+        max_needed = 1 + len(alt_filenames)
+
+        # 2. Download top results directly to desired filenames
+        downloaded_paths = download_images(
+            urls,
+            images_root,
+            filenames=[main_filename] + alt_filenames,
+            limit=max_needed,
+        )
         if not downloaded_paths:
             return {"error": "No images downloaded"}
 
         # Ensure all are Paths
         downloaded_paths = [Path(p) for p in downloaded_paths]
 
-        # 3. Rename main image → target_name
-        main_src = downloaded_paths[0]
-        main_dest = images_root / target_name
-
-        # If main_dest already exists, delete it first
-        if main_dest.exists():
-            main_dest.unlink()
-
-        main_src.rename(main_dest)
-
-        # 4. Rename alternatives to P1_1.png, P1_2.png...
-        stem = Path(target_name).stem      # P1
-        suffix = Path(target_name).suffix  # .png, .jpg...
-
-        alts = downloaded_paths[1:4]  # top 3 as alternatives
-        final_alts = []
-
-        for i, src in enumerate(alts, start=1):
-            dest = images_root / f"{stem}_{i}{suffix}"
-
-            if dest.exists():
-                dest.unlink()
-
-            src.rename(dest)
-            final_alts.append(dest)
+        main_dest = downloaded_paths[0]
+        final_alts = downloaded_paths[1:]
 
         return {
             "best": str(main_dest),

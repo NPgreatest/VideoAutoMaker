@@ -48,5 +48,9 @@
       "name": "Peter Griffin",
     "model_id": "981795f0720646e7b99cefa86602e9b8",
     "image_path": "./assets/pic/peter.png"
+  }, "manbo": {
+    "model_id": "384d5ee95db84926887185dc479ada7a",
+    "name": "赛马娘（曼波）",
+    "image_path": "./assets/pic/manbo.png"
   }
 }

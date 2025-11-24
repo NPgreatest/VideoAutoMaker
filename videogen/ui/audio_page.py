@@ -52,12 +52,12 @@ def _format_duration(value: Any) -> str:
 def _collect_audio_dashboard(project_name: str):
     if not project_name:
         empty_df = pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-        return empty_df, "请选择项目以查看音频状态。", [], [], [], False
+        return empty_df, "请选择项目以查看音频状态。", [], [], False
 
     raw = load_project_raw(project_name)
     if not raw:
         empty_df = pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-        return empty_df, f"❌ 未找到项目：{project_name}", [], [], [], False
+        return empty_df, f"❌ 未找到项目：{project_name}", [], [], False
 
     dao = WorkingBlockDAO()
     audio_blocks = {

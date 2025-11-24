@@ -9,6 +9,7 @@ from typing import Any, Dict, List, Tuple
 
 from videogen.dao.working_block_dao import WorkingBlockDAO
 from videogen.llm_agent.agents.auto_script import AutoScriptAgent
+from videogen.llm_agent.mcp.tools.image_search.tool import ImageSearchTool
 from videogen.llm_agent.utils.markdown_loader import MarkdownPromptLoader
 from videogen.pipeline.parse_script import parse_script_lines
 from videogen.pipeline.utils import write_json
@@ -23,6 +24,7 @@ from videogen.ui.shared import (
 
 PROMPT_LOADER = MarkdownPromptLoader()
 AUTO_SCRIPT_AGENT = AutoScriptAgent()
+IMAGE_SEARCH_TOOL = ImageSearchTool()
 IMAGE_MARKER_PATTERN = re.compile(
     r"\[([A-Za-z0-9_\-\.]+):\s*([^\]]+)\]"
 )
@@ -39,13 +41,21 @@ def _get_prompt_choices(category: str, default_key: str) -> List[Tuple[str, str]
     ]
 
 
-def _parse_image_targets(script_text: str) -> List[str]:
+def _parse_image_markers(script_text: str) -> List[Tuple[str, str]]:
+    markers: List[Tuple[str, str]] = []
     if not script_text:
-        return []
-    return [
-        m.group(1).strip()
-        for m in IMAGE_MARKER_PATTERN.finditer(script_text)
-    ]
+        return markers
+    for match in IMAGE_MARKER_PATTERN.finditer(script_text):
+        target = match.group(1).strip()
+        query = match.group(2).strip()
+        if not target or not query:
+            continue
+        markers.append((target, query))
+    return markers
+
+
+def _parse_image_targets(script_text: str) -> List[str]:
+    return [target for target, _ in _parse_image_markers(script_text)]
 
 
 
@@ -245,6 +255,47 @@ def apply_image_choice(
 
 
 
+def rerun_image_search(project_name: str, script_text: str):
+    """
+    Re-download images by scanning script markers and running the image search tool.
+    """
+    project_name = (project_name or "").strip()
+    script_text = script_text or ""
+
+    if not project_name:
+        dropdown, main_image, gallery, picker, data, _ = refresh_image_review(project_name, script_text)
+        return dropdown, main_image, gallery, picker, data, "ℹ️ 请先填写项目名称后再重新获取图片。"
+
+    markers = _parse_image_markers(script_text)
+    if not markers:
+        dropdown, main_image, gallery, picker, data, _ = refresh_image_review(project_name, script_text)
+        return dropdown, main_image, gallery, picker, data, "ℹ️ 剧本中未检测到图片标记，未触发图片搜索。"
+
+    successes = 0
+    failures: List[str] = []
+    for target, query in markers:
+        try:
+            result = IMAGE_SEARCH_TOOL.run(
+                {"query": query, "project_name": project_name, "target_name": target}
+            )
+            if "error" in result:
+                failures.append(f"{target}: {result['error']}")
+            else:
+                successes += 1
+        except Exception as exc:  # pragma: no cover - UI 调用链路
+            failures.append(f"{target}: {exc}")
+
+    dropdown, main_image, gallery, picker, data, base_status = refresh_image_review(project_name, script_text)
+
+    parts = [f"🖼️ 已重新获取 {successes}/{len(markers)} 组图片。"]
+    if failures:
+        tail = " ..." if len(failures) > 3 else ""
+        parts.append("⚠️ 失败: " + "; ".join(failures[:3]) + tail)
+    parts.append(base_status)
+    status = "\n\n".join(parts)
+    return dropdown, main_image, gallery, picker, data, status
+
+
 def generate_script_from_agent(
     topic: str,
     size: str,
@@ -422,6 +473,7 @@ def build_create_project_page() -> None:
                     interactive=True,
                 )
                 refresh_images_btn = gr.Button("刷新图片列表", variant="secondary")
+                regrab_images_btn = gr.Button("重新获取图片", variant="secondary")
             main_image_preview = gr.Image(
                 label="当前主图",
                 type="filepath",
@@ -484,6 +536,19 @@ def build_create_project_page() -> None:
 
     refresh_images_btn.click(
         fn=refresh_image_review,
+        inputs=[project_name, script_text],
+        outputs=[
+            image_target_dropdown,
+            main_image_preview,
+            image_gallery,
+            image_choice_radio,
+            image_state,
+            image_status,
+        ],
+    )
+
+    regrab_images_btn.click(
+        fn=rerun_image_search,
         inputs=[project_name, script_text],
         outputs=[
             image_target_dropdown,
