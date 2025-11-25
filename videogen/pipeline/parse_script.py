@@ -12,6 +12,22 @@ from videogen.schema.action_spec import ActionSpec
 from videogen.schema.project_schema import ScriptBlock
 
 
+def _extract_character_key(raw: str) -> str:
+    """
+    Normalize character string to the key used in configuration.
+    Examples:
+      "户晨风 (huchenfeng)" -> "huchenfeng"
+      "户晨风(huchenfeng)" -> "huchenfeng"
+      "huchenfeng" -> "huchenfeng"
+    """
+    if not raw:
+        return raw
+    match = re.search(r"\(([^)]+)\)", raw)
+    if match:
+        return match.group(1).strip()
+    return raw.strip()
+
+
 def parse_script_lines(
     script_text: str,
     default_character: str,
@@ -28,6 +44,8 @@ def parse_script_lines(
 
     # 👇 新增：用于判断角色变化
     prev_character = None
+    character_sides: Dict[str, str] = {}
+    default_character_key = _extract_character_key(default_character)
 
     for raw_line in lines:
         line = raw_line.strip()
@@ -44,26 +62,26 @@ def parse_script_lines(
 
             last_sb = script_blocks[-1]
             last_sb.actions.append(ActionSpec(
-                    type="remotion_picture",
-                    config={
-                        "template": "FilterTikTokSlide" if size=="tiktok" else "FilterDesktopSlide",
-                        "image_filename": picture_filename,
-                        "title": picture_title,
-                        "target_name": last_sb.id,
-                        "workdir": ".",
-                    }
-                ))
+                type="remotion_picture",
+                config={
+                    "template": "Slide-Portrait" if size == "tiktok" else "Slide-Landscape",
+                    "image_filename": picture_filename,
+                    "title": picture_title,
+                    "target_name": last_sb.id,
+                    "workdir": ".",
+                }
+            ))
             continue
 
         # ------------------------------------------------
         # 2. Normal text line
         # ------------------------------------------------
         text = line
-        character = default_character
+        character = default_character_key
 
         match_new = re.match(r'^"([^"]+)":\s*(.+)$', line)
         if match_new:
-            character = match_new.group(1).strip()
+            character = _extract_character_key(match_new.group(1).strip())
             text = match_new.group(2).strip()
             if text.startswith('"') and text.endswith('"'):
                 text = text[1:-1]
@@ -71,7 +89,7 @@ def parse_script_lines(
             if ":" in line and not line.startswith("http"):
                 prefix, rest = line.split(":", 1)
                 if prefix.strip():
-                    character = prefix.strip()
+                    character = _extract_character_key(prefix.strip())
                     text = rest.strip()
 
         # Build ScriptBlock
@@ -120,7 +138,7 @@ def parse_script_lines(
         # Step 3: remotion_picture
         # 加规则：如果上一句角色 != 当前角色 → appear: true
         # ------------------------------------
-        slide_template = "OverlapCharacterTiktok" if size == "tiktok" else "OverlapCharacter"
+        slide_template = "CharacterOverlay-Portrait" if size == "tiktok" else "CharacterOverlay-Landscape"
 
         # 🔥 动态生成 config
         picture_config = {
@@ -129,6 +147,15 @@ def parse_script_lines(
             "target_name": sb.id,
             "workdir": ".",
         }
+
+        if character not in character_sides:
+            if len(character_sides) == 0:
+                character_sides[character] = "left"
+            elif len(character_sides) == 1:
+                character_sides[character] = "right"
+            else:
+                character_sides[character] = "left"
+        picture_config["appear_from"] = character_sides[character]
 
         # 👇 角色变化 → 加 appear: true
         if prev_character is not None and prev_character != character:

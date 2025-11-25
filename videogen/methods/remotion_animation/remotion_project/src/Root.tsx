@@ -1,85 +1,36 @@
 import React from 'react';
 import {Composition} from 'remotion';
-import {FilterDesktopSlide} from './FilterDesktopSlide';
-import {FilterTikTokSlide} from './FilterTikTokSlide';
-import {OverlapCharacter} from './OverlapCharacter';
-import {OverlapCharacterTiktok} from './OverlapCharacterTiktok';
-import './load-fonts'; // Load fonts
+import './load-fonts';
+import {templates} from './templates';
 
-export const Root: React.FC = () => {
-  return (
-    <>
-      {/* CSS Filter Desktop Format (16:9) - Modern Approach */}
-      <Composition
-        id="FilterDesktopSlide"
-        component={FilterDesktopSlide}
-        durationInFrames={1000}
-        width={1920}
-        height={1080}
-        fps={30}
-        defaultProps={{
-          title: 'AI Technology',
-          description: 'Advanced artificial intelligence technology that transforms how we work and create.',
-          duration: 5,
-          imagePath: 'openai.png',
-          titleStartTime: 1500,
-          soundEffect: 'dong_effect.wav'
-        }}
-      />
-      
-      {/* CSS Filter TikTok Format (9:16) - Modern Approach */}
-      <Composition
-        id="FilterTikTokSlide"
-        component={FilterTikTokSlide}
-        durationInFrames={1000}
-        width={1080}
-        height={1920}
-        fps={30}
-        defaultProps={{
-          title: 'AI Technology',
-          description: 'Advanced artificial intelligence technology that transforms how we work and create.',
-          duration: 5,
-          imagePath: 'openai.png',
-          titleStartTime: 1500,
-          soundEffect: 'dong_effect.wav'
-        }}
-      />
-      
-      {/* Overlap Character - Character overlay with slide animation */}
-      <Composition
-        id="OverlapCharacter"
-        component={OverlapCharacter}
-        durationInFrames={1000}
-        width={1920}
-        height={1080}
-        fps={30}
-        defaultProps={{
-          imagePath: 'openai.png',
-          resizeRatio: 0.15,
-          position: { x: 0.02, y: 0.78 },
-          appear: true,
-          duration: 5,
-          videoPath: undefined
-        }}
-      />
-
-      {/* Overlap Character TikTok - 9:16 character overlay */}
-      <Composition
-        id="OverlapCharacterTiktok"
-        component={OverlapCharacterTiktok}
-        durationInFrames={1000}
-        width={1080}
-        height={1920}
-        fps={30}
-        defaultProps={{
-          imagePath: 'openai.png',
-          resizeRatio: 0.25,
-          position: {x: 0.05, y: 0.65},
-          appear: true,
-          duration: 5,
-          videoPath: undefined
-        }}
-      />
-    </>
-  );
+const basePreviewProps = {
+  title: 'Title',
+  description: 'Description',
+  duration: 5,
+  imagePath: 'openai.png',
+  videoPath: undefined,
+  titleStartTime: 1500,
+  soundEffect: '',
+  imageIsVideo: false,
+  resizeRatio: 0.2,
+  position: {x: 0.05, y: 0.7},
+  appear: true,
+  appearFrom: 'left',
 };
+
+export const Root: React.FC = () => (
+  <>
+    {templates.map((template) => (
+      <Composition
+        key={template.name}
+        id={template.name}
+        component={template.Component}
+        durationInFrames={template.fps * 600}
+        width={template.width}
+        height={template.height}
+        fps={template.fps}
+        defaultProps={(template.previewProps || basePreviewProps) as any}
+      />
+    ))}
+  </>
+);

@@ -1,61 +1,55 @@
-import React, { useCallback, useState } from 'react';
+import React, {useCallback, useState} from 'react';
 import {
-  useCurrentFrame,
-  interpolate,
   AbsoluteFill,
-  spring,
-  useVideoConfig,
   Img,
-  staticFile,
   OffthreadVideo,
+  interpolate,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
 } from 'remotion';
 
-export const OverlapCharacter: React.FC<{
+export type CharacterOverlayLandscapeProps = {
   imagePath: string;
+  imageIsVideo?: boolean;
   resizeRatio: number;
-  position: { x: number; y: number };
+  position: {x: number; y: number};
   appear: boolean;
+  appearFrom?: 'left' | 'right';
   duration: number;
   videoPath?: string;
-}> = ({
+};
+
+export const CharacterOverlayLandscape: React.FC<CharacterOverlayLandscapeProps> = ({
   imagePath,
+  imageIsVideo = false,
   resizeRatio,
   position,
   appear,
+  appearFrom = 'left',
   duration,
   videoPath,
 }) => {
   const frame = useCurrentFrame();
-  const { fps, width, height } = useVideoConfig();
-
-  const totalFrames = duration * fps;
+  const {fps, width, height} = useVideoConfig();
 
   const [videoErrored, setVideoErrored] = useState(false);
 
   const handleVideoError = useCallback((error: Error) => {
-    console.warn('[OverlapCharacter] Background video failed to play:', error);
+    console.warn('[CharacterOverlayLandscape] Background video failed to play:', error);
     setVideoErrored(true);
   }, []);
 
   const shouldShowVideo = Boolean(videoPath) && !videoErrored;
 
-  // Calculate image dimensions based on resize ratio
   const imageWidth = width * resizeRatio;
-  // We'll maintain aspect ratio, so we need to get the image's natural aspect ratio
-  // For now, we'll use a default aspect ratio or calculate it from the image
-  // Since we can't easily get image dimensions in Remotion, we'll use a square default
-  // The actual aspect ratio will be maintained by objectFit: 'contain'
-  const imageHeight = imageWidth; // Will be adjusted by objectFit
+  const imageHeight = imageWidth;
 
-  // Calculate position in pixels
   const imageX = width * position.x;
   const imageY = height * position.y;
 
-  // Slide animation from left if appear is true
-  const slideAnimationFrames = 30; // 1 second at 30fps
-  
-  // Calculate slide animation: start from left (negative position) and slide to target position
-  const slideStartOffset = appear ? -imageWidth : 0;
+  const slideAnimationFrames = 30;
+  const slideStartOffset = appear ? (appearFrom === 'right' ? imageWidth : -imageWidth) : 0;
   const slideEndOffset = 0;
 
   const slideOffset = appear
@@ -66,11 +60,10 @@ export const OverlapCharacter: React.FC<{
         {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
-        }
+        },
       )
     : 0;
 
-  // Optional: Add opacity animation when appearing
   const imageOpacity = appear
     ? interpolate(
         frame,
@@ -79,7 +72,7 @@ export const OverlapCharacter: React.FC<{
         {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
-        }
+        },
       )
     : 1;
 
@@ -91,7 +84,6 @@ export const OverlapCharacter: React.FC<{
         justifyContent: 'flex-start',
       }}
     >
-      {/* Background Video */}
       {shouldShowVideo ? (
         <AbsoluteFill>
           <OffthreadVideo
@@ -125,7 +117,6 @@ export const OverlapCharacter: React.FC<{
         </>
       )}
 
-      {/* Character Image */}
       <div
         style={{
           position: 'absolute',
@@ -138,17 +129,32 @@ export const OverlapCharacter: React.FC<{
           zIndex: 10,
         }}
       >
-        <Img
-          src={staticFile(`assets/${imagePath}`)}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            display: 'block',
-          }}
-        />
+        {imageIsVideo ? (
+          <OffthreadVideo
+            src={staticFile(`assets/${imagePath}`)}
+            muted
+            transparent
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              backgroundColor: 'transparent',
+            }}
+          />
+        ) : (
+          <Img
+            src={staticFile(`assets/${imagePath}`)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        )}
       </div>
     </AbsoluteFill>
   );
 };
 
+export default CharacterOverlayLandscape;

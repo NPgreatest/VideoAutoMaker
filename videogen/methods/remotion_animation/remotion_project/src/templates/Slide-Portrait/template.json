@@ -1,0 +1,8 @@
+{
+  "name": "Slide-Portrait",
+  "entry": "./Component.tsx",
+  "width": 1080,
+  "height": 1920,
+  "fps": 30,
+  "props_builder": "./props_builder.ts"
+}

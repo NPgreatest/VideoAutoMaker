@@ -2,10 +2,8 @@
 from __future__ import annotations
 
 import json
-import math
 from pathlib import Path
 from typing import Any, Dict, List, Tuple
-
 import gradio as gr
 import pandas as pd
 
@@ -23,41 +21,31 @@ from videogen.ui.shared import (
     project_json_path,
 )
 
-AUDIO_PLAYERS_COUNT = 0
-
-
-def _parse_result_json(wb) -> Dict[str, Any]:
-    try:
-        if wb.result_json:
-            data = json.loads(wb.result_json)
-            if isinstance(data, dict):
-                return data
-    except Exception:
-        pass
-    return {}
-
-
-def _format_duration(value: Any) -> str:
-    if value is None or value == "":
+# ----------------------------------------
+# Fix Windows/mac paths → POSIX
+# ----------------------------------------
+def sanitize_path(p: str) -> str:
+    if not p:
         return ""
     try:
-        duration = float(value)
-        if duration <= 0:
-            return ""
-        return f"{duration:.2f}"
-    except (TypeError, ValueError):
-        return ""
+        p = p.strip().strip('"').strip("'")
+        p = Path(p).expanduser().resolve()
+        return p.as_posix()
+    except:
+        return p.replace("\\", "/")
 
 
-def _collect_audio_dashboard(project_name: str):
+# ----------------------------------------
+# Collect audio info
+# ----------------------------------------
+def _collect_audio_data(project_name: str):
+    """Return df, banner, audio list, dropdown list"""
     if not project_name:
-        empty_df = pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-        return empty_df, "请选择项目以查看音频状态。", [], [], False
+        return pd.DataFrame(columns=AUDIO_TABLE_COLUMNS), "请选择项目", [], [], False
 
     raw = load_project_raw(project_name)
     if not raw:
-        empty_df = pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-        return empty_df, f"❌ 未找到项目：{project_name}", [], [], False
+        return pd.DataFrame(columns=AUDIO_TABLE_COLUMNS), f"❌ 未找到项目 {project_name}", [], [], False
 
     dao = WorkingBlockDAO()
     audio_blocks = {
@@ -66,231 +54,257 @@ def _collect_audio_dashboard(project_name: str):
         if wb.method_name == "fish_audio"
     }
 
-    rows: List[Dict[str, Any]] = []
-    dropdown_choices: List[Tuple[str, str]] = []
-    player_payloads: List[Dict[str, str]] = []
+    rows = []
+    dropdown = []
+    audio_items = []
     all_ready = True
 
-    for block in raw.get("script", []):
-        block_id = block.get("id") or ""
-        block_text = block.get("text") or ""
+    for block in raw["script"]:
+        block_id = block["id"]
+        text = block["text"]
+
         audio_action = next(
-            (action for action in block.get("actions", []) if action.get("type") == "fish_audio"),
-            {},
+            (a for a in block["actions"] if a.get("type") == "fish_audio"),
+            {}
         )
-        character = audio_action.get("config", {}).get("character") if isinstance(audio_action, dict) else ""
-        dropdown_choices.append((f"{block_id} · {character or '未设置'}", block_id))
+        character = audio_action.get("config", {}).get("character", "")
+
+        dropdown.append((f"{block_id} · {character}", block_id))
 
         wb = audio_blocks.get(block_id)
-        status_label = "⏳ 待生成"
-        duration_label = ""
+        status = "⏳ 待生成"
+        duration = ""
         output_path = ""
 
         if wb:
-            result = _parse_result_json(wb)
-            output_path = result.get("output_path") or wb.output_path or ""
-            duration_label = _format_duration(result.get("duration_sec"))
+            try:
+                r = json.loads(wb.result_json or "{}")
+            except:
+                r = {}
+
+            output_path = r.get("output_path") or wb.output_path or ""
+            if r.get("duration_sec"):
+                duration = f"{float(r['duration_sec']):.2f}"
 
             if wb.status == WorkingBlockStatus.SUCCESS:
-                status_label = "✅ 成功"
+                status = "✅ 成功"
             elif wb.status == WorkingBlockStatus.ERROR:
-                status_label = "❌ 失败"
+                status = "❌ 失败"
                 all_ready = False
             elif wb.status == WorkingBlockStatus.PENDING:
-                status_label = "⏳ 待生成"
+                status = "⏳ 待生成"
                 all_ready = False
             else:
-                status_label = "⚙️ 运行中"
+                status = "⚙️ 运行中"
                 all_ready = False
         else:
             all_ready = False
 
-        rows.append(
-            {
-                "Block ID": block_id,
-                "Character": character or "—",
-                "Text": format_text_preview(block_text),
-                "Duration(s)": duration_label or "—",
-                "状态": status_label,
-                "输出文件": output_path or "—",
-            }
-        )
+        rows.append({
+            "Block ID": block_id,
+            "Character": character,
+            "Text": format_text_preview(text),
+            "Duration(s)": duration or "—",
+            "状态": status,
+            "输出文件": output_path or "—",
+        })
 
         if output_path and Path(output_path).exists():
-            player_payloads.append(
-                {
-                    "path": output_path,
-                    "block_id": block_id,
-                    "character": character or "未设置",
-                    "duration": duration_label or "未知",
-                }
-            )
+            audio_items.append({
+                "path": sanitize_path(output_path),
+                "label": f"{block_id} · {character} ({duration}s)" if duration else block_id,
+            })
 
-    df = pd.DataFrame(rows) if rows else pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-    banner = "🎉 Audio Ready! 可以进入视频阶段了。" if all_ready and rows else "🔈 请生成或检查所有音频。"
-    return df, banner, player_payloads, dropdown_choices, all_ready
+    df = pd.DataFrame(rows)
+    banner = "🎉 Audio Ready!" if all_ready else "🔈 检查音频"
+
+    return df, banner, audio_items, dropdown, all_ready
 
 
-def _refresh_dropdown():
-    return gr.update(choices=list_projects())
+# ----------------------------------------
+# Pagination helper
+# ----------------------------------------
+ITEMS_PER_PAGE = 2
 
 
-def _update_audio_panel(project_name: str):
-    df, banner, player_payloads, dropdown_choices, _ = _collect_audio_dashboard(project_name)
-    player_updates: List[gr.Update] = []
-    for idx in range(AUDIO_PLAYERS_COUNT):
-        if idx < len(player_payloads):
-            payload = player_payloads[idx]
-            label = f"{payload['block_id']} · {payload['character']} ({payload['duration']}s)"
-            player_updates.append(
-                gr.update(value=payload["path"], label=label, visible=True)
-            )
+def _paginate_audio(audio_items: List[Dict], page: int):
+    total = len(audio_items)
+    max_page = max(1, (total + ITEMS_PER_PAGE - 1) // ITEMS_PER_PAGE)
+
+    page = max(1, min(page, max_page))
+
+    start = (page - 1) * ITEMS_PER_PAGE
+    end = start + ITEMS_PER_PAGE
+    page_items = audio_items[start:end]
+
+    return page_items, page, max_page
+
+
+# ----------------------------------------
+# Update UI
+# ----------------------------------------
+def _update_audio_panel(project_name: str, page: int, audio_slots: int):
+    df, banner, audio_items, dropdown, _ = _collect_audio_data(project_name)
+
+    page_items, page, max_page = _paginate_audio(audio_items, page)
+
+    updates = []
+
+    # Fill EXACT audio slots count
+    for i in range(audio_slots):
+        if i < len(page_items):
+            it = page_items[i]
+            updates.append(gr.update(value=it["path"], visible=True, label=it["label"]))
         else:
-            player_updates.append(gr.update(value=None, visible=False))
-    dropdown_update = gr.update(choices=dropdown_choices, value=None)
-    button_state = gr.update(interactive=not is_pipeline_running(project_name))
-    return (df, banner, *player_updates, dropdown_update, button_state)
+            updates.append(gr.update(value=None, visible=False))
+
+    return (
+        df,
+        banner,
+        page,
+        max_page,
+        *updates,
+        gr.update(choices=dropdown, value=None),
+        gr.update(interactive=not is_pipeline_running(project_name)),
+    )
 
 
+# ----------------------------------------
+# Pipeline actions
+# ----------------------------------------
 def start_audio_pipeline(project_name: str):
-    project_name = (project_name or "").strip()
     if not project_name:
-        return "❌ 请先选择项目。", gr.update()
+        return "❌ 请选择项目", gr.update()
 
     json_path = project_json_path(project_name)
     if not json_path.exists():
-        return f"❌ 未找到项目：{project_name}", gr.update()
+        return f"❌ 项目不存在 {project_name}", gr.update()
 
-    def _runner():
-        run_audio_pipeline(json_path)
+    ok = launch_pipeline_thread(project_name, lambda: run_audio_pipeline(json_path))
+    if not ok:
+        return "⚙️ pipeline 正在运行", gr.update(interactive=False)
 
-    started = launch_pipeline_thread(project_name, _runner)
-    if not started:
-        return "⚙️ 当前已有任务在运行，请稍候。", gr.update(interactive=False)
-
-    return f"🚀 已启动 `{project_name}` 的音频阶段。", gr.update(interactive=False)
+    return f"🚀 开始运行 {project_name} 音频 pipeline", gr.update(interactive=False)
 
 
 def retry_audio_block(project_name: str, block_id: str):
-    if not project_name:
-        return "❌ 请先选择项目。", gr.update()
     if not block_id:
-        return "❌ 请先选择需要重试的脚本块。", gr.update()
+        return "❌ 请选择脚本块", gr.update()
 
     dao = WorkingBlockDAO()
-    target_blocks = [
-        wb
-        for wb in dao.get_all(project_name)
+    blocks = [
+        wb for wb in dao.get_all(project_name)
         if wb.method_name == "fish_audio" and (wb.block_id or wb.id) == block_id
     ]
-    if not target_blocks:
-        return f"⚠️ 找不到脚本块 {block_id} 的音频任务。", gr.update(value=None)
 
-    for wb in target_blocks:
+    if not blocks:
+        return f"⚠️ {block_id} 找不到音频块", gr.update(value=None)
+
+    for wb in blocks:
         wb.status = WorkingBlockStatus.PENDING
         wb.output_path = None
         wb.result_json = ""
         dao.update(wb)
 
-    return f"🔁 已重置 {block_id}，再次点击“Generate Audio”即可重试。", gr.update(value=None)
+    return f"🔁 已重置 {block_id}", gr.update(value=None)
 
 
-def _calc_max_audio_players() -> int:
-    max_blocks = 0
-    for project_name in list_projects():
-        raw = load_project_raw(project_name)
-        if raw and isinstance(raw.get("script"), list):
-            max_blocks = max(max_blocks, len(raw["script"]))
-    # Provide some headroom for new projects; ensure multiples of 4 for layout
-    max_blocks = max(8, max_blocks + 8)
-    rows = math.ceil(max_blocks / 4)
-    return rows * 4
-
-
+# ----------------------------------------
+# Build UI Page
+# ----------------------------------------
 def build_audio_page() -> None:
-    global AUDIO_PLAYERS_COUNT
     project_choices = list_projects()
-    empty_df = pd.DataFrame(columns=AUDIO_TABLE_COLUMNS)
-    AUDIO_PLAYERS_COUNT = _calc_max_audio_players()
+
+    # Estimate max blocks for allocating fixed audio components
+    max_blocks = 0
+    for p in project_choices:
+        raw = load_project_raw(p)
+        if raw:
+            max_blocks = max(max_blocks, len(raw.get("script", [])))
+
+    audio_slots = ITEMS_PER_PAGE  # 10 per page
 
     with gr.Column():
-        gr.Markdown("### 🎙️ Audio Pipeline\n运行 fish_audio 任务并查看每个脚本块的生成状态。")
-        with gr.Row():
-            audio_project = gr.Dropdown(
-                label="选择项目",
-                choices=project_choices,
-                value=project_choices[0] if project_choices else None,
-            )
-            audio_refresh = gr.Button("刷新项目列表")
-
-        audio_banner = gr.Markdown("请选择项目以开始音频阶段。")
-        audio_table = gr.DataFrame(
-            value=empty_df,
-            interactive=False,
-            wrap=True,
-        )
-        gr.Markdown("#### 音频预览")
-        audio_players: List[gr.Audio] = []
-        rows = AUDIO_PLAYERS_COUNT // 4
-        for row_idx in range(rows):
-            with gr.Row():
-                for col_idx in range(4):
-                    idx = row_idx * 4 + col_idx
-                    audio_players.append(
-                        gr.Audio(
-                            label=f"Audio Preview {idx + 1}",
-                            interactive=False,
-                            type="filepath",
-                            visible=False,
-                        )
-                    )
+        gr.Markdown("### 🎙️ Audio Pipeline")
 
         with gr.Row():
-            generate_audio_btn = gr.Button("Generate Audio", variant="primary")
-            retry_block_dropdown = gr.Dropdown(
-                label="选择需要重试的脚本块",
-                choices=[],
-                allow_custom_value=False,
-            )
-            retry_button = gr.Button("Retry Audio")
+            audio_project = gr.Dropdown(choices=project_choices, label="选择项目")
+            audio_refresh = gr.Button("刷新")
 
-        audio_action_msg = gr.Markdown("")
+        audio_banner = gr.Markdown("")
+        audio_table = gr.DataFrame(interactive=False, wrap=True)
 
-    audio_refresh.click(fn=_refresh_dropdown, outputs=audio_project)
+        # ------------- Pagination UI -------------
+        with gr.Row():
+            page_state = gr.Number(value=1, interactive=False, label="页码")
+            max_page_state = gr.Number(value=1, interactive=False, label="总页数")
+        with gr.Row():
+            prev_btn = gr.Button("⬅ 上一页")
+            next_btn = gr.Button("➡ 下一页")
 
-    audio_outputs = [audio_table, audio_banner, *audio_players, retry_block_dropdown, generate_audio_btn]
+        # ------------- Audio players (10 slots) -------------
+        audio_players = [
+            gr.Audio(label=f"Audio {i+1}", type="filepath", visible=False)
+            for i in range(audio_slots)
+        ]
+
+
+        with gr.Row():
+            gen_btn = gr.Button("Generate Audio", variant="primary")
+            retry_dropdown = gr.Dropdown(label="选择重试块")
+            retry_btn = gr.Button("Retry")
+
+        action_msg = gr.Markdown("")
+
+    audio_refresh.click(lambda: gr.update(choices=list_projects()), outputs=audio_project)
+
+    outputs = [
+        audio_table, audio_banner, page_state, max_page_state,
+        *audio_players, retry_dropdown, gen_btn
+    ]
 
     audio_project.change(
-        fn=_update_audio_panel,
+        fn=lambda p: _update_audio_panel(p, 1, audio_slots),
         inputs=audio_project,
-        outputs=audio_outputs,
+        outputs=outputs,
     )
 
-    generate_audio_btn.click(
+    prev_btn.click(
+        fn=lambda p, cur: _update_audio_panel(p, cur - 1, audio_slots),
+        inputs=[audio_project, page_state],
+        outputs=outputs,
+    )
+
+    next_btn.click(
+        fn=lambda p, cur: _update_audio_panel(p, cur + 1, audio_slots),
+        inputs=[audio_project, page_state],
+        outputs=outputs,
+    )
+
+    gen_btn.click(
         fn=start_audio_pipeline,
         inputs=audio_project,
-        outputs=[audio_action_msg, generate_audio_btn],
+        outputs=[action_msg, gen_btn],
     ).then(
-        fn=_update_audio_panel,
+        fn=lambda p: _update_audio_panel(p, 1, audio_slots),
         inputs=audio_project,
-        outputs=audio_outputs,
+        outputs=outputs,
     )
 
-    retry_button.click(
+    retry_btn.click(
         fn=retry_audio_block,
-        inputs=[audio_project, retry_block_dropdown],
-        outputs=[audio_action_msg, retry_block_dropdown],
+        inputs=[audio_project, retry_dropdown],
+        outputs=[action_msg, retry_dropdown],
     ).then(
-        fn=_update_audio_panel,
+        fn=lambda p: _update_audio_panel(p, 1, audio_slots),
         inputs=audio_project,
-        outputs=audio_outputs,
+        outputs=outputs,
     )
 
+    # Timer 仅刷新表格 + banner + 页码（安全）
     audio_timer = gr.Timer(value=AUDIO_POLL_SECONDS)
     audio_timer.tick(
-        fn=_update_audio_panel,
+        fn=lambda p: _update_audio_panel(p, page_state.value, audio_slots)[:4],
         inputs=audio_project,
-        outputs=audio_outputs,
+        outputs=[audio_table, audio_banner, page_state, max_page_state],
     )
-
-

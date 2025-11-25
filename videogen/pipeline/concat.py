@@ -28,7 +28,9 @@ FONT_PATH = os.getenv("FONT_PATH")
 # ========== 辅助函数 ==========
 def run(cmd: List[str]) -> bool:
     print(f"[ffmpeg] {' '.join(cmd)}")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+    proc = subprocess.run(cmd, capture_output=True)
+    stderr = proc.stderr.decode("utf-8", errors="ignore")
+    stdout = proc.stdout.decode("utf-8", errors="ignore")
     if proc.returncode != 0:
         print(proc.stderr[-400:])
         return False
@@ -36,7 +38,7 @@ def run(cmd: List[str]) -> bool:
 
 def ffprobe(path: Path) -> Dict:
     cmd = ["ffprobe","-v","error","-show_streams","-show_format","-print_format","json",str(path)]
-    out = subprocess.check_output(cmd, text=True)
+    out = subprocess.check_output(cmd, encoding="utf-8")
     return json.loads(out)
 
 def parse_fps(s: str) -> float:
@@ -381,11 +383,17 @@ def concat_pipeline(project_name:str):
     w,h,fps=choose_target(infos, project_config)
     print(f"[spec] Target {w}x{h}@{fps}fps")
 
-    norm=[]
+    norm = []
     for c in clips:
-        out=norm_dir/f"{c.stem}_norm.mp4"
-        if normalize_clip(c,out,w,h,fps): norm.append(out)
-    if not norm: raise SystemExit("❌ normalize failed")
+        out = norm_dir / f"{c.stem}_norm.mp4"
+        if out.exists():
+            print(f"[norm] 🟡 Skip (cached): {out}")
+            norm.append(out)
+            continue
+
+        print(f"[norm] 🔵 Normalizing: {c} -> {out}")
+        if normalize_clip(c, out, w, h, fps):
+            norm.append(out)
 
     final=work/"final.mp4"
     if not concat_videos(norm,final):
@@ -414,8 +422,7 @@ def concat_pipeline(project_name:str):
     # ====== 阶段 7：字幕硬烧录 ======
     burn_out = project_dir / f"{project_name}_nobgm.mp4"
 
-    # Check if subtitle burning is enabled (default to True for backward compatibility)
-    # Try to get from project JSON if exists, otherwise default to True
+    # Check if subtitle burning is enabled
     burn_subtitle = True
     project_json_path = project_dir / f"{project_name}.json"
     if project_json_path.exists():
@@ -424,52 +431,89 @@ def concat_pipeline(project_name:str):
             burn_subtitle = raw.get("burn_subtitle", True)
         except Exception:
             pass
-    
+
     if not burn_subtitle:
-        print("[burn] ⏭️  Subtitle burning is disabled, skipping burn-in step.")
-        # If burning is disabled, just copy the final video to burn_out
-        try:
-            shutil.copy2(final, burn_out)
-            print(f"[burn] ✅ Copied video without subtitle burn-in to: {burn_out}")
-        except Exception as e:
-            print(f"[burn] ❌ Failed to copy video: {e}")
+        print("[burn] ⏭️ Subtitle burning is disabled, skipping.")
+        shutil.copy2(final, burn_out)
     else:
+        # Pick SRT file
         refined = work / f"{project_name}.srt"
         chosen_srt = refined if refined.exists() else out_srt
 
         if not chosen_srt.exists():
             print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
+            shutil.copy2(final, burn_out)
         else:
-            srt_path = str(chosen_srt.resolve()).replace("\\", "/")
-            font_path_abs = str(Path(FONT_PATH).resolve()).replace("\\", "/") if FONT_PATH else "Arial"
+            #
+            # ---------------------------------------------------------
+            # 🚨 核心补丁：创建 ASCII-only 临时目录执行 FFmpeg
+            # ---------------------------------------------------------
+            #
+            tmp_dir = Path("C:/temp/ffmpeg_run")
+            tmp_dir.mkdir(parents=True, exist_ok=True)
 
+            # Copy input video to safe ASCII path
+            tmp_input = tmp_dir / "input.mp4"
+            shutil.copy2(final, tmp_input)
+
+            # Copy subtitle file to safe ASCII path
+            safe_srt = tmp_dir / "subtitle.srt"
+            shutil.copy2(chosen_srt, safe_srt)
+
+            # Output path in safe ASCII dir
+            tmp_output = tmp_dir / "output_nobgm.mp4"
+
+            # Convert paths to ffmpeg-safe format
+            font_name = Path(FONT_PATH).stem if FONT_PATH else "Arial"
+
+            # ----------------------------------------------
+            # Windows FFmpeg 4.2 字幕路径兼容处理
+            # ----------------------------------------------
+
+            # WRONG (你现在代码里是这个)
+            # srt_path = str(temp_srt.resolve())
+
+            # CORRECT（必须替换成 safe_srt）
+            srt_path = str(safe_srt.resolve())
+            srt_path = srt_path.replace("\\", "/")
+
+            # FFmpeg 4.2 路径补丁
+            if ":/" in srt_path:
+                drive, rest = srt_path.split(":/", 1)
+                srt_path = f"{drive}\\:/{rest}"
+
+            font_name = Path(FONT_PATH).stem if FONT_PATH else "Arial"
+
+            # 黄色 PrimaryColour=&H00FFFF00
             subtitles_filter = (
-                f"subtitles='{srt_path}':"
-                f"force_style='FontName={Path(font_path_abs).stem},"
-                f"FontSize=20,"
-                f"PrimaryColour=&H0000FFFF,"   # 黄色字体
-                f"OutlineColour=&H00000000,"   # 黑色描边
-                f"BorderStyle=1,Outline=2,Shadow=0,"
-                f"Alignment=2,MarginL=40,MarginR=40,MarginV=60'"
+                f"subtitles=filename='{srt_path}':"
+                f"force_style='FontName={font_name},"
+                f"FontSize=20,PrimaryColour=&H00FFFF00,"
+                f"OutlineColour=&H00000000,BorderStyle=1,"
+                f"Outline=2,Shadow=0,Alignment=2,"
+                f"MarginL=40,MarginR=40,MarginV=60'"
             )
 
             cmd = [
                 "ffmpeg", "-y",
-                "-i", str(final),
+                "-i", str(tmp_input),
                 "-vf", subtitles_filter,
                 "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
                 "-pix_fmt", PIX_FMT,
                 "-c:a", "copy",
-                str(burn_out)
+                str(tmp_output)
             ]
 
-            print("[burn] 🔥 Burning subtitles into video ...")
+            print("[burn] 🔥 Burning subtitles inside ASCII-only temp dir ...")
             ok = run(cmd)
-            if ok:
+
+            if ok and tmp_output.exists():
+                # Copy the safe output back to the desired path
+                shutil.copy2(tmp_output, burn_out)
                 print(f"[burn] ✅ Subtitle burned video saved to: {burn_out}")
             else:
-                print("[burn] ❌ Burn-in failed.")
-
+                print("[burn] ❌ Burn-in failed, copying original instead.")
+                shutil.copy2(final, burn_out)
 
     # ====== 阶段 8：添加背景音乐 ======
     # 确定无 BGM 成品：若字幕烧录成功，burn_out 已在项目根目录；

@@ -1,19 +1,19 @@
 import React from 'react';
 import {
-  useCurrentFrame,
-  interpolate,
   AbsoluteFill,
-  spring,
-  useVideoConfig,
-  Img,
-  staticFile,
   Html5Audio,
+  Img,
   Sequence,
-  Video
+  Video,
+  interpolate,
+  spring,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
 } from 'remotion';
-import { fontFamily } from './load-fonts';
+import {fontFamily} from '../../load-fonts';
 
-export const FilterTikTokSlide: React.FC<{
+export type SlidePortraitProps = {
   title: string;
   description: string;
   duration: number;
@@ -21,22 +21,23 @@ export const FilterTikTokSlide: React.FC<{
   videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
-}> = ({
+};
+
+export const SlidePortrait: React.FC<SlidePortraitProps> = ({
   title,
   description,
   duration,
   imagePath = 'openai.png',
   videoPath,
   titleStartTime,
-  soundEffect
+  soundEffect,
 }) => {
   const SOUND_EFFECT_VOLUME = 1.8;
   const frame = useCurrentFrame();
-  const { fps, width } = useVideoConfig();
+  const {fps, width} = useVideoConfig();
 
   const totalFrames = duration * fps;
 
-  // Calculate title timing
   const titleStartFrame = titleStartTime
     ? Math.floor((titleStartTime / 1000) * fps)
     : title
@@ -52,13 +53,11 @@ export const FilterTikTokSlide: React.FC<{
   const safeDescriptionStartFrame = Math.max(safeTitleEndFrame, descriptionStartFrame);
   const safeDescriptionEndFrame = Math.max(safeDescriptionStartFrame + 1, descriptionEndFrame);
 
-  // Dynamic font sizing
   const targetWidth = width * 0.8;
   const estimatedCharWidth = 0.6;
   const titleFontSize = Math.min(Math.floor(targetWidth / (title.length * estimatedCharWidth)), 120);
   const descriptionFontSize = Math.floor(titleFontSize * 0.5);
 
-  // Animations
   const imageOpacity = interpolate(frame, [0, 30], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -67,7 +66,7 @@ export const FilterTikTokSlide: React.FC<{
   const imageScale = spring({
     fps,
     frame: Math.max(0, frame - 10),
-    config: { damping: 200 },
+    config: {damping: 200},
     from: 0.95,
     to: 1,
   });
@@ -90,7 +89,7 @@ export const FilterTikTokSlide: React.FC<{
   const titleScale = spring({
     fps,
     frame: Math.max(0, frame - safeTitleStartFrame),
-    config: { damping: 200 },
+    config: {damping: 200},
     from: 0.9,
     to: 1,
   });
@@ -101,11 +100,10 @@ export const FilterTikTokSlide: React.FC<{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: fontFamily,
+        fontFamily,
         padding: '40px',
       }}
     >
-      {/* Background Video (if provided) */}
       {videoPath ? (
         <AbsoluteFill>
           <Video
@@ -119,7 +117,6 @@ export const FilterTikTokSlide: React.FC<{
         </AbsoluteFill>
       ) : (
         <>
-          {/* Fallback background */}
           <div
             style={{
               position: 'absolute',
@@ -144,17 +141,16 @@ export const FilterTikTokSlide: React.FC<{
         </>
       )}
 
-      {/* Enlarged Center Image */}
       <div
         style={{
           position: 'absolute',
-          top: '0%', // starts from top
+          top: '0%',
           left: '50%',
           transform: `translateX(-50%) scale(${imageScale})`,
           opacity: imageOpacity,
           zIndex: 1,
-          width: '90%',  // 90% screen width
-          height: '50%', // occupy upper half
+          width: '90%',
+          height: '50%',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
@@ -173,7 +169,6 @@ export const FilterTikTokSlide: React.FC<{
         />
       </div>
 
-      {/* Text content */}
       <div
         style={{
           position: 'absolute',
@@ -227,7 +222,6 @@ export const FilterTikTokSlide: React.FC<{
         )}
       </div>
 
-      {/* Sound effect */}
       {soundEffect && (
         <Sequence from={safeTitleStartFrame}>
           <Html5Audio src={staticFile(soundEffect)} volume={SOUND_EFFECT_VOLUME} />
@@ -236,3 +230,5 @@ export const FilterTikTokSlide: React.FC<{
     </AbsoluteFill>
   );
 };
+
+export default SlidePortrait;

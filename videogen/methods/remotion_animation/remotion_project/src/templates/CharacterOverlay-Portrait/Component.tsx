@@ -12,30 +12,34 @@ import {
 const TIKTOK_WIDTH = 1080;
 const TIKTOK_HEIGHT = 1920;
 
-export const OverlapCharacterTiktok: React.FC<{
+export type CharacterOverlayPortraitProps = {
   imagePath: string;
+  imageIsVideo?: boolean;
   resizeRatio: number;
   position: {x: number; y: number};
   appear: boolean;
+  appearFrom?: 'left' | 'right';
   duration: number;
   videoPath?: string;
-}> = ({
+};
+
+export const CharacterOverlayPortrait: React.FC<CharacterOverlayPortraitProps> = ({
   imagePath,
+  imageIsVideo = false,
   resizeRatio,
   position,
   appear,
+  appearFrom = 'left',
   duration,
   videoPath,
 }) => {
   const frame = useCurrentFrame();
   const {fps} = useVideoConfig();
 
-  const totalFrames = duration * fps;
-
   const [videoErrored, setVideoErrored] = useState(false);
 
   const handleVideoError = useCallback((error: Error) => {
-    console.warn('[OverlapCharacterTiktok] Background video failed to play:', error);
+    console.warn('[CharacterOverlayPortrait] Background video failed to play:', error);
     setVideoErrored(true);
   }, []);
 
@@ -51,7 +55,7 @@ export const OverlapCharacterTiktok: React.FC<{
   const imageY = canvasHeight * position.y;
 
   const slideAnimationFrames = 30;
-  const slideStartOffset = appear ? -imageWidth : 0;
+  const slideStartOffset = appear ? (appearFrom === 'right' ? imageWidth : -imageWidth) : 0;
   const slideEndOffset = 0;
 
   const slideOffset = appear
@@ -62,7 +66,7 @@ export const OverlapCharacterTiktok: React.FC<{
         {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
-        }
+        },
       )
     : 0;
 
@@ -74,7 +78,7 @@ export const OverlapCharacterTiktok: React.FC<{
         {
           extrapolateLeft: 'clamp',
           extrapolateRight: 'clamp',
-        }
+        },
       )
     : 1;
 
@@ -133,17 +137,32 @@ export const OverlapCharacterTiktok: React.FC<{
           zIndex: 10,
         }}
       >
-        <Img
-          src={staticFile(`assets/${imagePath}`)}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            display: 'block',
-          }}
-        />
+        {imageIsVideo ? (
+          <OffthreadVideo
+            src={staticFile(`assets/${imagePath}`)}
+            muted
+            transparent
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              backgroundColor: 'transparent',
+            }}
+          />
+        ) : (
+          <Img
+            src={staticFile(`assets/${imagePath}`)}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        )}
       </div>
     </AbsoluteFill>
   );
 };
 
+export default CharacterOverlayPortrait;

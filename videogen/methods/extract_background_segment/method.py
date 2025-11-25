@@ -21,14 +21,31 @@ from videogen.pipeline.path_utils import get_action_output_dir, get_output_file_
 
 
 def _run_ffmpeg(cmd: list[str]) -> bool:
-    """Execute FFmpeg command and print diagnostic output on failure."""
+    """
+    Execute FFmpeg command without GBK decoding issues on Windows.
+    Use raw bytes -> decode UTF-8 manually -> avoid UnicodeDecodeError.
+    """
     print(f"[ffmpeg] {' '.join(cmd)}")
-    proc = subprocess.run(cmd, capture_output=True, text=True)
+
+    proc = subprocess.Popen(
+        cmd,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=False  # IMPORTANT: don't auto-decode using GBK
+    )
+    out, err = proc.communicate()
+
+    # FFmpeg outputs UTF-8 on all platforms
+    out = out.decode("utf-8", errors="ignore")
+    err = err.decode("utf-8", errors="ignore")
+
     if proc.returncode != 0:
         print("[ffmpeg] ❌ FFmpeg failed:")
-        print(proc.stderr)
+        print(err[-400:])  # show the last part for readability
         return False
+
     return True
+
 
 
 def _get_video_duration_sec(video_path: Path) -> float:

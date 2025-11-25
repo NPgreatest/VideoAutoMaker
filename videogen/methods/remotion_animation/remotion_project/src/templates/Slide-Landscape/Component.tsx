@@ -1,19 +1,19 @@
-import React, { useCallback, useState } from 'react';
+import React, {useCallback, useState} from 'react';
 import {
-  useCurrentFrame,
-  interpolate,
   AbsoluteFill,
-  spring,
-  useVideoConfig,
-  Img,
-  staticFile,
   Html5Audio,
-  Sequence,
+  Img,
   OffthreadVideo,
+  Sequence,
+  interpolate,
+  spring,
+  staticFile,
+  useCurrentFrame,
+  useVideoConfig,
 } from 'remotion';
-import { fontFamily } from './load-fonts';
+import {fontFamily} from '../../load-fonts';
 
-export const FilterDesktopSlide: React.FC<{
+export type SlideLandscapeProps = {
   title: string;
   description: string;
   duration: number;
@@ -21,22 +21,23 @@ export const FilterDesktopSlide: React.FC<{
   videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
-}> = ({
+};
+
+export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
   title,
   description,
   duration,
   imagePath = 'openai.png',
   videoPath,
   titleStartTime,
-  soundEffect
+  soundEffect,
 }) => {
   const SOUND_EFFECT_VOLUME = 1.0;
   const frame = useCurrentFrame();
-  const { fps, width } = useVideoConfig();
+  const {fps, width} = useVideoConfig();
 
   const totalFrames = duration * fps;
 
-  // Title timing
   const titleStartFrame = titleStartTime
     ? Math.floor((titleStartTime / 1000) * fps)
     : title
@@ -53,7 +54,6 @@ export const FilterDesktopSlide: React.FC<{
   const safeDescriptionStartFrame = Math.max(safeTitleEndFrame, descriptionStartFrame);
   const safeDescriptionEndFrame = Math.max(safeDescriptionStartFrame + 1, descriptionEndFrame);
 
-  // Animations
   const imageOpacity = interpolate(frame, [0, 25], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -62,7 +62,7 @@ export const FilterDesktopSlide: React.FC<{
   const imageScale = spring({
     fps,
     frame: Math.max(0, frame - 10),
-    config: { damping: 200 },
+    config: {damping: 200},
     from: 0.96,
     to: 1,
   });
@@ -75,7 +75,7 @@ export const FilterDesktopSlide: React.FC<{
   const titleScale = spring({
     fps,
     frame: Math.max(0, frame - safeTitleStartFrame),
-    config: { damping: 200 },
+    config: {damping: 200},
     from: 0.92,
     to: 1,
   });
@@ -84,17 +84,16 @@ export const FilterDesktopSlide: React.FC<{
     frame,
     [safeDescriptionStartFrame, safeDescriptionEndFrame],
     [0, 1],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
   );
 
   const descriptionTranslateY = interpolate(
     frame,
     [safeDescriptionStartFrame, safeDescriptionEndFrame],
     [30, 0],
-    { extrapolateLeft: 'clamp', extrapolateRight: 'clamp' }
+    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
   );
 
-  // Dynamic title sizing
   const targetWidth = width * 0.8;
   const estimatedCharWidth = 0.55;
   const titleFontSize = Math.min(Math.floor(targetWidth / (title.length * estimatedCharWidth)), 90);
@@ -103,7 +102,7 @@ export const FilterDesktopSlide: React.FC<{
   const [videoErrored, setVideoErrored] = useState(false);
 
   const handleVideoError = useCallback((error: Error) => {
-    console.warn('[FilterDesktopSlide] Background video failed to play:', error);
+    console.warn('[SlideLandscape] Background video failed to play:', error);
     setVideoErrored(true);
   }, []);
 
@@ -115,10 +114,9 @@ export const FilterDesktopSlide: React.FC<{
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontFamily: fontFamily,
+        fontFamily,
       }}
     >
-      {/* Background Video */}
       {shouldShowVideo ? (
         <AbsoluteFill>
           <OffthreadVideo
@@ -152,7 +150,6 @@ export const FilterDesktopSlide: React.FC<{
         </>
       )}
 
-      {/* Image */}
       <div
         style={{
           position: 'absolute',
@@ -181,7 +178,6 @@ export const FilterDesktopSlide: React.FC<{
         />
       </div>
 
-      {/* Text */}
       <div
         style={{
           position: 'absolute',
@@ -240,7 +236,6 @@ export const FilterDesktopSlide: React.FC<{
         )}
       </div>
 
-      {/* Sound effect */}
       {soundEffect && (
         <Sequence from={safeTitleStartFrame}>
           <Html5Audio src={staticFile(soundEffect)} volume={SOUND_EFFECT_VOLUME} />
@@ -249,3 +244,5 @@ export const FilterDesktopSlide: React.FC<{
     </AbsoluteFill>
   );
 };
+
+export default SlideLandscape;
