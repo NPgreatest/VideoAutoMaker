@@ -292,17 +292,32 @@ class TextVideoSilicon(BaseMethod):
                 return result
             
             else:
-                # Error or other terminal state
+                # Error or failed status → automatically retry by re-submitting
                 error_msg = resp.get("error", f"Unknown error: {new_status}")
-                print(f"[TextVideoSilicon] ❌ Task {request_id} failed: {error_msg}")
-                wb.status = WorkingBlockStatus.ERROR
-                result = GenerationResult(status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg)
+                print(f"[TextVideoSilicon] ❌ Task failed: {error_msg}")
+
+                # ====== AUTO RETRY LOGIC ======
+                config_dict.pop("request_id", None)
+                wb.config_json = json.dumps(config_dict)
+
+                # Reset status to PENDING to trigger re-submit
+                wb.status = WorkingBlockStatus.PENDING
+
+                result = GenerationResult(
+                    status=WorkingBlockStatus.PENDING,
+                    output_path=None,
+                    duration_sec=None,
+                    error=f"AutoRetry: {error_msg}"
+                )
+
                 wb.result_json = json.dumps({
                     "status": result.status.value,
                     "output_path": result.output_path,
                     "duration_sec": result.duration_sec,
-                    "error": result.error
+                    "error": result.error,
+                    "status_detail": "auto_retry"
                 })
+
                 return result
                 
         except Exception as e:

@@ -54,13 +54,19 @@ class Pipeline:
             config_json = json.dumps(action.config, sort_keys=True)
 
             # ---- 检查是否已存在相同 project_name 和 config_json 的 working block ----
+            # ---- 优先基于 (block_id + action_index + method_name) 复用 ----
             existing_wb = None
             for wb in all_blocks:
                 if wb.project_name != self.project_name:
                     continue
-                if wb.config_json != config_json:
+                if wb.block_id != block_id:
+                    continue
+                if wb.action_index != action_index:
+                    continue
+                if wb.method_name != action.type:
                     continue
 
+                # —— 已成功且输出仍存在 → 直接复用 ——
                 if wb.status == WorkingBlockStatus.SUCCESS:
                     try:
                         result = json.loads(wb.result_json or "{}")
@@ -68,14 +74,15 @@ class Pipeline:
                         if output_path and os.path.exists(output_path):
                             existing_wb = wb
                             break
-                        # 成功但输出文件缺失，继续寻找其他 block
-                        continue
+                        # 成功但文件丢失 → 不复用
                     except Exception:
-                        continue
+                        pass
+                    continue
 
-                # PENDING/ERROR → 复用原记录，避免重复插入
+                # —— pending/error → 复用记录，避免重复 insert ——
                 existing_wb = wb
                 break
+
 
             if existing_wb:
                 # 找到重复的 working block，直接跳过
