@@ -17,7 +17,7 @@ export type SlidePortraitProps = {
   title: string;
   description: string;
   duration: number;
-  imagePath?: string;
+  imagePath?: string;     // 🔥 不要默认 openai.png
   videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
@@ -27,7 +27,7 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
   title,
   description,
   duration,
-  imagePath = 'openai.png',
+  imagePath,           // 🔥 不默认值了
   videoPath,
   titleStartTime,
   soundEffect,
@@ -43,6 +43,7 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
     : title
     ? Math.floor(totalFrames * 0.5)
     : Math.floor(totalFrames * 0.3);
+
   const titleEndFrame = Math.min(titleStartFrame + Math.floor(totalFrames * 0.1), totalFrames);
 
   const descriptionStartFrame = titleEndFrame;
@@ -120,59 +121,56 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
           <div
             style={{
               position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
+              inset: 0,
               background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
             }}
           />
           <div
             style={{
               position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
+              inset: 0,
               background:
-                'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%)',
+                'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0,05) 0%, transparent 50%)',
             }}
           />
         </>
       )}
 
-      <div
-        style={{
-          position: 'absolute',
-          top: '0%',
-          left: '50%',
-          transform: `translateX(-50%) scale(${imageScale})`,
-          opacity: imageOpacity,
-          zIndex: 1,
-          width: '90%',
-          height: '50%',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Img
-          src={staticFile(`assets/${imagePath}`)}
-          alt={title}
+      {/* 🔥 图片存在时才渲染 */}
+      {imagePath && (
+        <div
           style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            borderRadius: '0px',
-            display: 'block',
+            position: 'absolute',
+            top: '0%',
+            left: '50%',
+            transform: `translateX(-50%) scale(${imageScale})`,
+            opacity: imageOpacity,
+            zIndex: 1,
+            width: '90%',
+            height: '50%',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
           }}
-        />
-      </div>
+        >
+          <Img
+            src={staticFile(`assets/${imagePath}`)}
+            alt={title}
+            style={{
+              width: '100%',
+              height: '100%',
+              objectFit: 'contain',
+              display: 'block',
+            }}
+          />
+        </div>
+      )}
 
+      {/* 文案区 */}
       <div
         style={{
           position: 'absolute',
-          top: '65%',
+          top: imagePath ? '65%' : '50%',        // 🔥 没图 → 文案自动上移
           left: '50%',
           transform: 'translate(-50%, -50%)',
           textAlign: 'center',
@@ -190,11 +188,6 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
               color: 'white',
               margin: '0 0 12px 0',
               lineHeight: '1.0',
-              letterSpacing: '-0.02em',
-              filter:
-                'drop-shadow(0 0 0 #000000) drop-shadow(-2px -2px 0 #000000) drop-shadow(2px -2px 0 #000000) drop-shadow(-2px 2px 0 #000000) drop-shadow(2px 2px 0 #000000)',
-              WebkitTextStroke: 'none',
-              textShadow: 'none',
             }}
           >
             {title}
@@ -208,13 +201,9 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
               transform: `translateY(${descriptionTranslateY}px)`,
               fontSize: `${descriptionFontSize}px`,
               lineHeight: '1.2',
-              margin: '0',
+              margin: 0,
               fontWeight: '600',
               color: 'white',
-              filter:
-                'drop-shadow(0 0 0 #000000) drop-shadow(-1px -1px 0 #000000) drop-shadow(1px -1px 0 #000000) drop-shadow(-1px 1px 0 #000000) drop-shadow(1px 1px 0 #000000)',
-              WebkitTextStroke: 'none',
-              textShadow: 'none',
             }}
           >
             {description}

@@ -19,7 +19,7 @@ export type SlideLandscapeProps = {
   duration: number;
   imagePath?: string;
   videoPath?: string;
-  titleStartTime?: number;
+  imageMode?: 'top' | 'center' | 'cover';
   soundEffect?: string;
 };
 
@@ -27,33 +27,19 @@ export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
   title,
   description,
   duration,
-  imagePath = 'openai.png',
+  imagePath = '',
   videoPath,
-  titleStartTime,
+  imageMode = 'top',
   soundEffect,
 }) => {
-  const SOUND_EFFECT_VOLUME = 1.0;
   const frame = useCurrentFrame();
   const {fps, width} = useVideoConfig();
-
   const totalFrames = duration * fps;
 
-  const titleStartFrame = titleStartTime
-    ? Math.floor((titleStartTime / 1000) * fps)
-    : title
-    ? Math.floor(totalFrames * 0.5)
-    : Math.floor(totalFrames * 0.3);
+  const hasImage = imagePath !== '';
+  const hasTitle = title !== '';
 
-  const titleEndFrame = Math.min(titleStartFrame + Math.floor(totalFrames * 0.12), totalFrames);
-
-  const safeTitleStartFrame = Math.max(0, titleStartFrame);
-  const safeTitleEndFrame = Math.max(safeTitleStartFrame + 1, titleEndFrame);
-
-  const descriptionStartFrame = safeTitleEndFrame;
-  const descriptionEndFrame = Math.min(descriptionStartFrame + Math.floor(totalFrames * 0.12), totalFrames);
-  const safeDescriptionStartFrame = Math.max(safeTitleEndFrame, descriptionStartFrame);
-  const safeDescriptionEndFrame = Math.max(safeDescriptionStartFrame + 1, descriptionEndFrame);
-
+  // ========== Animations ==========
   const imageOpacity = interpolate(frame, [0, 25], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
@@ -67,153 +53,133 @@ export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
     to: 1,
   });
 
-  const titleOpacity = interpolate(frame, [safeTitleStartFrame, safeTitleEndFrame], [0, 1], {
+  const titleOpacity = interpolate(frame, [10, 40], [0, 1], {
     extrapolateLeft: 'clamp',
     extrapolateRight: 'clamp',
   });
 
   const titleScale = spring({
     fps,
-    frame: Math.max(0, frame - safeTitleStartFrame),
+    frame: Math.max(0, frame - 10),
     config: {damping: 200},
     from: 0.92,
     to: 1,
   });
 
-  const descriptionOpacity = interpolate(
-    frame,
-    [safeDescriptionStartFrame, safeDescriptionEndFrame],
-    [0, 1],
-    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
-  );
+  const descriptionOpacity = interpolate(frame, [40, 70], [0, 1], {
+    extrapolateLeft: 'clamp',
+    extrapolateRight: 'clamp',
+  });
 
   const descriptionTranslateY = interpolate(
     frame,
-    [safeDescriptionStartFrame, safeDescriptionEndFrame],
+    [40, 70],
     [30, 0],
     {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
   );
 
+  // Text size auto scale
   const targetWidth = width * 0.8;
   const estimatedCharWidth = 0.55;
-  const titleFontSize = Math.min(Math.floor(targetWidth / (title.length * estimatedCharWidth)), 90);
+  const titleFontSize = Math.min(
+    Math.floor(targetWidth / (title.length * estimatedCharWidth)),
+    90,
+  );
   const descriptionFontSize = Math.floor(titleFontSize * 0.45);
 
+  // ========== Video background ==========
   const [videoErrored, setVideoErrored] = useState(false);
 
   const handleVideoError = useCallback((error: Error) => {
-    console.warn('[SlideLandscape] Background video failed to play:', error);
+    console.warn('[SlideLandscape] Background video failed:', error);
     setVideoErrored(true);
   }, []);
 
   const shouldShowVideo = Boolean(videoPath) && !videoErrored;
 
   return (
-    <AbsoluteFill
-      style={{
-        display: 'flex',
-        alignItems: 'center',
-        justifyContent: 'center',
-        fontFamily,
-      }}
-    >
+    <AbsoluteFill style={{fontFamily}}>
+      {/* Background */}
       {shouldShowVideo ? (
         <AbsoluteFill>
           <OffthreadVideo
             src={staticFile(`assets/${videoPath}`)}
             muted
             onError={handleVideoError}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
+            style={{width: '100%', height: '100%', objectFit: 'cover'}}
           />
         </AbsoluteFill>
       ) : (
-        <>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0.05) 0%, transparent 50%)',
-            }}
-          />
-        </>
+        <AbsoluteFill style={{backgroundColor: 'black'}} />
       )}
 
-      <div
+      {/* Content Layer */}
+      <AbsoluteFill
         style={{
-          position: 'absolute',
-          top: 0,
-          left: '50%',
-          transform: `translateX(-50%) scale(${imageScale})`,
-          opacity: imageOpacity,
-          zIndex: 1,
-          width: '90vw',
-          height: '60vh',
           display: 'flex',
+          flexDirection: 'column',
           alignItems: 'center',
-          justifyContent: 'center',
-        }}
-      >
-        <Img
-          src={staticFile(`assets/${imagePath}`)}
-          alt={title}
-          style={{
-            width: '100%',
-            height: '100%',
-            objectFit: 'contain',
-            display: 'block',
-            borderRadius: '20px',
-          }}
-        />
-      </div>
-
-      <div
-        style={{
-          position: 'absolute',
-          top: '65%',
-          left: '50%',
-          transform: 'translate(-50%, 0)',
+          justifyContent:
+            !hasImage && hasTitle
+              ? 'center' // title-only
+              : hasImage && !hasTitle
+              ? 'center' // image-only
+              : 'flex-start', // image + title
+          paddingTop:
+            hasImage && hasTitle && imageMode === 'top'
+              ? '5vh'
+              : 0,
           textAlign: 'center',
           zIndex: 2,
-          maxWidth: '90vw',
         }}
       >
-        {title && (
+        {/* IMAGE */}
+        {hasImage && (
+          <Img
+            src={staticFile(`assets/${imagePath}`)}
+            style={{
+              width:
+                imageMode === 'cover'
+                  ? '100%'
+                  : hasTitle
+                  ? '85vw'
+                  : '70vw',
+              height:
+                imageMode === 'cover'
+                  ? '100%'
+                  : hasTitle
+                  ? '45vh'
+                  : '70vh',
+              objectFit: imageMode === 'cover' ? 'cover' : 'contain',
+              opacity: imageOpacity,
+              transform: `scale(${imageScale})`,
+              borderRadius: imageMode === 'cover' ? 0 : 20,
+              marginBottom: hasTitle ? '3vh' : 0,
+            }}
+          />
+        )}
+
+        {/* TITLE */}
+        {hasTitle && (
           <h1
             style={{
               opacity: titleOpacity,
               transform: `scale(${titleScale})`,
               fontSize: `${titleFontSize}px`,
-              fontWeight: '900',
+              fontWeight: 900,
               color: 'white',
-              margin: '0 0 20px 0',
-              lineHeight: '1.0',
+              margin: hasImage ? '0 0 20px 0' : 0,
+              maxWidth: '90vw',
+              lineHeight: '1.1',
               letterSpacing: '-0.01em',
-              filter: `
-                drop-shadow(0 0 0 #000) 
-                drop-shadow(-2px -2px 0 #000)
-                drop-shadow(2px -2px 0 #000)
-                drop-shadow(-2px 2px 0 #000)
-                drop-shadow(2px 2px 0 #000)
-              `,
             }}
           >
             {title}
           </h1>
         )}
 
-        {description && (
+        {/* DESCRIPTION (only when both image + title exist) */}
+        {hasImage && hasTitle && description && (
           <p
             style={{
               opacity: descriptionOpacity,
@@ -221,24 +187,19 @@ export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
               fontSize: `${descriptionFontSize}px`,
               color: 'white',
               margin: 0,
-              fontWeight: '600',
-              filter: `
-                drop-shadow(0 0 0 #000)
-                drop-shadow(-1px -1px 0 #000)
-                drop-shadow(1px -1px 0 #000)
-                drop-shadow(-1px 1px 0 #000)
-                drop-shadow(1px 1px 0 #000)
-              `,
+              fontWeight: 600,
+              maxWidth: '90vw',
             }}
           >
             {description}
           </p>
         )}
-      </div>
+      </AbsoluteFill>
 
+      {/* Sound Effect */}
       {soundEffect && (
-        <Sequence from={safeTitleStartFrame}>
-          <Html5Audio src={staticFile(soundEffect)} volume={SOUND_EFFECT_VOLUME} />
+        <Sequence from={10}>
+          <Html5Audio src={staticFile(soundEffect)} volume={1.0} />
         </Sequence>
       )}
     </AbsoluteFill>

@@ -51,35 +51,38 @@ export const CharacterOverlayPortrait: React.FC<CharacterOverlayPortraitProps> =
   const imageWidth = canvasWidth * resizeRatio;
   const imageHeight = imageWidth;
 
+  // Original target position
   const imageX = canvasWidth * position.x;
   const imageY = canvasHeight * position.y;
 
+  // ✔ Mirror the final stop position when appearFrom="right"
+  const finalImageX =
+    appearFrom === 'right'
+      ? canvasWidth - imageWidth - imageX
+      : imageX;
+
   const slideAnimationFrames = 30;
-  const slideStartOffset = appear ? (appearFrom === 'right' ? imageWidth : -imageWidth) : 0;
-  const slideEndOffset = 0;
+
+  // ✔ Left slides from -imageWidth
+  // ✔ Right slides from +imageWidth
+  const slideStartOffset = appear
+    ? appearFrom === 'right'
+      ? imageWidth
+      : -imageWidth
+    : 0;
 
   const slideOffset = appear
-    ? interpolate(
-        frame,
-        [0, slideAnimationFrames],
-        [slideStartOffset, slideEndOffset],
-        {
-          extrapolateLeft: 'clamp',
-          extrapolateRight: 'clamp',
-        },
-      )
+    ? interpolate(frame, [0, slideAnimationFrames], [slideStartOffset, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      })
     : 0;
 
   const imageOpacity = appear
-    ? interpolate(
-        frame,
-        [0, slideAnimationFrames],
-        [0, 1],
-        {
-          extrapolateLeft: 'clamp',
-          extrapolateRight: 'clamp',
-        },
-      )
+    ? interpolate(frame, [0, slideAnimationFrames], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      })
     : 1;
 
   return (
@@ -128,7 +131,7 @@ export const CharacterOverlayPortrait: React.FC<CharacterOverlayPortraitProps> =
       <div
         style={{
           position: 'absolute',
-          left: imageX,
+          left: finalImageX,
           top: imageY,
           transform: `translateX(${slideOffset}px)`,
           opacity: imageOpacity,

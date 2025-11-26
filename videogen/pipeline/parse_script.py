@@ -1,25 +1,21 @@
 #!/usr/bin/env python3
 """
-Ultra-simplified Script parsing:
-ScriptBlock + ActionSpec[] with NO ids, NO prev_ids.
-Pipeline will auto-generate ids & dependencies.
+Script parsing with:
+- Normal dialogue
+- Picture lines [img.png:title]
+- Slide-only title clip [: title]
+- Flags:
+    -blank
+    -imageMode='center'
 """
 
 from typing import Any, Dict, List
 import re
-
 from videogen.schema.action_spec import ActionSpec
 from videogen.schema.project_schema import ScriptBlock
 
 
 def _extract_character_key(raw: str) -> str:
-    """
-    Normalize character string to the key used in configuration.
-    Examples:
-      "户晨风 (huchenfeng)" -> "huchenfeng"
-      "户晨风(huchenfeng)" -> "huchenfeng"
-      "huchenfeng" -> "huchenfeng"
-    """
     if not raw:
         return raw
     match = re.search(r"\(([^)]+)\)", raw)
@@ -42,66 +38,109 @@ def parse_script_lines(
     line_index = 1
     lines = script_text.splitlines()
 
-    # 👇 新增：用于判断角色变化
     prev_character = None
     character_sides: Dict[str, str] = {}
     default_character_key = _extract_character_key(default_character)
 
-    for raw_line in lines:
-        line = raw_line.strip()
+    for raw in lines:
+        line = raw.strip()
         if not line:
             continue
 
-        # ------------------------------------------------
-        # 1. Picture-only line: [img.png:title]
-        # ------------------------------------------------
-        picture_match = re.match(r'^\[([^:]+):(.*)\]$', line)
+        # ============================================
+        # 🔥 global flag extraction
+        # ============================================
+        blank_flag = line.endswith("-blank")
+        image_mode_match = re.search(r"-imageMode='([^']+)'", line)
+        custom_image_mode = image_mode_match.group(1) if image_mode_match else None
+
+        # remove flags for main parsing
+        line_clean = re.sub(r"-blank", "", line)
+        line_clean = re.sub(r"-imageMode='([^']+)'", "", line_clean).strip()
+
+        # ============================================
+        # 0️⃣ Title-only slide: [: title text]
+        # ============================================
+        title_slide_match = re.match(r"^\[:\s*(.+)\]$", line_clean)
+        if title_slide_match:
+            title = title_slide_match.group(1).strip()
+
+            last_sb = script_blocks[-1]
+
+            template_name = "Slide-Portrait" if size == "tiktok" else "Slide-Landscape"
+
+            cfg = {
+                "template": template_name,
+                "title": title,
+                "image_filename": "",
+                "target_name": last_sb.id,
+                "workdir": ".",
+            }
+
+            if custom_image_mode:
+                cfg["imageMode"] = custom_image_mode
+
+            last_sb.actions.append(ActionSpec(type="remotion_picture", config=cfg))
+            continue
+
+        # ====================================================
+        # 1️⃣ Picture-only: [img.png:title]
+        # ====================================================
+        picture_match = re.match(r'^\[([^:]+):(.*)\]$', line_clean)
         if picture_match:
             picture_filename = picture_match.group(1).strip()
             picture_title = picture_match.group(2).strip()
 
             last_sb = script_blocks[-1]
+
+            template_name = "Slide-Portrait" if size == "tiktok" else "Slide-Landscape"
+
+            cfg = {
+                "template": template_name,
+                "image_filename": picture_filename,
+                "title": picture_title,
+                "target_name": last_sb.id,
+                "workdir": ".",
+            }
+
+            if custom_image_mode:
+                cfg["imageMode"] = custom_image_mode
+
             last_sb.actions.append(ActionSpec(
                 type="remotion_picture",
-                config={
-                    "template": "Slide-Portrait" if size == "tiktok" else "Slide-Landscape",
-                    "image_filename": picture_filename,
-                    "title": picture_title,
-                    "target_name": last_sb.id,
-                    "workdir": ".",
-                }
+                config=cfg,
             ))
             continue
 
-        # ------------------------------------------------
-        # 2. Normal text line
-        # ------------------------------------------------
-        text = line
+        # ====================================================
+        # 2️⃣ Normal text (dialogue)
+        # ====================================================
+        text = line_clean
         character = default_character_key
 
-        match_new = re.match(r'^"([^"]+)":\s*(.+)$', line)
+        match_new = re.match(r'^"([^"]+)":\s*(.+)$', line_clean)
         if match_new:
             character = _extract_character_key(match_new.group(1).strip())
             text = match_new.group(2).strip()
             if text.startswith('"') and text.endswith('"'):
                 text = text[1:-1]
         else:
-            if ":" in line and not line.startswith("http"):
-                prefix, rest = line.split(":", 1)
+            if ":" in line_clean and not line_clean.startswith("http"):
+                prefix, rest = line_clean.split(":", 1)
                 if prefix.strip():
                     character = _extract_character_key(prefix.strip())
                     text = rest.strip()
 
-        # Build ScriptBlock
+        # ============================================
+        # Create ScriptBlock
+        # ============================================
         sb = ScriptBlock(
             id=f"L{line_index}",
             text=text,
-            actions=[]
+            actions=[],
         )
 
-        # ------------------------------------
-        # Step 1: fish_audio
-        # ------------------------------------
+        # --- Step1: audio ---
         sb.actions.append(ActionSpec(
             type="fish_audio",
             config={
@@ -112,9 +151,7 @@ def parse_script_lines(
             }
         ))
 
-        # ------------------------------------
-        # Step 2: text_video / extract_background_segment
-        # ------------------------------------
+        # --- Step2: background video OR text_video ---
         if background_video:
             sb.actions.append(ActionSpec(
                 type="extract_background_segment",
@@ -125,22 +162,24 @@ def parse_script_lines(
                 }
             ))
         else:
-            sb.actions.append(ActionSpec(
-                type="text_video",
-                config={
-                    "text": text,
-                    "target_name": sb.id,
-                    "workdir": ".",
-                }
-            ))
+            if not blank_flag:   # 👈 NEW
+                sb.actions.append(ActionSpec(
+                    type="text_video",
+                    config={
+                        "text": text,
+                        "target_name": sb.id,
+                        "workdir": ".",
+                    }
+                ))
 
-        # ------------------------------------
-        # Step 3: remotion_picture
-        # 加规则：如果上一句角色 != 当前角色 → appear: true
-        # ------------------------------------
-        slide_template = "CharacterOverlay-Portrait" if size == "tiktok" else "CharacterOverlay-Landscape"
+        # ============================================
+        # Step 3: Character overlay (remotion_picture)
+        # ============================================
+        slide_template = (
+            "CharacterOverlay-Portrait" if size == "tiktok"
+            else "CharacterOverlay-Landscape"
+        )
 
-        # 🔥 动态生成 config
         picture_config = {
             "template": slide_template,
             "character": character,
@@ -148,6 +187,7 @@ def parse_script_lines(
             "workdir": ".",
         }
 
+        # 分配左右出现位置（保持你原本的逻辑）
         if character not in character_sides:
             if len(character_sides) == 0:
                 character_sides[character] = "left"
@@ -155,20 +195,29 @@ def parse_script_lines(
                 character_sides[character] = "right"
             else:
                 character_sides[character] = "left"
+
         picture_config["appear_from"] = character_sides[character]
 
-        # 👇 角色变化 → 加 appear: true
-        if prev_character is not None and prev_character != character:
+        # -------------------------------------------------------
+        # 🔥 新规则：如果当前角色 == 上一行角色 → appear=true
+        # -------------------------------------------------------
+        if prev_character == character:
             picture_config["appear"] = True
+
+        # （注意：角色变化时，不再设置 appear）
+        # -------------------------------------------------------
+
+        # per-line 自定义 imageMode
+        if custom_image_mode:
+            picture_config["imageMode"] = custom_image_mode
 
         sb.actions.append(ActionSpec(
             type="remotion_picture",
             config=picture_config
         ))
 
-        # 收尾
         script_blocks.append(sb)
-        prev_character = character  # 👈 更新上一行角色
+        prev_character = character
         line_index += 1
 
     return script_blocks

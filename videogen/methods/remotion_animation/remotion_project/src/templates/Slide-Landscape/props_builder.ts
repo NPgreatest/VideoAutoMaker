@@ -1,6 +1,7 @@
+// props_builder.ts
 type Assets = Record<string, string | undefined>;
 
-const DEFAULT_IMAGE = 'openai.png';
+const DEFAULT_IMAGE = '';
 const DEFAULT_SOUND = '';
 
 const coerceNumber = (value: any, fallback: number): number => {
@@ -24,13 +25,13 @@ const pickField = <T>(config: any, keys: string[], fallback: T): T => {
 };
 
 export const previewProps = {
-  title: 'Title',
-  description: 'Description goes here',
+  title: 'Sample Title',
+  description: '',
   duration: 5,
-  imagePath: DEFAULT_IMAGE,
+  imagePath: '',
   videoPath: undefined,
-  titleStartTime: 1500,
-  soundEffect: DEFAULT_SOUND,
+  imageMode: 'top',
+  soundEffect: '',
 };
 
 export function buildProps(config: any, assets: Assets) {
@@ -42,23 +43,14 @@ export function buildProps(config: any, assets: Assets) {
     (config?.data?.duration_ms !== undefined ? config.data.duration_ms / 1000 : undefined);
 
   const safeDuration = coerceNumber(duration, previewProps.duration);
-  const imagePath = assets.image || DEFAULT_IMAGE;
-  const title = pickField<string>(config, ['title'], '');
-  const description = pickField<string>(config, ['description'], '');
-  const soundEffect = pickField<string>(config, ['sound_effect', 'soundEffect'], DEFAULT_SOUND);
-
-  const titleStartTime =
-    config?.title_start_time ??
-    config?.titleStartTime ??
-    (config?.data?.title_start_time ?? config?.data?.titleStartTime);
 
   return {
-    title,
-    description,
+    title: pickField<string>(config, ['title'], ''),
+    description: pickField<string>(config, ['description'], ''),
     duration: safeDuration,
-    imagePath,
+    imagePath: assets.image ?? '',
     videoPath: assets.video,
-    titleStartTime: coerceNumber(titleStartTime, Math.floor(safeDuration * 0.5 * 1000)),
-    soundEffect,
+    imageMode: pickField<string>(config, ['image_mode', 'imageMode'], 'top'),
+    soundEffect: pickField<string>(config, ['sound_effect', 'soundEffect'], ''),
   };
 }

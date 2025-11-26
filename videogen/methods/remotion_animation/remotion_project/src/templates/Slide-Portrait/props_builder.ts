@@ -1,6 +1,5 @@
 type Assets = Record<string, string | undefined>;
 
-const DEFAULT_IMAGE = 'openai.png';
 const DEFAULT_SOUND = '';
 
 const coerceNumber = (value: any, fallback: number): number => {
@@ -11,7 +10,7 @@ const coerceNumber = (value: any, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const pickField = <T>(config: any, keys: string[], fallback: T): T => {
+const pickField = (config: any, keys: string[], fallback: any) => {
   for (const key of keys) {
     if (config && config[key] !== undefined) {
       return config[key];
@@ -27,14 +26,15 @@ export const previewProps = {
   title: 'Title',
   description: 'Description goes here',
   duration: 5,
-  imagePath: DEFAULT_IMAGE,
+  imagePath: undefined,
   videoPath: undefined,
   titleStartTime: 1500,
   soundEffect: DEFAULT_SOUND,
 };
 
 export function buildProps(config: any, assets: Assets) {
-  const durationMs = pickField<number | undefined>(config, ['duration_ms', 'durationMs'], undefined);
+  const durationMs = pickField(config, ['duration_ms', 'durationMs'], undefined);
+
   const duration =
     config?.duration_sec ??
     config?.duration ??
@@ -42,10 +42,12 @@ export function buildProps(config: any, assets: Assets) {
     (config?.data?.duration_ms !== undefined ? config.data.duration_ms / 1000 : undefined);
 
   const safeDuration = coerceNumber(duration, previewProps.duration);
-  const imagePath = assets.image || DEFAULT_IMAGE;
-  const title = pickField<string>(config, ['title'], '');
-  const description = pickField<string>(config, ['description'], '');
-  const soundEffect = pickField<string>(config, ['sound_effect', 'soundEffect'], DEFAULT_SOUND);
+
+  const imagePath = assets.image || undefined;
+
+  const title = pickField(config, ['title'], '');
+  const description = pickField(config, ['description'], '');
+  const soundEffect = pickField(config, ['sound_effect', 'soundEffect'], DEFAULT_SOUND);
 
   const titleStartTime =
     config?.title_start_time ??
@@ -58,7 +60,10 @@ export function buildProps(config: any, assets: Assets) {
     duration: safeDuration,
     imagePath,
     videoPath: assets.video,
-    titleStartTime: coerceNumber(titleStartTime, Math.floor(safeDuration * 0.5 * 1000)),
+    titleStartTime: coerceNumber(
+      titleStartTime,
+      Math.floor(safeDuration * 0.5 * 1000),
+    ),
     soundEffect,
   };
 }

@@ -47,6 +47,7 @@ class RemotionMethod(BaseMethod):
     DEFAULT_DURATION_SEC = 5
     DEFAULT_IMAGE = "openai.png"
     DEFAULT_SOUND_EFFECT = ""
+
     VIDEO_EXTENSIONS = (".mp4", ".mov", ".webm", ".mkv")
 
     TEMPLATE_ALIASES = {
@@ -59,6 +60,7 @@ class RemotionMethod(BaseMethod):
         "OverlapCharacter": "CharacterOverlay-Landscape",
         "OverlapCharacterTiktok": "CharacterOverlay-Portrait",
     }
+
     def _npx_executable(self) -> str:
         default = Path(r"C:\Program Files\nodejs\npx.cmd")
         return str(default) if default.exists() else "npx"
@@ -80,11 +82,6 @@ class RemotionMethod(BaseMethod):
 
     def _remotion_project_path(self) -> Path:
         return Path(__file__).parent / "remotion_project"
-
-    # def _canonical_template_name(self, template_name: Optional[str]) -> str:
-    #     if not template_name:
-    #         return self.DEFAULT_TEMPLATE
-    #     return self.TEMPLATE_ALIASES.get(template_name, template_name)
 
     def _discover_templates(self) -> Dict[str, TemplateDefinition]:
         if self._templates_cache is not None:
@@ -146,7 +143,9 @@ class RemotionMethod(BaseMethod):
                 "default=noprint_wrappers=1:nokey=1",
                 str(video_path),
             ]
-            result_probe = subprocess.run(cmd, capture_output=True, text=True)
+            result_probe = subprocess.run(
+                cmd, capture_output=True, text=True, encoding="utf-8", errors="replace"
+            )
             if result_probe.returncode == 0:
                 return float(result_probe.stdout.strip())
         except Exception:
@@ -192,6 +191,9 @@ class RemotionMethod(BaseMethod):
         project_dir: Path,
         preferred_name: Optional[str] = None,
     ) -> Tuple[str, Path, bool]:
+        """
+        Safe copy — path_like *must* be non-null and exists.
+        """
         path_str = str(path_like)
         candidate_paths = self._build_candidate_paths(path_str, project_dir)
         source = next((p for p in candidate_paths if p.exists() and p.is_file()), None)
@@ -216,7 +218,14 @@ class RemotionMethod(BaseMethod):
         assets_json = json.dumps(assets, default=str)
 
         cmd = ["node", str(runner), str(builder_path), config_json, assets_json]
-        result_cmd = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True)
+        result_cmd = subprocess.run(
+            cmd,
+            cwd=cwd,
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
 
         if result_cmd.returncode != 0:
             raise RuntimeError(
@@ -228,17 +237,15 @@ class RemotionMethod(BaseMethod):
         except json.JSONDecodeError as e:
             raise ValueError(f"Failed to parse props_builder output: {e}\nOutput: {result_cmd.stdout}") from e
 
+    # ------------------------------------------
+    # RUN
+    # ------------------------------------------
     def run(self, spec: ActionSpec) -> WorkingBlock:
         schema_class = get_schema(self.NAME)
         config = from_dict(schema_class, spec.config or {})
 
         template_name = getattr(config, "animation_type", None) or (spec.config or {}).get("template")
         template_name = self.TEMPLATE_ALIASES.get(template_name, template_name)
-
-
-        available_templates = self._discover_templates()
-        if template_name not in available_templates:
-            raise ValueError(f"Invalid template '{template_name}'. Available: {list(available_templates.keys())}")
 
         now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
         working_id = str(uuid.uuid4())
@@ -260,88 +267,77 @@ class RemotionMethod(BaseMethod):
 
         return working_block
 
+    # ------------------------------------------
+    # POLL
+    # ------------------------------------------
     def poll(self, wb: WorkingBlock) -> GenerationResult:
         try:
             config_dict = json.loads(wb.config_json)
             template_name = config_dict.get("template")
             template_name = self.TEMPLATE_ALIASES.get(template_name, template_name)
             templates = self._discover_templates()
+
             if template_name not in templates:
                 raise ValueError(f"Template {template_name} not found")
-            template = templates[template_name]
 
+            template = templates[template_name]
             dao = WorkingBlockDAO()
 
+            # ----------------------------------------------------
+            # FIX: Safe detection of video_path from previous modules
+            # ----------------------------------------------------
+            def _is_video_file(path: Path) -> bool:
+                return path.suffix.lower() in self.VIDEO_EXTENSIONS
+
             video_path: Optional[Path] = None
+
             if wb.prev_ids:
                 for prev_id in wb.prev_ids:
                     prev_wb = dao.get_working_block(prev_id)
+
                     if not prev_wb or prev_wb.status != WorkingBlockStatus.SUCCESS:
                         return GenerationResult(
-                            status=WorkingBlockStatus.PENDING, output_path=None, duration_sec=None, error=None
+                            status=WorkingBlockStatus.PENDING,
+                            output_path=None,
+                            duration_sec=None,
+                            error=None,
                         )
-                    if prev_wb.output_path and Path(prev_wb.output_path).exists():
-                        video_path = Path(prev_wb.output_path)
+
+                    # If prev is fish_audio → skip (audio-only)
+                    if prev_wb.method_name == "audio_fish":
+                        video_path = None
                         break
+
+                    if prev_wb.output_path:
+                        prev_path = Path(prev_wb.output_path)
+
+                        # Skip audio files
+                        if not _is_video_file(prev_path):
+                            video_path = None
+                            break
+
+                        # Valid video
+                        if prev_path.exists():
+                            video_path = prev_path
+                            break
+
                 else:
                     error_msg = f"Previous job outputs not found for {wb.prev_ids}"
                     wb.status = WorkingBlockStatus.ERROR
-                    result = GenerationResult(
+                    return GenerationResult(
                         status=WorkingBlockStatus.ERROR,
                         output_path=None,
                         duration_sec=None,
                         error=error_msg,
                     )
-                    wb.result_json = json.dumps(
-                        {
-                            "status": result.status.value,
-                            "output_path": result.output_path,
-                            "duration_sec": result.duration_sec,
-                            "error": result.error,
-                        }
-                    )
-                    return result
-            else:
-                video_path_str = config_dict.get("video_path")
-                if not video_path_str:
-                    error_msg = "No previous job or video_path specified"
-                    wb.status = WorkingBlockStatus.ERROR
-                    result = GenerationResult(
-                        status=WorkingBlockStatus.ERROR,
-                        output_path=None,
-                        duration_sec=None,
-                        error=error_msg,
-                    )
-                    wb.result_json = json.dumps(
-                        {
-                            "status": result.status.value,
-                            "output_path": result.output_path,
-                            "duration_sec": result.duration_sec,
-                            "error": result.error,
-                        }
-                    )
-                    return result
-                video_path = Path(video_path_str)
 
-            if not video_path or not video_path.exists():
-                error_msg = f"Video file not found: {video_path}"
-                wb.status = WorkingBlockStatus.ERROR
-                result = GenerationResult(
-                    status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg
-                )
-                wb.result_json = json.dumps(
-                    {
-                        "status": result.status.value,
-                        "output_path": result.output_path,
-                        "duration_sec": result.duration_sec,
-                        "error": result.error,
-                    }
-                )
-                return result
-
+            # ----------------------------------------------------
+            # Working directory + assets
+            # ----------------------------------------------------
             workdir = Path(config_dict.get("workdir", ".")).resolve()
             project_name = wb.project_name or config_dict.get("project_name", "default")
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
+
             action_dir = get_action_output_dir(
                 project_root=workdir,
                 project_name=project_name,
@@ -360,6 +356,7 @@ class RemotionMethod(BaseMethod):
 
             assets: Dict[str, Optional[str]] = {"video": None, "image": None, "character": None}
 
+            # image asset
             image_ref = (
                 config_dict.get("image_filename")
                 or config_dict.get("single_picture")
@@ -373,6 +370,7 @@ class RemotionMethod(BaseMethod):
                 if should_cleanup:
                     copied_assets.append(image_dest)
 
+            # character asset
             character_name = config_dict.get("character")
             if character_name:
                 char_info = get_character_info(character_name) or {}
@@ -384,19 +382,27 @@ class RemotionMethod(BaseMethod):
                     assets["character"] = char_asset_name
                     if should_cleanup:
                         copied_assets.append(char_dest)
+
             if assets["character"] is None and assets["image"]:
                 assets["character"] = assets["image"]
 
-            video_dest_name, video_dest, should_cleanup = self._copy_asset(
-                video_path,
-                assets_dir,
-                project_dir,
-                preferred_name=f"{wb.id}_video{video_path.suffix or '.mp4'}",
-            )
-            assets["video"] = video_dest_name
-            if should_cleanup:
-                copied_assets.append(video_dest)
+            # ----------------------------------------------------
+            # FIX：video_path 支持 None
+            # ----------------------------------------------------
+            if video_path:
+                video_dest_name, video_dest, should_cleanup = self._copy_asset(
+                    video_path,
+                    assets_dir,
+                    project_dir,
+                    preferred_name=f"{wb.id}_video{video_path.suffix}",
+                )
+                assets["video"] = video_dest_name
+                if should_cleanup:
+                    copied_assets.append(video_dest)
+            else:
+                assets["video"] = None
 
+            # duration
             duration_sec = self._coalesce_numeric(
                 config_dict.get("duration_sec"),
                 config_dict.get("duration"),
@@ -404,9 +410,12 @@ class RemotionMethod(BaseMethod):
                 default=None,
             )
             if duration_sec is None:
-                duration_sec = self._probe_video_duration(video_path) or self.DEFAULT_DURATION_SEC
-            duration_sec = max(1.0, duration_sec)
+                if video_path:
+                    duration_sec = self._probe_video_duration(video_path) or self.DEFAULT_DURATION_SEC
+                else:
+                    duration_sec = self.DEFAULT_DURATION_SEC
 
+            duration_sec = max(1.0, duration_sec)
             duration_in_frames = max(1, int(round(duration_sec * template.fps)))
 
             builder_input = dict(config_dict)
@@ -414,8 +423,13 @@ class RemotionMethod(BaseMethod):
             builder_input["duration_sec"] = duration_sec
             builder_input["duration_in_frames"] = duration_in_frames
             builder_input["env_defaults"] = self._env_defaults()
+            print("[DEBUG] Builder input:", json.dumps(builder_input, indent=2))
             props = self._execute_props_builder(template.props_builder, builder_input, assets, cwd=template.dir)
+            print("[DEBUG] Props passed to Remotion:", json.dumps(props, indent=2))
 
+            # ----------------------------------------------------
+            # Render
+            # ----------------------------------------------------
             output_path = get_output_file_path(action_dir, block_id, "mp4")
             temp_output_filename = f"temp_{wb.id}{output_path.suffix}"
             temp_output_path = remotion_project_path / "output" / temp_output_filename
@@ -439,10 +453,11 @@ class RemotionMethod(BaseMethod):
             result_cmd = subprocess.run(
                 cmd,
                 cwd=remotion_project_path,
-                capture_output=True,
-                text=True,
-                timeout=300,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
             )
+            stdout = result_cmd.stdout.decode("utf-8", errors="ignore")
+            stderr = result_cmd.stderr.decode("utf-8", errors="ignore")
 
             if result_cmd.returncode == 0 and temp_output_path.exists():
                 shutil.move(str(temp_output_path), str(output_path))
@@ -464,7 +479,13 @@ class RemotionMethod(BaseMethod):
                         "default=noprint_wrappers=1:nokey=1",
                         str(output_path),
                     ]
-                    result_probe = subprocess.run(cmd_probe, capture_output=True, text=True)
+                    result_probe = subprocess.run(
+                        cmd_probe,
+                        capture_output=True,
+                        text=True,
+                        encoding="utf-8",
+                        errors="replace",
+                    )
                     if result_probe.returncode == 0:
                         actual_duration = float(result_probe.stdout.strip())
                 except Exception:
@@ -473,6 +494,7 @@ class RemotionMethod(BaseMethod):
                 wb.status = WorkingBlockStatus.SUCCESS
                 wb.output_path = str(output_path)
 
+                # accumulated time
                 max_prev_end = 0.0
                 for prev_id in wb.prev_ids:
                     prev_wb = dao.get_working_block(prev_id)
@@ -481,6 +503,7 @@ class RemotionMethod(BaseMethod):
                         prev_duration = prev_result.get("duration_sec") or 0.0
                         start = prev_wb.accumulated_duration_sec or 0.0
                         max_prev_end = max(max_prev_end, start + prev_duration)
+
                 wb.accumulated_duration_sec = max_prev_end + actual_duration
 
                 result = GenerationResult(
@@ -507,35 +530,23 @@ class RemotionMethod(BaseMethod):
         except subprocess.TimeoutExpired:
             error_msg = "Remotion rendering timed out (5 minutes)"
             wb.status = WorkingBlockStatus.ERROR
-            result = GenerationResult(
-                status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg
+            return GenerationResult(
+                status=WorkingBlockStatus.ERROR,
+                output_path=None,
+                duration_sec=None,
+                error=error_msg,
             )
-            wb.result_json = json.dumps(
-                {
-                    "status": result.status.value,
-                    "output_path": result.output_path,
-                    "duration_sec": result.duration_sec,
-                    "error": result.error,
-                }
-            )
-            return result
+
         except Exception as e:
             error_msg = f"Remotion generation error: {str(e)}"
             print(f"[RemotionMethod] ⚠️ {error_msg}")
             import traceback
-
             traceback.print_exc()
 
             wb.status = WorkingBlockStatus.ERROR
-            result = GenerationResult(
-                status=WorkingBlockStatus.ERROR, output_path=None, duration_sec=None, error=error_msg
+            return GenerationResult(
+                status=WorkingBlockStatus.ERROR,
+                output_path=None,
+                duration_sec=None,
+                error=error_msg,
             )
-            wb.result_json = json.dumps(
-                {
-                    "status": result.status.value,
-                    "output_path": result.output_path,
-                    "duration_sec": result.duration_sec,
-                    "error": result.error,
-                }
-            )
-            return result

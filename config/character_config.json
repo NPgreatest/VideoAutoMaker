@@ -32,7 +32,7 @@
   "leijun": {
         "name": "雷军",
     "model_id": "0bcdfe563eca444f935c0cf780f287d3",
-    "image_path": "./assets/pic/leijun.png"
+    "image_path": "./assets/pic/leijun_transparent.webm"
   },
     "sun": {
       "name": "孙笑川",
@@ -42,7 +42,7 @@
     "stewie": {
         "name": "Stewie Griffin(饺子)",
     "model_id": "7fc7ee55e20b425c85e630c8abf6a92c",
-    "image_path": "./assets/pic/stewie.png"
+    "image_path": "./assets/pic/stewie_transparent.webm"
   },
     "peter": {
       "name": "Peter Griffin",

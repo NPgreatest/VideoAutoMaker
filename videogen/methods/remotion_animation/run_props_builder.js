@@ -15,6 +15,7 @@ const transpile = (tsPath) => {
     compilerOptions: {
       module: ts.ModuleKind.CommonJS,
       jsx: ts.JsxEmit.React,
+        charset: "utf8",
       target: ts.ScriptTarget.ES2019,
       esModuleInterop: true,
     },
