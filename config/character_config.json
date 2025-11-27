@@ -52,5 +52,10 @@
     "model_id": "384d5ee95db84926887185dc479ada7a",
     "name": "赛马娘（曼波）",
     "image_path": "./assets/pic/manbo.webm"
+  },
+  "young_man_english": {
+    "model_id": "f9e361ee1d4944789be40ece8649ba68",
+    "name": "英文年轻男性旁白",
+    "image_path": "./assets/pic/manbo.webm"
   }
 }

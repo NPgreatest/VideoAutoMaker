@@ -74,21 +74,9 @@ def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: st
     
     if not block_blocks:
         return None
-    
-    # Build a set of all working block IDs that are referenced as prev_ids
-    referenced_ids = set()
-    for wb in all_blocks:
-        referenced_ids.update(wb.prev_ids or [])
-    
-    # Find blocks that are not referenced by any other block (leaf nodes)
-    leaf_nodes = [wb for wb in block_blocks if wb.id not in referenced_ids]
-    
-    if not leaf_nodes:
-        # If no leaf nodes found, use the one with the latest create_time
-        leaf_nodes = sorted(block_blocks, key=lambda wb: wb.create_time or "", reverse=True)
-    
-    # Return the first leaf node (or the latest one if no leaf found)
-    return leaf_nodes[0].id if leaf_nodes else None
+
+    block_blocks.sort(key=lambda wb: wb.action_index)
+    return block_blocks[-1].id
 
 def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
     """Find the fish_audio working block for a given block_id.

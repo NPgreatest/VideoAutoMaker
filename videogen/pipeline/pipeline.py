@@ -30,8 +30,9 @@ class Pipeline:
     - Updates job execution results
     """
 
-    def __init__(self, project_name: str, dao: WorkingBlockDAO = None):
+    def __init__(self, project_name: str, global_context: Optional[str] = None, dao: WorkingBlockDAO = None):
         self.project_name = project_name
+        self.global_context = global_context
         self.dao = dao or WorkingBlockDAO()
 
     def build(self, script_block: ScriptBlock, prev_fish_audio_id: Optional[str]) -> Optional[str]:
@@ -51,6 +52,8 @@ class Pipeline:
             # normalize config
             action.config = action.config or {}
             action.config.setdefault("project_name", self.project_name)
+            if self.global_context is not None and action.type in {"fish_audio", "text_video"}:
+                action.config.setdefault("global_context", self.global_context)
             config_json = json.dumps(action.config, sort_keys=True)
 
             # ---- 检查是否已存在相同 project_name 和 config_json 的 working block ----
@@ -115,6 +118,8 @@ class Pipeline:
             else:
                 # ★ 本 block 内链式依赖
                 wb.prev_ids = [last_wb_id] if last_wb_id else []
+                if action.type == "remotion_animation" and action.config.get("template", None) == "ElasticClip":
+                    wb.prev_ids.append(prev_fish_audio_id)
 
             # ---- 插 DB ----
             if self.dao.insert(wb):
@@ -257,7 +262,7 @@ def _reset_video_error_blocks(project_name: str) -> int:
 
 
 def _build_full_dag(project: ProjectJSON) -> Pipeline:
-    pipeline = Pipeline(project.project_name)
+    pipeline = Pipeline(project.project_name, global_context=project.global_context)
     prev_audio = None
     for script_block in project.script:
         print(f"[Pipeline] Build DAG for ScriptBlock {script_block.id}")

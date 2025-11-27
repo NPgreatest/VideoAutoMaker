@@ -30,7 +30,7 @@ class TextVideoSilicon(BaseMethod):
     def __init__(self) -> None:
         super().__init__()
 
-    def generate_prompt(self, text: str) -> str:
+    def generate_prompt(self, text: str, global_context: str | None = None) -> str:
         """
         Convert a line of dialogue into a vivid cinematic scene prompt for text-to-video models.
         """
@@ -52,8 +52,10 @@ class TextVideoSilicon(BaseMethod):
             "Now generate a similar cinematic description for the following line."
         )
 
+        context_block = f"\nGlobal context for the video: {global_context.strip()}" if global_context else ""
+
         user_prompt = (
-            f"Input line:\n{text.strip()}\n\n"
+            f"Input line:\n{text.strip()}{context_block}\n\n"
             "Output:"
         )
 
@@ -129,7 +131,7 @@ class TextVideoSilicon(BaseMethod):
                 
                 # Generate prompt if not provided
                 if not config.prompt:
-                    config.prompt = self.generate_prompt(config.text)
+                    config.prompt = self.generate_prompt(config.text, config.global_context)
                     config_dict["prompt"] = config.prompt
                 
                 # Get video format from project config

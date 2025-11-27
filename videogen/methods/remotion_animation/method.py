@@ -290,7 +290,13 @@ class RemotionMethod(BaseMethod):
                 return path.suffix.lower() in self.VIDEO_EXTENSIONS
 
             video_path: Optional[Path] = None
-
+            # duration
+            duration_sec = self._coalesce_numeric(
+                config_dict.get("duration_sec"),
+                config_dict.get("duration"),
+                (config_dict.get("duration_ms") / 1000.0) if config_dict.get("duration_ms") else None,
+                default=None,
+            )
             if wb.prev_ids:
                 for prev_id in wb.prev_ids:
                     prev_wb = dao.get_working_block(prev_id)
@@ -304,9 +310,11 @@ class RemotionMethod(BaseMethod):
                         )
 
                     # If prev is fish_audio → skip (audio-only)
-                    if prev_wb.method_name == "audio_fish":
-                        video_path = None
-                        break
+                    if prev_wb.method_name == "fish_audio" :
+                        if duration_sec is None:
+                            result_data = json.loads(prev_wb.result_json or "{}")
+                            duration_sec =  result_data.get("duration_sec")
+                        continue
 
                     if prev_wb.output_path:
                         prev_path = Path(prev_wb.output_path)
@@ -321,15 +329,15 @@ class RemotionMethod(BaseMethod):
                             video_path = prev_path
                             break
 
-                else:
-                    error_msg = f"Previous job outputs not found for {wb.prev_ids}"
-                    wb.status = WorkingBlockStatus.ERROR
-                    return GenerationResult(
-                        status=WorkingBlockStatus.ERROR,
-                        output_path=None,
-                        duration_sec=None,
-                        error=error_msg,
-                    )
+                    # else:
+                    #     error_msg = f"Previous job outputs not found for {wb.prev_ids}"
+                    #     wb.status = WorkingBlockStatus.ERROR
+                    #     return GenerationResult(
+                    #         status=WorkingBlockStatus.ERROR,
+                    #         output_path=None,
+                    #         duration_sec=None,
+                    #         error=error_msg,
+                    #     )
 
             # ----------------------------------------------------
             # Working directory + assets
@@ -402,18 +410,11 @@ class RemotionMethod(BaseMethod):
             else:
                 assets["video"] = None
 
-            # duration
-            duration_sec = self._coalesce_numeric(
-                config_dict.get("duration_sec"),
-                config_dict.get("duration"),
-                (config_dict.get("duration_ms") / 1000.0) if config_dict.get("duration_ms") else None,
-                default=None,
-            )
+
+            if duration_sec is None and video_path:
+                duration_sec = self._probe_video_duration(video_path)
             if duration_sec is None:
-                if video_path:
-                    duration_sec = self._probe_video_duration(video_path) or self.DEFAULT_DURATION_SEC
-                else:
-                    duration_sec = self.DEFAULT_DURATION_SEC
+                raise ValueError("[Remotion] Duration not specified")
 
             duration_sec = max(1.0, duration_sec)
             duration_in_frames = max(1, int(round(duration_sec * template.fps)))

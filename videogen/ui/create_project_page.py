@@ -330,6 +330,8 @@ def _save_project_assets(
     project_name: str,
     size: str,
     default_character: str,
+    global_context: str,
+    show_character_overlay: bool,
     script_text: str,
     bgm_path: str,
     background_video_path: str,
@@ -346,6 +348,8 @@ def _save_project_assets(
         "size": size,
         "script": script_dicts,
         "project_status": ProjectStatus.CREATED.value,
+        "global_context": global_context or None,
+        "show_character_overlay": bool(show_character_overlay),
         "bgm_path": bgm_path or None,
         "background_video": background_video_path or None,
         "burn_subtitle": burn_subtitle,
@@ -367,6 +371,8 @@ def create_project(
     size: str,
     default_character: str,
     video_topic: str,
+    global_context: str,
+    show_character_overlay: bool,
     script_text: str,
     bgm_path: str,
     background_video_path: str,
@@ -380,7 +386,13 @@ def create_project(
     if not script_text or not script_text.strip():
         return "❌ Script text cannot be empty"
 
-    blocks = parse_script_lines(script_text, default_character, size, background_video_path or None)
+    blocks = parse_script_lines(
+        script_text,
+        default_character,
+        size,
+        background_video_path or None,
+        show_character_overlay,
+    )
     if not blocks:
         return "❌ No valid script lines parsed."
 
@@ -389,6 +401,8 @@ def create_project(
         project_name,
         size,
         default_character,
+        global_context,
+        show_character_overlay,
         script_text,
         bgm_path.strip(),
         background_video_path.strip(),
@@ -422,6 +436,11 @@ def build_create_project_page() -> None:
             label="Video Topic",
             placeholder="例如：为什么 B+ 树在数据库里无处不在？",
             max_lines=1,
+        )
+        global_context = gr.Textbox(
+            label="Global Context",
+            placeholder="例如：整体风格、背景设定、目标受众等全局信息",
+            lines=2,
         )
         with gr.Row():
             size = gr.Radio(
@@ -459,6 +478,10 @@ def build_create_project_page() -> None:
             value=background_video_choices[0][1] if background_video_choices else "",
         )
         burn_subtitle = gr.Checkbox(label="Burn Subtitles to Final Video", value=True)
+        show_character_overlay = gr.Checkbox(
+            label="显示角色人像（Character Overlay）",
+            value=True,
+        )
         script_text = gr.Textbox(
             label="Script Text",
             placeholder='"character": your line\nnext line...',
@@ -526,6 +549,8 @@ def build_create_project_page() -> None:
             size,
             default_character,
             video_topic,
+            global_context,
+            show_character_overlay,
             script_text,
             bgm_dropdown,
             background_video_dropdown,

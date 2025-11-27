@@ -18,6 +18,7 @@ class TextToVideoSchema:
         workdir: Working directory path
         image_size: Image size for video generation (e.g., "1280x720")
         request_id: Request ID from API (set during poll)
+        global_context: Global theme/context for the entire video
     """
     text: str
     prompt: str = None
@@ -26,6 +27,7 @@ class TextToVideoSchema:
     workdir: str = "."
     image_size: str = None
     request_id: str = None
+    global_context: str = None
 
 
 # Register schema

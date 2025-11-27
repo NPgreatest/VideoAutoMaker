@@ -29,6 +29,7 @@ def parse_script_lines(
     default_character: str,
     size: str = "tiktok",
     background_video: str = None,
+    show_character_overlay: bool = True,
 ) -> List[ScriptBlock]:
 
     script_blocks: List[ScriptBlock] = []
@@ -171,50 +172,51 @@ def parse_script_lines(
                         "workdir": ".",
                     }
                 ))
+                sb.actions.append(ActionSpec(
+                    type="remotion_picture",
+                    config={
+                    "template": "ElasticClip",
+                    "workdir": ".",
+                    "target_name": sb.id,
+                    }
+                ))
 
         # ============================================
         # Step 3: Character overlay (remotion_picture)
         # ============================================
-        slide_template = (
-            "CharacterOverlay-Portrait" if size == "tiktok"
-            else "CharacterOverlay-Landscape"
-        )
+        if show_character_overlay:
+            slide_template = (
+                "CharacterOverlay-Portrait" if size == "tiktok"
+                else "CharacterOverlay-Landscape"
+            )
 
-        picture_config = {
-            "template": slide_template,
-            "character": character,
-            "target_name": sb.id,
-            "workdir": ".",
-        }
+            picture_config = {
+                "template": slide_template,
+                "character": character,
+                "target_name": sb.id,
+                "workdir": ".",
+            }
 
-        # 分配左右出现位置（保持你原本的逻辑）
-        if character not in character_sides:
-            if len(character_sides) == 0:
-                character_sides[character] = "left"
-            elif len(character_sides) == 1:
-                character_sides[character] = "right"
-            else:
-                character_sides[character] = "left"
+            if character not in character_sides:
+                if len(character_sides) == 0:
+                    character_sides[character] = "left"
+                elif len(character_sides) == 1:
+                    character_sides[character] = "right"
+                else:
+                    character_sides[character] = "left"
 
-        picture_config["appear_from"] = character_sides[character]
+            picture_config["appear_from"] = character_sides[character]
 
-        # -------------------------------------------------------
-        # 🔥 新规则：如果当前角色 == 上一行角色 → appear=true
-        # -------------------------------------------------------
-        if prev_character == character:
-            picture_config["appear"] = True
+            if prev_character == character:
+                picture_config["appear"] = True
 
-        # （注意：角色变化时，不再设置 appear）
-        # -------------------------------------------------------
+            if custom_image_mode:
+                picture_config["imageMode"] = custom_image_mode
 
-        # per-line 自定义 imageMode
-        if custom_image_mode:
-            picture_config["imageMode"] = custom_image_mode
-
-        sb.actions.append(ActionSpec(
-            type="remotion_picture",
-            config=picture_config
-        ))
+            sb.actions.append(ActionSpec(
+                type="remotion_picture",
+                config=picture_config
+            ))
 
         script_blocks.append(sb)
         prev_character = character

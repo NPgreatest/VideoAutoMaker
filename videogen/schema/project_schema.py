@@ -40,6 +40,8 @@ class ProjectJSON(BaseModel):
     project_name: str
     script: List[ScriptBlock] = field(default_factory=list)
     project_status: ProjectStatus = ProjectStatus.CREATED
+    global_context: Optional[str] = None
+    show_character_overlay: bool = True
     bgm_path: Optional[str] = None
     background_video: Optional[str] = None
 
