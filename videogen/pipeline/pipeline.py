@@ -118,8 +118,8 @@ class Pipeline:
             else:
                 # ★ 本 block 内链式依赖
                 wb.prev_ids = [last_wb_id] if last_wb_id else []
-                if action.type == "remotion_animation" and action.config.get("template", None) == "ElasticClip":
-                    wb.prev_ids.append(prev_fish_audio_id)
+                if action.type == "remotion_picture" and action.config.get("template", None) == "ElasticClip":
+                    wb.prev_ids.append(fish_audio_wb_id)
 
             # ---- 插 DB ----
             if self.dao.insert(wb):

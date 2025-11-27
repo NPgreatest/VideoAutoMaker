@@ -297,9 +297,11 @@ class RemotionMethod(BaseMethod):
                 (config_dict.get("duration_ms") / 1000.0) if config_dict.get("duration_ms") else None,
                 default=None,
             )
+
             if wb.prev_ids:
                 for prev_id in wb.prev_ids:
                     prev_wb = dao.get_working_block(prev_id)
+                    # print(f"DEBUG, {prev_wb}")
 
                     if not prev_wb or prev_wb.status != WorkingBlockStatus.SUCCESS:
                         return GenerationResult(
@@ -310,7 +312,8 @@ class RemotionMethod(BaseMethod):
                         )
 
                     # If prev is fish_audio → skip (audio-only)
-                    if prev_wb.method_name == "fish_audio" :
+                    if prev_wb.method_name == "fish_audio":
+                        # print(f"found prev fish_audio, {duration_sec}, {prev_wb.result_json}")
                         if duration_sec is None:
                             result_data = json.loads(prev_wb.result_json or "{}")
                             duration_sec =  result_data.get("duration_sec")
@@ -322,12 +325,12 @@ class RemotionMethod(BaseMethod):
                         # Skip audio files
                         if not _is_video_file(prev_path):
                             video_path = None
-                            break
+                            continue
 
                         # Valid video
                         if prev_path.exists():
                             video_path = prev_path
-                            break
+                            continue
 
                     # else:
                     #     error_msg = f"Previous job outputs not found for {wb.prev_ids}"
