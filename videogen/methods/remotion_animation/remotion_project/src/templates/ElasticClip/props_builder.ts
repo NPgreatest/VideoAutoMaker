@@ -1,4 +1,4 @@
-type Assets = Record<string, string | undefined>;
+type Assets = Record<string, any>;
 
 const coerceNumber = (value: any, fallback: number): number => {
   if (value === null || value === undefined || value === '') return fallback;
@@ -31,7 +31,17 @@ export function buildProps(config: any, assets: Assets) {
 
   const safeDuration = coerceNumber(duration, previewProps.duration);
 
-  const originalLength = coerceNumber(pickField(config, ['original_length', 'originalLength'], undefined), previewProps.originalLength);
+  // 🔥 获取真实视频长度（秒）
+  const realVideoSeconds =
+    assets.videoDuration ??
+    assets.videoMetadata?.duration ??
+    previewProps.originalLength; // fallback
+
+  // 🔥 config 里给的 original_length 优先，其次使用真实长度
+  const originalLength = coerceNumber(
+    pickField(config, ['original_length', 'originalLength'], realVideoSeconds),
+    realVideoSeconds
+  );
 
   return {
     videoPath: assets.video,

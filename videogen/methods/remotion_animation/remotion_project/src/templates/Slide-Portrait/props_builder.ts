@@ -10,7 +10,7 @@ const coerceNumber = (value: any, fallback: number): number => {
   return Number.isFinite(parsed) ? parsed : fallback;
 };
 
-const pickField = (config: any, keys: string[], fallback: any) => {
+const pickField = <T>(config: any, keys: string[], fallback: T): T => {
   for (const key of keys) {
     if (config && config[key] !== undefined) {
       return config[key];
@@ -31,6 +31,9 @@ export const previewProps = {
   titleStartTime: 1500,
   soundEffect: DEFAULT_SOUND,
   appear: false,
+
+  // 🔥 新增预览
+  imageMode: 'top',
 };
 
 export function buildProps(config: any, assets: Assets) {
@@ -55,7 +58,8 @@ export function buildProps(config: any, assets: Assets) {
     config?.titleStartTime ??
     (config?.data?.title_start_time ?? config?.data?.titleStartTime);
 
-  return {
+
+    return {
     title,
     description,
     duration: safeDuration,
@@ -67,5 +71,8 @@ export function buildProps(config: any, assets: Assets) {
     ),
     soundEffect,
     appear: pickField<boolean>(config, ['appear'], previewProps.appear),
+
+    // 🔥 新增 imageMode 支持
+    imageMode: pickField(config, ['image_mode', 'imageMode'], previewProps.imageMode),
   };
 }

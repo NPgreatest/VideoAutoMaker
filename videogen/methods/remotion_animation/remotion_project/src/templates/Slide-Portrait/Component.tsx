@@ -17,22 +17,27 @@ export type SlidePortraitProps = {
   title: string;
   description: string;
   duration: number;
-  imagePath?: string;     // 🔥 不要默认 openai.png
+  imagePath?: string;
   videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
   appear?: boolean;
+
+  imageMode?: 'top' | 'center' | 'cover';
 };
 
 export const SlidePortrait: React.FC<SlidePortraitProps> = ({
   title,
   description,
   duration,
-  imagePath,           // 🔥 不默认值了
+  imagePath,
   videoPath,
   titleStartTime,
   soundEffect,
   appear = false,
+
+  // 🔥 默认 top（与 Landscape 一致）
+  imageMode = 'top',
 }) => {
   const SOUND_EFFECT_VOLUME = 1.8;
   const frame = useCurrentFrame();
@@ -63,10 +68,7 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
 
   const imageOpacity = appear
     ? 1
-    : interpolate(frame, [0, 30], [0, 1], {
-        extrapolateLeft: 'clamp',
-        extrapolateRight: 'clamp',
-      });
+    : interpolate(frame, [0, 30], [0, 1], {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'});
 
   const imageScale = appear
     ? 1
@@ -109,7 +111,81 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
         to: 1,
       });
 
-  return (
+const getImageWrapperStyle = () => {
+  if (!imagePath) return {};
+
+  if (imageMode === 'cover') {
+    return {
+      position: 'absolute' as const,
+      inset: 0,
+      zIndex: 1,
+      opacity: imageOpacity,
+      transform: `scale(${imageScale})`,
+    };
+  }
+
+  if (imageMode === 'center') {
+    return {
+      position: 'absolute' as const,
+      top: '45%',
+      left: '50%',
+      transform: `translate(-50%, -50%) scale(${imageScale})`,
+      opacity: imageOpacity,
+      zIndex: 1,
+      width: '90%',
+      height: '65%',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+    };
+  }
+
+  // top
+  return {
+    position: 'absolute' as const,
+    top: '0%',
+    left: '50%',
+    transform: `translateX(-50%) scale(${imageScale})`,
+    opacity: imageOpacity,
+    zIndex: 1,
+    width: '90%',
+    height: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+  };
+};
+
+
+    const getImageStyle = () => {
+      if (imageMode === 'cover') {
+        return {
+          width: '100%',
+          height: '100%',
+          objectFit: 'cover' as const,   // ←🔥 必须加 as const
+        };
+      }
+
+      return {
+        width: '100%',
+        height: '100%',
+        objectFit: 'contain' as const,  // ←🔥 必须加 as const
+        display: 'block',
+      };
+    };
+
+
+  const getTextTopOffset = () => {
+    if (!imagePath) return '50%';
+    if (imageMode === 'center') return '80%';
+    if (imageMode === 'cover') return '50%';
+    return '65%'; // top
+  };
+  // =========================================================
+
+  // @ts-ignore
+    // @ts-ignore
+    return (
     <AbsoluteFill
       style={{
         display: 'flex',
@@ -123,72 +199,32 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
         <AbsoluteFill>
           <Video
             src={staticFile(`assets/${videoPath}`)}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-            }}
+            style={{width: '100%', height: '100%', objectFit: 'cover'}}
           />
         </AbsoluteFill>
       ) : (
         <>
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background: 'linear-gradient(135deg, #000000 0%, #1a1a1a 100%)',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05) 0%, transparent 50%), radial-gradient(circle at 80% 20%, rgba(255,255,255,0,05) 0%, transparent 50%)',
-            }}
-          />
+          <div style={{position: 'absolute', inset: 0, background: 'linear-gradient(135deg,#000,#1a1a1a)'}} />
+          <div style={{position: 'absolute', inset: 0, background: 'radial-gradient(circle at 20% 80%, rgba(255,255,255,0.05), transparent 50%)'}} />
         </>
       )}
 
-      {/* 🔥 图片存在时才渲染 */}
+      {/* 🔥 图片 */}
       {imagePath && (
-        <div
-          style={{
-            position: 'absolute',
-            top: '0%',
-            left: '50%',
-            transform: `translateX(-50%) scale(${imageScale})`,
-            opacity: imageOpacity,
-            zIndex: 1,
-            width: '90%',
-            height: '50%',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-          }}
-        >
-          <Img
-            src={staticFile(`assets/${imagePath}`)}
-            alt={title}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'contain',
-              display: 'block',
-            }}
-          />
+        <div style={getImageWrapperStyle()}>
+          <Img src={staticFile(`assets/${imagePath}`)} alt={title} style={getImageStyle()} />
         </div>
       )}
 
-      {/* 文案区 */}
+      {/* 文案层 */}
       <div
         style={{
           position: 'absolute',
-          top: imagePath ? '65%' : '50%',        // 🔥 没图 → 文案自动上移
+          top: getTextTopOffset(),
           left: '50%',
           transform: 'translate(-50%, -50%)',
           textAlign: 'center',
-          zIndex: 2,
+          zIndex: 3,
           maxWidth: '90vw',
         }}
       >
