@@ -16,6 +16,8 @@ class WorkingBlock:
     method_name: str            # associated method name
     status: WorkingBlockStatus  # pending / success / error
     retries: int = 0
+    priority: Optional[int] = None
+    last_scheduled_at: Optional[float] = None
 
     prev_ids: List[str] = None  # List of upstream working block IDs
     output_path: Optional[str] = None

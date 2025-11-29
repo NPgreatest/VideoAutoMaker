@@ -8,6 +8,8 @@ Final clean architecture for VideoGen pipeline.
 
 import json
 import os
+import time
+
 from pathlib import Path
 from typing import List, Optional, Set
 
@@ -143,7 +145,7 @@ class Pipeline:
         - have output_path file exist
         """
         for prev_id in wb.prev_ids:
-            prev_block = self.dao.get_working_block(prev_id)
+            prev_block = self.dao.get_by_id(prev_id)
             if not prev_block:
                 return False
 
@@ -163,13 +165,43 @@ class Pipeline:
         return True
 
     def get_next_runnable(self, allowed_methods: Optional[Set[str]] = None) -> Optional[WorkingBlock]:
-        """Return a PENDING block whose dependencies are all satisfied."""
-        for wb in self.dao.get_pending(self.project_name):
-            if allowed_methods and wb.method_name not in allowed_methods:
-                continue
-            if self._deps_done(wb):
-                return wb
-        return None
+        """
+        Priority-based round-robin scheduling:
+        - High priority first
+        - Within same priority: pick the task least recently scheduled
+        """
+
+        pending = self.dao.get_pending(self.project_name)
+
+        # 1. 过滤 method
+        if allowed_methods:
+            pending = [wb for wb in pending if wb.method_name in allowed_methods]
+
+        # 2. 过滤依赖未完成的
+        runnable = [wb for wb in pending if self._deps_done(wb)]
+        if not runnable:
+            return None
+
+        # 3. 设置默认 priority + last_scheduled_at
+        for wb in runnable:
+            if wb.priority is None:
+                wb.priority = 10  # 默认优先级
+            if wb.last_scheduled_at is None:
+                wb.last_scheduled_at = 0  # 从未调度过则优先
+
+        # 4. 取最高优先级的一组（值越小优先级越高）
+        runnable.sort(key=lambda wb: wb.priority)
+        top_priority = runnable[0].priority
+        tier = [wb for wb in runnable if wb.priority == top_priority]
+
+        # 5. 从这一组里面选 last_scheduled_at 最小的
+        next_job = min(tier, key=lambda wb: wb.last_scheduled_at)
+
+        # 6. 更新 last_scheduled_at → 放到队尾
+        next_job.last_scheduled_at = time.time()
+        self.dao.update(next_job)
+
+        return next_job
 
     # ----------------------------------------------------------------------
     # 3. Update job results
