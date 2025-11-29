@@ -21,6 +21,7 @@ export type SlideLandscapeProps = {
   videoPath?: string;
   imageMode?: 'top' | 'center' | 'cover';
   soundEffect?: string;
+  appear?: boolean;
 };
 
 export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
@@ -31,6 +32,7 @@ export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
   videoPath,
   imageMode = 'top',
   soundEffect,
+  appear = false,
 }) => {
   const frame = useCurrentFrame();
   const {fps, width} = useVideoConfig();
@@ -40,43 +42,53 @@ export const SlideLandscape: React.FC<SlideLandscapeProps> = ({
   const hasTitle = title !== '';
 
   // ========== Animations ==========
-  const imageOpacity = interpolate(frame, [0, 25], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const imageOpacity = appear
+    ? 1
+    : interpolate(frame, [0, 25], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const imageScale = spring({
-    fps,
-    frame: Math.max(0, frame - 10),
-    config: {damping: 200},
-    from: 0.96,
-    to: 1,
-  });
+  const imageScale = appear
+    ? 1
+    : spring({
+        fps,
+        frame: Math.max(0, frame - 10),
+        config: {damping: 200},
+        from: 0.96,
+        to: 1,
+      });
 
-  const titleOpacity = interpolate(frame, [10, 40], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const titleOpacity = appear
+    ? 1
+    : interpolate(frame, [10, 40], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const titleScale = spring({
-    fps,
-    frame: Math.max(0, frame - 10),
-    config: {damping: 200},
-    from: 0.92,
-    to: 1,
-  });
+  const titleScale = appear
+    ? 1
+    : spring({
+        fps,
+        frame: Math.max(0, frame - 10),
+        config: {damping: 200},
+        from: 0.92,
+        to: 1,
+      });
 
-  const descriptionOpacity = interpolate(frame, [40, 70], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const descriptionOpacity = appear
+    ? 1
+    : interpolate(frame, [40, 70], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const descriptionTranslateY = interpolate(
-    frame,
-    [40, 70],
-    [30, 0],
-    {extrapolateLeft: 'clamp', extrapolateRight: 'clamp'},
-  );
+  const descriptionTranslateY = appear
+    ? 0
+    : interpolate(frame, [40, 70], [30, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
   // Text size auto scale
   const targetWidth = width * 0.8;

@@ -26,8 +26,9 @@ PROMPT_LOADER = MarkdownPromptLoader()
 AUTO_SCRIPT_AGENT = AutoScriptAgent()
 IMAGE_SEARCH_TOOL = ImageSearchTool()
 IMAGE_MARKER_PATTERN = re.compile(
-    r"\[([A-Za-z0-9_\-\.]+):\s*([^\]]+)\]"
+    r"\[([A-Za-z0-9_.-]+):([^\]]*)\]"
 )
+
 
 
 def _get_prompt_choices(category: str, default_key: str) -> List[Tuple[str, str]]:
@@ -48,8 +49,7 @@ def _parse_image_markers(script_text: str) -> List[Tuple[str, str]]:
     for match in IMAGE_MARKER_PATTERN.finditer(script_text):
         target = match.group(1).strip()
         query = match.group(2).strip()
-        if not target or not query:
-            continue
+
         markers.append((target, query))
     return markers
 

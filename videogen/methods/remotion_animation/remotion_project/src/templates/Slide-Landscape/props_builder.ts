@@ -32,6 +32,7 @@ export const previewProps = {
   videoPath: undefined,
   imageMode: 'top',
   soundEffect: '',
+  appear: false,
 };
 
 export function buildProps(config: any, assets: Assets) {
@@ -52,5 +53,6 @@ export function buildProps(config: any, assets: Assets) {
     videoPath: assets.video,
     imageMode: pickField<string>(config, ['image_mode', 'imageMode'], 'top'),
     soundEffect: pickField<string>(config, ['sound_effect', 'soundEffect'], ''),
+    appear: pickField<boolean>(config, ['appear'], previewProps.appear),
   };
 }

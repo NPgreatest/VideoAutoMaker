@@ -30,6 +30,7 @@ export const previewProps = {
   videoPath: undefined,
   titleStartTime: 1500,
   soundEffect: DEFAULT_SOUND,
+  appear: false,
 };
 
 export function buildProps(config: any, assets: Assets) {
@@ -65,5 +66,6 @@ export function buildProps(config: any, assets: Assets) {
       Math.floor(safeDuration * 0.5 * 1000),
     ),
     soundEffect,
+    appear: pickField<boolean>(config, ['appear'], previewProps.appear),
   };
 }

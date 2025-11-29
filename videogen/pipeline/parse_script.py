@@ -51,14 +51,16 @@ def parse_script_lines(
         # ============================================
         # 🔥 global flag extraction
         # ============================================
-        blank_flag = line.endswith("-blank")
+        blank_flag = bool(re.search(r"-blank\b", line))
         image_mode_match = re.search(r"-imageMode='([^']+)'", line)
         custom_image_mode = image_mode_match.group(1) if image_mode_match else None
+        appear_flag = bool(re.search(r"--appear", line))
 
         # remove flags for main parsing
         line_clean = re.sub(r"-blank", "", line)
         line_clean = re.sub(r"-imageMode='([^']+)'", "", line_clean).strip()
-
+        line_clean = re.sub(r"--appear", "", line_clean).strip()
+        print(line_clean, end="\n\n")
         # ============================================
         # 0️⃣ Title-only slide: [: title text]
         # ============================================
@@ -80,6 +82,8 @@ def parse_script_lines(
 
             if custom_image_mode:
                 cfg["imageMode"] = custom_image_mode
+            if appear_flag:
+                cfg["appear"] = True
 
             last_sb.actions.append(ActionSpec(type="remotion_picture", config=cfg))
             continue
@@ -106,6 +110,8 @@ def parse_script_lines(
 
             if custom_image_mode:
                 cfg["imageMode"] = custom_image_mode
+            if appear_flag:
+                cfg["appear"] = True
 
             last_sb.actions.append(ActionSpec(
                 type="remotion_picture",

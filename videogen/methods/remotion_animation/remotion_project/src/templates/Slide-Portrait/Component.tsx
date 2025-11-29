@@ -21,6 +21,7 @@ export type SlidePortraitProps = {
   videoPath?: string;
   titleStartTime?: number;
   soundEffect?: string;
+  appear?: boolean;
 };
 
 export const SlidePortrait: React.FC<SlidePortraitProps> = ({
@@ -31,6 +32,7 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
   videoPath,
   titleStartTime,
   soundEffect,
+  appear = false,
 }) => {
   const SOUND_EFFECT_VOLUME = 1.8;
   const frame = useCurrentFrame();
@@ -59,41 +61,53 @@ export const SlidePortrait: React.FC<SlidePortraitProps> = ({
   const titleFontSize = Math.min(Math.floor(targetWidth / (title.length * estimatedCharWidth)), 120);
   const descriptionFontSize = Math.floor(titleFontSize * 0.5);
 
-  const imageOpacity = interpolate(frame, [0, 30], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const imageOpacity = appear
+    ? 1
+    : interpolate(frame, [0, 30], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const imageScale = spring({
-    fps,
-    frame: Math.max(0, frame - 10),
-    config: {damping: 200},
-    from: 0.95,
-    to: 1,
-  });
+  const imageScale = appear
+    ? 1
+    : spring({
+        fps,
+        frame: Math.max(0, frame - 10),
+        config: {damping: 200},
+        from: 0.95,
+        to: 1,
+      });
 
-  const descriptionOpacity = interpolate(frame, [safeDescriptionStartFrame, safeDescriptionEndFrame], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const descriptionOpacity = appear
+    ? 1
+    : interpolate(frame, [safeDescriptionStartFrame, safeDescriptionEndFrame], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const descriptionTranslateY = interpolate(frame, [safeDescriptionStartFrame, safeDescriptionEndFrame], [30, 0], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const descriptionTranslateY = appear
+    ? 0
+    : interpolate(frame, [safeDescriptionStartFrame, safeDescriptionEndFrame], [30, 0], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const titleOpacity = interpolate(frame, [safeTitleStartFrame, safeTitleEndFrame], [0, 1], {
-    extrapolateLeft: 'clamp',
-    extrapolateRight: 'clamp',
-  });
+  const titleOpacity = appear
+    ? 1
+    : interpolate(frame, [safeTitleStartFrame, safeTitleEndFrame], [0, 1], {
+        extrapolateLeft: 'clamp',
+        extrapolateRight: 'clamp',
+      });
 
-  const titleScale = spring({
-    fps,
-    frame: Math.max(0, frame - safeTitleStartFrame),
-    config: {damping: 200},
-    from: 0.9,
-    to: 1,
-  });
+  const titleScale = appear
+    ? 1
+    : spring({
+        fps,
+        frame: Math.max(0, frame - safeTitleStartFrame),
+        config: {damping: 200},
+        from: 0.9,
+        to: 1,
+      });
 
   return (
     <AbsoluteFill
