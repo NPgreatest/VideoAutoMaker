@@ -1,7 +1,7 @@
 # 📚➡️🎬 **Wiki2Video — 让任何一篇 Wikipedia 文章变成可视化故事**
 
 <p align="center">
-  <img src="picture/W2V.png" width="180"/>
+  <img src="example/picture/W2V.png" width="180"/>
 </p>
 
 > **让所有维基知识立即可视化。**

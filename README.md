@@ -1,7 +1,7 @@
 # 📚➡️🎬 **Wiki2Video — Turn Any Wikipedia Page Into a Visual Story**
 
 <p align="center">
-  <img src="picture/W2V.png" width="180"/>
+  <img src="example/picture/W2V.png" width="180"/>
 </p>
 
 > **Every wiki, instantly visualized.**
