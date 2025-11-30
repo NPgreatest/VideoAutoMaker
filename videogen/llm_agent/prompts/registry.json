@@ -5,10 +5,16 @@
     "direction_story": "categories/info_query/direction_story.md"
   },
   "script_structure": {
-    "solo": "categories/script_structure/solo.md",
+    "wiki_solo_narrative": "categories/script_structure/wiki_solo_narrative.md",
     "elon_trump": "categories/script_structure/elon_trump.md",
     "stewie_peter": "categories/script_structure/stewie_peter.md",
     "leijun_dingzhen": "categories/script_structure/leijun_dingzhen.md",
     "leijun_manbo": "categories/script_structure/leijun_manbo.md"
+  },
+  "wiki_direction_extractor": {
+    "default": "wiki_direction_extractor/wiki_direction_extractor.md"
+  },
+  "insert_image": {
+    "local": "categories/insert_image/insert_image_from_local.md"
   }
 }

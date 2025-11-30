@@ -150,16 +150,54 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
 
             # 处理标题B部分：如果超过12个字，自动换行
             # 注意：title_text 是【A】B格式中的B部分，只对B部分进行换行处理
+            # ============================
+            #   智能换行：中英双支持
+            #   - 中文按字符
+            #   - 英文按单词，不截断单词
+            # ============================
             title_lines = []
+
             if title_text:
-                if len(title_text) > 12:
-                    # 每行最多12个字，按12个字切分
-                    for i in range(0, len(title_text), 12):
-                        title_lines.append(title_text[i:i+12])
+                # 决定一行允许的最大像素宽度（右下角区域），你可调整比例
+                max_line_width = canvas.width * 0.55
+
+                # 判断是否为英文（全部是 ASCII + 空格）
+                is_english = all(ord(c) < 128 for c in title_text)
+
+                if is_english:
+                    # ------------ 英文：按单词换行 ------------
+                    words = title_text.split()
+                    current_line = ""
+
+                    for word in words:
+                        test_line = current_line + (" " if current_line else "") + word
+
+                        w_t, _ = measure_text(draw, test_line, font_title)
+
+                        if w_t <= max_line_width:
+                            # 放得下：继续累加
+                            current_line = test_line
+                        else:
+                            # 放不下：推入上一行，重新开始
+                            if current_line:
+                                title_lines.append(current_line)
+                            current_line = word  # 新行以当前单词开始
+
+                    # 最后一行加入
+                    if current_line:
+                        title_lines.append(current_line)
+
                 else:
-                    title_lines = [title_text]
-            else:
-                title_lines = []
+                    # ------------ 中文：按字数平分 ------------
+                    # 估算每行最大字数（测一个字宽度）
+                    test_w, _ = measure_text(draw, "好", font_title)
+                    if test_w == 0:
+                        max_chars = 12
+                    else:
+                        max_chars = max(6, int(max_line_width / test_w))
+
+                    for i in range(0, len(title_text), max_chars):
+                        title_lines.append(title_text[i:i + max_chars])
 
             # 计算标题每行的尺寸和总高度
             title_line_info = []  # [(width, height), ...]

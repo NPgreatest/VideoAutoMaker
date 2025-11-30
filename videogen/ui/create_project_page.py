@@ -416,7 +416,6 @@ def create_project(
     )
     return message
 
-
 def build_create_project_page() -> None:
     character_choices = get_character_choices()
     default_character_value = character_choices[0][1] if character_choices else ""
@@ -430,18 +429,28 @@ def build_create_project_page() -> None:
     )
 
     with gr.Column():
-        gr.Markdown("### 🆕 Create Project\n为项目输入名称和脚本，系统会自动解析为脚本块并初始化数据库。")
-        project_name = gr.Textbox(label="Project Name", placeholder="e.g., tech_demo", max_lines=1, value="", interactive=True)
-        video_topic = gr.Textbox(
-            label="Video Topic",
-            placeholder="例如：为什么 B+ 树在数据库里无处不在？",
+        gr.Markdown("### 🆕 Create Project\n为项目输入名称（可含主题）与剧本，系统将自动解析脚本块并初始化数据库。")
+
+        project_name = gr.Textbox(
+            label="Project Name",
+            placeholder="e.g., mohenjo_daro_demo",
+            max_lines=1,
+            value="",
+            interactive=True,
+        )
+
+        wiki_input = gr.Textbox(
+            label="Wikipedia URL / Topic (Optional)",
+            placeholder="例如：https://en.wikipedia.org/wiki/Mohenjo-daro 或 Mohenjo-daro",
             max_lines=1,
         )
+
         global_context = gr.Textbox(
             label="Global Context",
             placeholder="例如：整体风格、背景设定、目标受众等全局信息",
             lines=2,
         )
+
         with gr.Row():
             size = gr.Radio(
                 label="Video Format",
@@ -454,6 +463,7 @@ def build_create_project_page() -> None:
                 value=default_character_value,
                 allow_custom_value=True,
             )
+
         with gr.Row():
             info_query_prompt = gr.Dropdown(
                 label="Info Query Prompt",
@@ -467,6 +477,7 @@ def build_create_project_page() -> None:
                 if script_structure_choices
                 else "",
             )
+
         bgm_dropdown = gr.Dropdown(
             label="Background Music (BGM)",
             choices=bgm_choices,
@@ -477,16 +488,19 @@ def build_create_project_page() -> None:
             choices=background_video_choices,
             value=background_video_choices[0][1] if background_video_choices else "",
         )
+
         burn_subtitle = gr.Checkbox(label="Burn Subtitles to Final Video", value=True)
         show_character_overlay = gr.Checkbox(
             label="显示角色人像（Character Overlay）",
             value=True,
         )
+
         script_text = gr.Textbox(
             label="Script Text",
             placeholder='"character": your line\nnext line...',
             lines=12,
         )
+
         with gr.Accordion("🖼️ 图片核对与备份清理", open=False):
             image_status = gr.Markdown("生成剧本后会自动展示图片及备选项。")
             with gr.Row():
@@ -515,14 +529,25 @@ def build_create_project_page() -> None:
             )
             apply_image_btn = gr.Button("保存选择并清理备份", variant="primary")
             image_state = gr.State([])
+
         status = gr.Markdown("")
-        generate_btn = gr.Button("Generate Script", variant="secondary")
-        create_btn = gr.Button("Create Project", variant="primary")
+
+        generate_btn = gr.Button(
+            "Generate Script & Images from Wikipedia\n从 Wikipedia 中生成视频剧本及对应图片",
+            variant="secondary",
+        )
+
+        create_btn = gr.Button(
+            "Create Video Workflow File\n创建视频工作流配置文件",
+            variant="primary",
+        )
+
+    # ==== Event Bindings ====
 
     generate_btn.click(
         fn=generate_script_from_agent,
         inputs=[
-            video_topic,
+            wiki_input,            # <—— changed
             size,
             default_character,
             info_query_prompt,
@@ -542,14 +567,14 @@ def build_create_project_page() -> None:
             image_status,
         ],
     )
+
     create_btn.click(
         fn=create_project,
         inputs=[
             project_name,
             size,
             default_character,
-            video_topic,
-            global_context,
+            global_context,  # <— removed video_topic
             show_character_overlay,
             script_text,
             bgm_dropdown,
