@@ -51,13 +51,12 @@ def parse_script_lines(
         # ============================================
         # 🔥 global flag extraction
         # ============================================
-        blank_flag = bool(re.search(r"-blank\b", line))
+        blank_flag = bool(re.search(r"--blank\b", line))
         image_mode_match = re.search(r"-imageMode='([^']+)'", line)
         custom_image_mode = image_mode_match.group(1) if image_mode_match else None
         appear_flag = bool(re.search(r"--appear", line))
 
-        # remove flags for main parsing
-        line_clean = re.sub(r"-blank", "", line)
+        line_clean = re.sub(r"--blank", "", line)
         line_clean = re.sub(r"-imageMode='([^']+)'", "", line_clean).strip()
         line_clean = re.sub(r"--appear", "", line_clean).strip()
         print(line_clean, end="\n\n")

@@ -124,7 +124,7 @@ def _collect_audio_data(project_name: str):
 # ----------------------------------------
 # Pagination helper
 # ----------------------------------------
-ITEMS_PER_PAGE = 2
+ITEMS_PER_PAGE = 10
 
 
 def _paginate_audio(audio_items: List[Dict], page: int):
