@@ -1,5 +1,5 @@
 from dataclasses import dataclass, field, asdict
-from datetime import datetime
+from datetime import datetime, UTC
 from enum import Enum
 from typing import Any, Dict, List, Optional
 
@@ -8,7 +8,7 @@ from wiki2video.schema.action_spec import ActionSpec
 
 def now_iso() -> str:
     """Return current UTC time in ISO format with Z suffix."""
-    return datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    return datetime.now(UTC).isoformat(timespec="seconds") + "Z"
 
 
 @dataclass
@@ -47,7 +47,6 @@ class ProjectJSON(BaseModel):
 
     def to_dict(self) -> Dict[str, Any]:
         return asdict(self)
-
 
 
 

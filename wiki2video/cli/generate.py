@@ -1,5 +1,4 @@
-#!/usr/bin/env python3
-"""Generate script and render video from a wiki topic."""
+# wiki2video/cli/generate.py
 
 from __future__ import annotations
 
@@ -10,91 +9,82 @@ from typing import Optional
 import typer
 from dotenv import load_dotenv
 
-from wiki2video.cli.script import ScriptBuildResult, build_script
+from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project
 from wiki2video.pipeline.pipeline import run_pipeline
 
 load_dotenv()
 
 app = typer.Typer(
-    help="Generate a wiki script and render the full video pipeline.",
-    invoke_without_command=True,
-    no_args_is_help=True,
+    help="Generate a video from a Wikipedia topic.",
 )
 
 
 def _locate_final_video(project_name: str) -> Optional[Path]:
     base = Path("project") / project_name
-    candidates = [
+    for path in [
         base / f"{project_name}.mp4",
         base / f"{project_name}_nobgm.mp4",
         base / "_work" / "final.mp4",
-    ]
-    for path in candidates:
+    ]:
         if path.exists():
             return path
     return None
 
 
-@app.callback()
-def main(
-    ctx: typer.Context,
+@app.command()
+def generate(
     url_or_topic: str = typer.Argument(..., help="Wikipedia URL or topic"),
-    character: Optional[str] = typer.Option(
-        None, "--character", "-c", help="Character voice / script style key."
-    ),
-    duration: Optional[int] = typer.Option(
-        None, "--duration", "-d", help="Approximate target duration in minutes."
-    ),
-    verbose: bool = typer.Option(
-        False, "--verbose", "-v", help="Accept flag for future verbose logging."
-    ),
-    project_name: Optional[str] = typer.Option(
-        None, "--project-name", "-n", help="Override project directory name."
-    ),
-    output: Optional[Path] = typer.Option(
-        None,
-        "--out",
-        "-o",
-        help="Path to copy the final MP4 (default: ./out/<project>.mp4).",
-    ),
-) -> None:
-    if ctx.invoked_subcommand:
-        return
+    size: str = typer.Option("tiktok", "--size", "-s"),
+    character: Optional[str] = typer.Option("young_man_english", "--character", "-c"),
+    bgm: Optional[str] = typer.Option(None, "--bgm"),
+    bg_video: Optional[str] = typer.Option(None, "--bg-video"),
+    burn_subtitle: bool = typer.Option(True, "--burn/--no-burn"),
+    overlay: bool = typer.Option(True, "--overlay/--no-overlay"),
+    project_name: Optional[str] = typer.Option(None, "--name", "-n"),
+    output: Optional[Path] = typer.Option(None, "--out", "-o"),
+):
+    """Generate script + project.json and render final video."""
 
+    typer.secho("🚀 Starting Wiki → Video full pipeline...", fg="cyan")
+
+    # Step 1 — Build project
     try:
-        script_result: ScriptBuildResult = build_script(
-            url_or_topic,
-            character=character,
-            duration=duration,
+        script_result: ScriptBuildResult = build_project(
+            wiki_input=url_or_topic,
             project_name=project_name,
+            size=size,
+            character=character,
+            bgm=bgm,
+            bg_video=bg_video,
+            burn=burn_subtitle,
+            show_overlay=overlay,
         )
-    except Exception as exc:  # pragma: no cover - CLI path
+    except Exception as exc:
         typer.secho(f"❌ Script generation failed: {exc}", fg="red", err=True)
         raise typer.Exit(code=1)
 
-    typer.secho(f"📝 Script ready under project {script_result.project_name}", fg="cyan")
+    typer.secho(f"📘 Project JSON created: {script_result.project_path}", fg="cyan")
 
+    # Step 2 — Render pipeline
     try:
         run_pipeline(script_result.project_path)
-    except Exception as exc:  # pragma: no cover - CLI path
-        typer.secho(f"❌ Pipeline failed: {exc}", fg="red", err=True)
+    except Exception as exc:
+        typer.secho(f"❌ Render pipeline failed: {exc}", fg="red", err=True)
         raise typer.Exit(code=1)
 
+    # Step 3 — Find final mp4
     final_video = _locate_final_video(script_result.project_name)
     if not final_video:
-        typer.secho(
-            "⚠️ Could not locate final video output. Check logs under project folder.",
-            fg="yellow",
-        )
+        typer.secho("⚠️ Could not find final video output.", fg="yellow")
         raise typer.Exit(code=1)
 
+    # Step 4 — Copy to output
     out_dir = Path("out")
     out_dir.mkdir(parents=True, exist_ok=True)
     target = output or out_dir / f"{script_result.project_name}.mp4"
-    target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(final_video, target)
 
-    typer.secho(f"🎬 Final video copied to: {target}", fg="green")
+    typer.secho(f"🎬 Final video saved: {target}", fg="green")
 
 
 __all__ = ["app"]

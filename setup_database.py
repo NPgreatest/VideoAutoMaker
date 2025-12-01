@@ -6,7 +6,7 @@ Creates SQLite database for WorkingBlock storage using the latest schema.
 
 import sys
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, UTC
 
 # Add project root to PYTHONPATH
 project_root = Path(__file__).parent
@@ -67,7 +67,7 @@ def setup_database():
 
     print("\nRunning CRUD tests...")
 
-    now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
     test_block = WorkingBlock(
         id="test_working_id",
         project_name="test_project",

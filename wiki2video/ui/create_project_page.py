@@ -7,6 +7,7 @@ from pathlib import Path
 import re
 from typing import Any, Dict, List, Tuple
 
+from wiki2video.cli.script import build_project
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.llm_agent.mcp.tools.image_search.tool import ImageSearchTool
 from wiki2video.llm_agent.utils.markdown_loader import MarkdownPromptLoader
@@ -20,9 +21,7 @@ from wiki2video.ui.shared import (
     get_character_choices,
 )
 
-# ------------------------------
-# NEW orchestrator (no direction select)
-# ------------------------------
+# NEW orchestrator
 from wiki2video.llm_agent.agents.wiki2video import Wiki2VideoInteractiveOrchestrator
 orchestrator = Wiki2VideoInteractiveOrchestrator()
 
@@ -172,36 +171,6 @@ def _reset_project_blocks(project_name: str):
         dao.delete(wb.id)
 
 
-def _save_project(
-    project_name, size, character, global_context, show_character_overlay,
-    script_text, bgm, bg_video, burn
-):
-    blocks = parse_script_lines(script_text, character, size, bg_video, show_character_overlay)
-    if not blocks:
-        return "❌ 无法解析脚本"
-
-    _reset_project_blocks(project_name)
-
-    project_dir = PROJECT_ROOT / project_name
-    project_dir.mkdir(parents=True, exist_ok=True)
-
-    project_payload = {
-        "project_name": project_name,
-        "size": size,
-        "script": [asdict(b) for b in blocks],
-        "project_status": ProjectStatus.CREATED.value,
-        "global_context": global_context,
-        "show_character_overlay": bool(show_character_overlay),
-        "bgm_path": bgm,
-        "background_video": bg_video,
-        "burn_subtitle": bool(burn),
-    }
-
-    json_path = project_dir / f"{project_name}.json"
-    write_json(json_path, project_payload)
-
-    return f"✅ 项目已创建：`{json_path}`"
-
 
 # ============================================================
 # Main UI
@@ -216,13 +185,12 @@ def build_create_project_page():
     with gr.Column():
         gr.Markdown("# 🆕 Wiki → Video Project Builder")
 
-        # Project Name
         project_name = gr.Textbox(
             label="Project Name (Required)",
             placeholder="例如：mohenjo_demo",
         )
 
-        # Step 1 — Input Wiki
+        # Step 1
         gr.Markdown("## Step 1 — 输入 Wikipedia 地址")
 
         wiki_input = gr.Textbox(
@@ -230,16 +198,21 @@ def build_create_project_page():
             placeholder="例如：https://en.wikipedia.org/wiki/Mohenjo-daro",
         )
 
-        # One Button: Run Full Pipeline
         fetch_btn = gr.Button("🎬 从 Wiki 自动生成完整剧本（含插图）")
 
-        # Script Output
         script_text = gr.Textbox(label="Generated Script", lines=14)
+
+        global_context = gr.Textbox(label="Global Context", lines=3)
 
         # Step 2 — Image Review
         with gr.Accordion("🖼️ 图片审查", open=False):
             image_status = gr.Markdown("等待剧本…")
-            image_target_dropdown = gr.Dropdown(label="图片标记", choices=[])
+            image_target_dropdown = gr.Dropdown(
+                label="图片标记",
+                choices=[],
+                value=None,
+                interactive=False,
+            )
             refresh_images_btn = gr.Button("刷新图片列表")
             regrab_images_btn = gr.Button("重新获取图片")
             main_image_preview = gr.Image(label="当前主图", type="filepath")
@@ -248,7 +221,7 @@ def build_create_project_page():
             apply_image_btn = gr.Button("保存主图", variant="primary")
             image_state = gr.State([])
 
-        # Step 3 — Project Settings
+        # Step 3 — Settings
         gr.Markdown("## Step 3 — 项目设置")
 
         size = gr.Radio(
@@ -261,13 +234,11 @@ def build_create_project_page():
             choices=character_choices,
             value=default_character_value,
         )
-        global_context = gr.Textbox(label="Global Context", lines=2)
         bgm_dropdown = gr.Dropdown(label="Background Music", choices=bgm_choices)
         bg_video_dropdown = gr.Dropdown(label="Background Video", choices=bg_video_choices)
         burn_subtitle = gr.Checkbox(label="Burn Subtitles", value=True)
         show_character_overlay = gr.Checkbox(label="显示角色人像", value=True)
 
-        # Create Project
         create_btn = gr.Button("📁 创建项目")
         status = gr.Markdown("")
 
@@ -277,14 +248,23 @@ def build_create_project_page():
 
     async def _run_full_pipeline(url, pname):
         if not pname.strip():
-            return "❌ 请先填写 Project Name"
+            return "❌ 请先填写 Project Name", ""
 
-        script = await orchestrator.run_full(url, pname)
+        script, gctx = await orchestrator.run_full(url, pname)
+        return script, gctx
+
+    # small wrapper so refresh_image only receives script
+    def _after_script_fetched(script, gctx):
         return script
 
+    # ---- RUN (script + global_context) ----
     fetch_btn.click(
         _run_full_pipeline,
         inputs=[wiki_input, project_name],
+        outputs=[script_text, global_context],   # AUTO FILL CONTEXT
+    ).then(
+        _after_script_fetched,
+        inputs=[script_text, global_context],
         outputs=[script_text],
     ).then(
         refresh_image_review,
@@ -299,6 +279,7 @@ def build_create_project_page():
         ],
     )
 
+    # ---- Image Review Buttons ----
     refresh_images_btn.click(
         refresh_image_review,
         inputs=[project_name, script_text],
@@ -332,8 +313,9 @@ def build_create_project_page():
         ],
     )
 
+    # ---- Create Project ----
     create_btn.click(
-        _save_project,
+        build_project,
         inputs=[
             project_name, size, default_character, global_context,
             show_character_overlay, script_text,

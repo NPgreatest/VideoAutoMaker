@@ -88,9 +88,6 @@ class WikiFetcherAndCleanerWorker:
         print("    🔴 No URL resolved!")
         return None
 
-    # ---------------------------
-    # LLM 小节总结 (同步)
-    # ---------------------------
     def summarize_section(self, text: str):
         print(f"    🔵 STEP: summarize_section (len={len(text)} chars)")
         system_prompt = (
@@ -185,7 +182,7 @@ class WikiFetcherAndCleanerWorker:
         all_text = []
 
         # 准备保存图片目录
-        img_dir = Path(f"./project/{project_name}/image_candidates")
+        img_dir = Path(f"./project/{project_name}/images")
         img_dir.mkdir(parents=True, exist_ok=True)
         print(f"🟡 Image directory: {img_dir}")
 
@@ -238,7 +235,7 @@ class WikiFetcherAndCleanerWorker:
 
             structured.append({
                 "heading": heading,
-                "summary": summary,
+                "summary": summary if summary else cleaned,
                 "word_count": wc,
                 "images": sec_imgs
             })

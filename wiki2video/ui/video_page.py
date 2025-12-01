@@ -177,6 +177,7 @@ def build_video_page() -> None:
             video_retry_dropdown = gr.Dropdown(
                 label="选择需要重试的工作块",
                 choices=[],
+                value=None,
                 allow_custom_value=False,
             )
             retry_button = gr.Button("Retry Video Block")
@@ -217,5 +218,4 @@ def build_video_page() -> None:
         inputs=video_project,
         outputs=[video_table, video_status, final_video_view, video_retry_dropdown, generate_video_btn],
     )
-
 

@@ -9,7 +9,7 @@ import shutil
 import subprocess
 import uuid
 from dataclasses import dataclass
-from datetime import datetime
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import Any, Dict, Optional, Tuple
 
@@ -247,7 +247,7 @@ class RemotionMethod(BaseMethod):
         template_name = getattr(config, "animation_type", None) or (spec.config or {}).get("template")
         template_name = self.TEMPLATE_ALIASES.get(template_name, template_name)
 
-        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
         working_id = str(uuid.uuid4())
         config_json = dict(spec.config or {})
         config_json["template"] = template_name

@@ -7,7 +7,7 @@ import re
 import uuid
 from pathlib import Path
 from typing import List
-from datetime import datetime
+from datetime import datetime, UTC
 
 import backoff
 import requests
@@ -96,7 +96,7 @@ class FishAudioMethod(BaseMethod):
         
         # Create WorkingBlock
         working_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
         
         working_block = WorkingBlock(
             id=working_id,

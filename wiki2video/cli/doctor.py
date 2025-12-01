@@ -16,7 +16,7 @@ load_dotenv()
 app = typer.Typer(
     help="Verify local dependencies and API keys.",
     invoke_without_command=True,
-    no_args_is_help=True,
+    no_args_is_help=False,
 )
 
 
@@ -42,7 +42,7 @@ def _check_node() -> Tuple[str, str]:
 
 
 def _check_remotion_env() -> Tuple[str, str]:
-    project_dir = Path("videogen/methods/remotion_animation/remotion_project")
+    project_dir = Path("wiki2video/methods/remotion_animation/remotion_project")
     pkg = project_dir / "package.json"
     node_modules = project_dir / "node_modules"
     if not pkg.exists():

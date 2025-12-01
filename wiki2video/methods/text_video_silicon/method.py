@@ -4,7 +4,7 @@ import json
 import subprocess
 import uuid
 from pathlib import Path
-from datetime import datetime
+from datetime import datetime, UTC
 from dacite import from_dict
 
 from wiki2video.methods.base import BaseMethod
@@ -82,7 +82,7 @@ class TextVideoSilicon(BaseMethod):
         """
         # Create WorkingBlock
         working_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
         
         working_block = WorkingBlock(
             id=working_id,

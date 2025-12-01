@@ -228,7 +228,11 @@ def build_audio_page() -> None:
         gr.Markdown("### 🎙️ Audio Pipeline")
 
         with gr.Row():
-            audio_project = gr.Dropdown(choices=project_choices, label="选择项目")
+            audio_project = gr.Dropdown(
+                choices=project_choices,
+                label="选择项目",
+                value=project_choices[0] if project_choices else None,
+            )
             audio_refresh = gr.Button("刷新")
 
         audio_banner = gr.Markdown("")
@@ -251,7 +255,7 @@ def build_audio_page() -> None:
 
         with gr.Row():
             gen_btn = gr.Button("Generate Audio", variant="primary")
-            retry_dropdown = gr.Dropdown(label="选择重试块")
+            retry_dropdown = gr.Dropdown(label="选择重试块", choices=[], value=None)
             retry_btn = gr.Button("Retry")
 
         action_msg = gr.Markdown("")
