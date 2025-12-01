@@ -3,7 +3,7 @@ import json
 import threading
 from pathlib import Path
 from typing import List, Optional
-from datetime import datetime
+from datetime import datetime, UTC
 
 from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 
@@ -116,15 +116,13 @@ class WorkingBlockDAO:
             modify_time=modify_time
         )
 
-    # -----------------------------------------------------------
-    #  CRUD
-    # -----------------------------------------------------------
     def insert(self, wb: WorkingBlock) -> bool:
         with self._lock:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             try:
-                now = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+
                 wb.create_time = wb.create_time or now
                 wb.modify_time = wb.modify_time or now
 
@@ -165,7 +163,8 @@ class WorkingBlockDAO:
             conn = sqlite3.connect(self.db_path)
             cursor = conn.cursor()
             try:
-                wb.modify_time = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                now = datetime.now(UTC).replace(microsecond=0).isoformat().replace("+00:00", "Z")
+                wb.modify_time = now
 
                 cursor.execute(f"""
                     UPDATE working_blocks SET

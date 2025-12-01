@@ -63,15 +63,11 @@ INPUTS FOR THIS TASK
 ----------------------------------------------------------------
 
 1. Selected Video Direction:
-```
 
-{{USER_SELECTED_DIRECTION_JSON}}
+{USER_SELECTED_DIRECTION_JSON}
 
-```
 
 2. Cleaned Wikipedia Text:
-```
 
-{{CLEANED_TEXT}}
+{CLEANED_TEXT}
 
-```

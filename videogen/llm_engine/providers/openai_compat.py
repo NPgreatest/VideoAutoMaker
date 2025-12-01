@@ -43,6 +43,8 @@ class OpenAICompatProvider:
 
         backoff = LLM_BACKOFF_BASE
         for attempt in range(1, LLM_MAX_RETRIES + 1):
+            if attempt > 1:
+                print(f'chat attempt {attempt}/{LLM_MAX_RETRIES}')
             try:
                 resp = requests.post(
                     self.api_url,

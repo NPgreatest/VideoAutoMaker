@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 from typing import TYPE_CHECKING, Optional, Set
-from datetime import datetime
+from datetime import datetime, UTC
 
 from videogen.methods.registry import create_method
 from videogen.pipeline.working_block import WorkingBlockStatus
@@ -83,7 +83,7 @@ class Worker:
             "config": config_dict,
             "output": output_file_name,
             "status": result.status.value,
-            "timestamp": datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "timestamp": datetime.now(UTC).isoformat(timespec="seconds") + "Z",
             "duration_sec": result.duration_sec,
             "error": result.error
         }

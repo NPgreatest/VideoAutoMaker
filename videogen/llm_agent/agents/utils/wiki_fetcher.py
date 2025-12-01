@@ -1,27 +1,15 @@
-import os
 import re
 import mwclient
 import mwparserfromhell
-import requests
 from urllib.parse import urlparse, unquote
+from pathlib import Path
+import requests
+import time
 
 from ...utils.markdown_loader import MarkdownPromptLoader
 from ....llm_engine.client import get_engine
 
-
 loader = MarkdownPromptLoader()
-
-
-async def summarize_section(text):
-    prompt = loader.load_from_registry("wiki", "section_summary")
-    engine = get_engine()
-
-    res = engine.ask_text(
-        prompt.format(text=text),
-        temperature=0.3,
-        max_tokens=180
-    )
-    return res.strip()
 
 
 class WikiFetcherAndCleanerWorker:
@@ -33,13 +21,16 @@ class WikiFetcherAndCleanerWorker:
     # 工具函数：解析输入 URL 或标题
     # ---------------------------
     def normalize_title(self, user_input: str) -> str:
+        print(f"\n🔵 STEP: normalize_title('{user_input}')")
         if user_input.startswith(("http://", "https://")):
             parsed = urlparse(user_input)
             m = re.match(r"^/wiki/(.+)$", parsed.path)
             if not m:
                 raise ValueError("Invalid Wikipedia URL")
             title = unquote(m.group(1)).replace("_", " ")
+            print(f"🟡 Normalized title from URL = {title}")
             return title
+        print(f"🟡 Normalized title = {user_input.strip()}")
         return user_input.strip()
 
     # ---------------------------
@@ -65,7 +56,7 @@ class WikiFetcherAndCleanerWorker:
         return imgs
 
     # ---------------------------
-    # 文本清洗
+    # 清洗 wiki 原文
     # ---------------------------
     def deep_clean_text(self, t: str) -> str:
         t = re.sub(r"<ref.*?>.*?</ref>", "", t, flags=re.DOTALL)
@@ -76,9 +67,10 @@ class WikiFetcherAndCleanerWorker:
         return t.strip()
 
     # ---------------------------
-    # 获取图片真实 URL
+    # 解析真实 wiki 图片 URL
     # ---------------------------
     def get_real_url(self, file_name):
+        print(f"    🔍 Resolving image URL for: {file_name}")
         title = f"File:{file_name}"
         for site in (self.COMMONS, self.ENWIKI):
             try:
@@ -87,97 +79,162 @@ class WikiFetcherAndCleanerWorker:
                 for p in pages.values():
                     info = p.get("imageinfo")
                     if info:
-                        return info[0].get("url")
-            except Exception:
+                        url = info[0].get("url")
+                        print(f"    🟡 Found URL = {url}")
+                        return url
+            except Exception as e:
+                print(f"    🔴 Error fetching from site: {e}")
                 continue
+        print("    🔴 No URL resolved!")
         return None
+
+    # ---------------------------
+    # LLM 小节总结 (同步)
+    # ---------------------------
+    def summarize_section(self, text: str):
+        print(f"    🔵 STEP: summarize_section (len={len(text)} chars)")
+        system_prompt = (
+            "You are a highly accurate summarization assistant specialized in Wikipedia content. "
+            "Your job is to extract the core meaning of a section using only the provided text. "
+            "Your summaries must be factual, neutral, and strictly grounded in the source. "
+            "Never add external knowledge, assumptions, or interpretations."
+        )
+
+        user_prompt = (
+            "Summarize the following Wikipedia section.\n"
+            "Requirements:\n"
+            "1. Length: 1–3 sentences.\n"
+            "2. Style: objective, concise, Wikipedia-like.\n"
+            "3. No hallucination. Use ONLY information contained in the text.\n"
+            "4. No lists, no bullets—only plain sentences.\n\n"
+            f"=== BEGIN TEXT ===\n{text}\n=== END TEXT ==="
+        )
+
+        try:
+            engine = get_engine()
+            res = engine.chat(
+                messages=[
+                    {"role": "system", "content": system_prompt},
+                    {"role": "user", "content": user_prompt},
+                ],
+                temperature=0.3,
+                max_tokens=180,
+            )
+            summary = res["content"].strip()
+            print(f"    🟡 Summary done (len={len(summary)} chars)")
+            return summary
+        except Exception as e:
+            print(f"    🔴 [ERROR] LLM generation failed: {e}")
+            return ""
 
     # ---------------------------
     # 下载图片
     # ---------------------------
-    def download_image(self, url: str, local_path: str):
-        os.makedirs(os.path.dirname(local_path), exist_ok=True)
-
+    def download_image(self, url, out_path: Path):
+        print(f"    📥 Downloading {url} -> {out_path}")
+        out_path.parent.mkdir(parents=True, exist_ok=True)
         headers = {
-            "User-Agent": (
-                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
-                "AppleWebKit/537.36 (KHTML, like Gecko) "
-                "Chrome/120.0 Safari/537.36"
-            ),
+            "User-Agent": "Mozilla/5.0",
             "Referer": "https://en.wikipedia.org/"
         }
         try:
-            resp = requests.get(url, headers=headers, timeout=20)
-            if resp.status_code == 200:
-                with open(local_path, "wb") as f:
-                    f.write(resp.content)
-                return True
-        except Exception:
-            pass
-
-        return False
-
+            r = requests.get(url, headers=headers, timeout=15)
+            r.raise_for_status()
+            with open(out_path, "wb") as f:
+                f.write(r.content)
+            print(f"    🟡 Image saved.")
+            return True
+        except Exception as e:
+            print(f"    🔴 [Image] Download error: {e}")
+            return False
 
     # ---------------------------
-    # 主流程：抓取 + 清理 + 总结 + 下载图片
+    # 主流程（同步版本）
     # ---------------------------
-    async def run(self, user_input: str, project_name: str):
-        # 创建图片文件夹路径
-        image_dir = f"./project/{project_name}/image_candidates"
-        os.makedirs(image_dir, exist_ok=True)
+    def run(self, user_input: str, project_name: str):
+        print("\n==============================")
+        print("   🚀 WikiFetcher RUN START")
+        print("==============================\n")
 
+        t0 = time.time()
+
+        # 1. 解析标题
         title = self.normalize_title(user_input)
+
+        # 2. 获取页面
+        print(f"\n🔵 STEP: Fetching page '{title}'")
         site = mwclient.Site("en.wikipedia.org")
         page = site.pages[title]
 
         if page.redirect:
+            print("🟡 Page is redirect → resolving...")
             page = page.resolve_redirect()
 
+        # 3. 下载原始 wikicode
+        print("🔵 STEP: Reading raw wiki text")
         raw = page.text()
+        print(f"🟠 Raw text length: {len(raw)} chars")
+
         wikicode = mwparserfromhell.parse(raw)
         sections = wikicode.get_sections(include_lead=True, flat=True)
+        print(f"🟡 Found {len(sections)} sections")
 
+        # 4. 输出结构
         structured = []
         all_images = []
         all_text = []
 
-        for sec in sections:
+        # 准备保存图片目录
+        img_dir = Path(f"./project/{project_name}/image_candidates")
+        img_dir.mkdir(parents=True, exist_ok=True)
+        print(f"🟡 Image directory: {img_dir}")
+
+        # 5. 逐节处理
+        for idx, sec in enumerate(sections):
+            print(f"\n====================")
+            print(f" 🔵 SECTION {idx+1}/{len(sections)}")
+            print("====================")
+
             heading_nodes = sec.filter_headings()
             heading = heading_nodes[0].title.strip() if heading_nodes else "Introduction"
+            print(f"🟡 Heading = {heading}")
 
             raw_text = self.clean_raw_text(sec)
             cleaned = self.deep_clean_text(raw_text)
-
-            # summary
-            summary = await summarize_section(cleaned)
             wc = len(cleaned.split())
+            print(f"🟠 Cleaned word_count = {wc}")
 
-            # process images
+            # 6. LLM summary
+            if wc > 3000:
+                summary = self.summarize_section(cleaned)
+            else:
+                summary = ""
+                print("🟡 Skipping summary (too short section)")
+
+            # 7. 图片处理
+            imgs = self.extract_images(sec)
+            print(f"🟠 Found {len(imgs)} wiki image refs")
+
             sec_imgs = []
-            for img in self.extract_images(sec):
+            for img in imgs:
                 file_name = img["file_name"]
-                caption = self.deep_clean_text(img["caption"])
-
                 url = self.get_real_url(file_name)
                 if not url:
+                    print("🔴 Skip (no URL)")
                     continue
 
-                # 生成本地文件路径
-                local_path = os.path.join(image_dir, file_name)
-
-                # 下载文件
+                local_path = img_dir / file_name
                 self.download_image(url, local_path)
 
-                img_obj = {
+                obj = {
                     "file_name": file_name,
-                    "caption": caption,
+                    "caption": self.deep_clean_text(img["caption"]),
                     "url": url,
-                    "local_path": local_path,
+                    "local_path": str(local_path),
                     "section": heading
                 }
-
-                sec_imgs.append(img_obj)
-                all_images.append(img_obj)
+                sec_imgs.append(obj)
+                all_images.append(obj)
 
             structured.append({
                 "heading": heading,
@@ -188,8 +245,18 @@ class WikiFetcherAndCleanerWorker:
 
             all_text.append(cleaned)
 
-        return {
+        # 8. 生成最终输出
+        output = {
             "clean_text": "\n\n".join(all_text),
             "images": all_images,
             "sections": structured
         }
+
+        print("\n==============================")
+        print("   ✅ WikiFetcher RUN DONE")
+        print("==============================")
+        print(f"⏱ Total time = {time.time() - t0:.2f} sec")
+        print(f"🟠 Total sections = {len(structured)}")
+        print(f"🟠 Total images   = {len(all_images)}\n")
+
+        return output
