@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "wiki2video"
+version = "0.1.0"
+description = "wiki2video command line interface"
+requires-python = ">=3.9"
+
+[project.scripts]
+wiki2video = "wiki2video.cli.main:app"
+
+
+[tool.setuptools]
+package-dir = {"" = "."}
+
+[tool.setuptools.packages.find]
+include = ["wiki2video*"]

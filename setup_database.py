@@ -12,8 +12,8 @@ from datetime import datetime
 project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
-from videogen.dao.working_block_dao import WorkingBlockDAO
-from videogen.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.dao.working_block_dao import WorkingBlockDAO
+from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 
 
 REQUIRED_COLUMNS = [
