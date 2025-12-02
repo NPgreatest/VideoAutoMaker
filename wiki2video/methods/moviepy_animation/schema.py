@@ -1,5 +1,5 @@
 """
-ActionSchema for remotion_animation method.
+ActionSchema for the MoviePy animation method (legacy name: remotion_animation).
 """
 from dataclasses import dataclass
 from typing import Dict, Any
@@ -7,9 +7,9 @@ from wiki2video.schema.schema_registry import register_schema
 
 
 @dataclass
-class RemotionAnimationSchema:
+class MoviepyAnimationSchema:
     """
-    Schema for remotion_animation method configuration.
+    Schema for remotion_picture method configuration.
     """
     project_name: str = None
     target_name: str = None
@@ -25,5 +25,4 @@ class RemotionAnimationSchema:
 
 
 # Register schema
-register_schema("remotion_picture", RemotionAnimationSchema)
-
+register_schema("moviepy_animation", MoviepyAnimationSchema)

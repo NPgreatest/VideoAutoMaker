@@ -73,7 +73,7 @@ Wiki2Video 是一个 **可投入生产的自动化 AI 视频制作系统**，可
 
 6. **自动剪辑与渲染**
 
-   * 基于 Remotion 的模板体系
+   * 基于 MoviePy 的模板体系
    * 字幕、背景音乐、转场、节奏全自动
    * 多格式统一导出
 
@@ -135,6 +135,5 @@ cp .env_example .env
 * **大模型（LLM）：** DeepSeek-V3 / OpenAI / Qwen
 * **文本转视频（T2V）：** Wan2.1 / Wan 2.2 Turbo
 * **文本转语音（TTS）：** GPT-SoVITS（支持自定义角色）
-* **视频渲染：** Remotion（React + FFmpeg）
+* **视频渲染：** MoviePy（Python + FFmpeg）
 * **后端：** Python、SQLite、JSON 可编辑流水线
-

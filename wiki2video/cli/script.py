@@ -5,7 +5,7 @@ import typer
 from pathlib import Path
 from typing import Optional
 
-from wiki2video.cli.core_project_builder import build_project, ScriptBuildResult
+from wiki2video.cli.core_project_builder import build_project_from_wiki, ScriptBuildResult
 
 def script_command(
     wiki: str = typer.Argument(..., help="Wikipedia URL or topic"),
@@ -21,7 +21,7 @@ def script_command(
     typer.secho("🚀 Running full Wiki → Video pipeline...", fg="cyan")
 
     try:
-        result: ScriptBuildResult = build_project(
+        result: ScriptBuildResult = build_project_from_wiki(
             wiki_input=wiki,
             project_name=project_name,
             size=size,

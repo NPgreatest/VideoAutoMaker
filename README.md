@@ -74,7 +74,7 @@ Whether you’re building educational content, history explainers, knowledge cha
 
 6. **Video editing & rendering**
 
-   * Remotion templates
+   * MoviePy templates
    * Subtitles
    * Music
    * Transitions
@@ -141,5 +141,5 @@ And fill in required API keys.
 * **LLMs:** DeepSeek-V3 / OpenAI / Qwen
 * **Text-to-Video:** Wan2.1 / Wan 2.2 Turbo
 * **TTS:** GPT-SoVITS (supports custom voices)
-* **Video Rendering:** Remotion (React + FFmpeg)
+* **Video Rendering:** MoviePy (Python + FFmpeg)
 * **Backend:** Python, SQLite, JSON-structured pipeline

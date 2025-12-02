@@ -44,7 +44,7 @@ class ScriptBuildResult:
     blocks: List[ScriptBlock]
     global_context: str
 
-def build_project(
+def build_project_from_wiki(
     wiki_input: str,
     *,
     project_name: Optional[str],
@@ -90,6 +90,61 @@ def build_project(
         "background_video": bg_video,
         "burn_subtitle": bool(burn),
         "source": wiki_input,
+    }
+
+    json_path = project_dir / f"{project_name}.json"
+    write_json(json_path, payload)
+
+    return ScriptBuildResult(
+        project_name=project_name,
+        project_path=json_path,
+        script_text=script_text,
+        blocks=blocks,
+        global_context=global_context,
+    )
+
+
+
+def build_project_from_script(
+    script_text: str,
+    project_name: Optional[str],
+    *,
+    size: str,
+    character: str,
+    bgm: Optional[str],
+    bg_video: Optional[str],
+    burn: bool,
+    show_overlay: bool,
+    global_context: str,
+) -> ScriptBuildResult:
+
+    blocks = parse_script_lines(
+        script_text,
+        character,
+        size,
+        bg_video,
+        show_overlay,
+    )
+    if not blocks:
+        raise RuntimeError("Failed to parse script into blocks.")
+
+    project_dir = Path("project") / project_name
+    project_dir.mkdir(parents=True, exist_ok=True)
+
+    # save script.txt
+    (project_dir / "script.txt").write_text(script_text, encoding="utf-8")
+
+    # save project.json
+    payload: Dict[str, Any] = {
+        "project_name": project_name,
+        "size": size,
+        "script": [asdict(b) for b in blocks],
+        "project_status": ProjectStatus.CREATED.value,
+        "global_context": global_context,
+        "show_character_overlay": bool(show_overlay),
+        "bgm_path": bgm,
+        "background_video": bg_video,
+        "burn_subtitle": bool(burn),
     }
 
     json_path = project_dir / f"{project_name}.json"

@@ -7,7 +7,8 @@ from pathlib import Path
 import re
 from typing import Any, Dict, List, Tuple
 
-from wiki2video.cli.script import build_project
+from wiki2video.cli.core_project_builder import build_project_from_script
+from wiki2video.cli.script import build_project_from_wiki
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.llm_agent.mcp.tools.image_search.tool import ImageSearchTool
 from wiki2video.llm_agent.utils.markdown_loader import MarkdownPromptLoader
@@ -171,6 +172,43 @@ def _reset_project_blocks(project_name: str):
         dao.delete(wb.id)
 
 
+# ============================================================
+# UI Wrapper for build_project (fix argument mismatch)
+# ============================================================
+def build_project_ui(
+    project_name,
+    size,
+    default_character,
+    global_context,
+    show_character_overlay,
+    script_text,
+    bgm_path,
+    bg_video_path,
+    burn_subtitle,
+):
+    """
+    UI wrapper: maps UI inputs into the exact keyword-only arguments
+    required by build_project().
+    """
+    try:
+        # ⚠ 关键：严格按照错误提示中的 keyword-only 参数传入
+        result = build_project_from_script(
+            script_text,
+            project_name,
+            size=size,
+            character=default_character,
+            global_context=global_context,
+            show_overlay=show_character_overlay,
+            bgm=bgm_path,
+            bg_video=bg_video_path,
+            burn=burn_subtitle,
+        )
+
+        return f"✅ 项目创建成功：{project_name}\n\n{result}"
+
+    except Exception as e:
+        return f"❌ 创建项目失败：{e}"
+
 
 # ============================================================
 # Main UI
@@ -315,11 +353,18 @@ def build_create_project_page():
 
     # ---- Create Project ----
     create_btn.click(
-        build_project,
+        build_project_ui,
         inputs=[
-            project_name, size, default_character, global_context,
-            show_character_overlay, script_text,
-            bgm_dropdown, bg_video_dropdown, burn_subtitle,
+            project_name,
+            size,
+            default_character,
+            global_context,
+            show_character_overlay,
+            script_text,
+            bgm_dropdown,
+            bg_video_dropdown,
+            burn_subtitle,
         ],
         outputs=[status],
     )
+

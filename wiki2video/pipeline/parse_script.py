@@ -84,7 +84,7 @@ def parse_script_lines(
             if appear_flag:
                 cfg["appear"] = True
 
-            last_sb.actions.append(ActionSpec(type="remotion_picture", config=cfg))
+            last_sb.actions.append(ActionSpec(type="moviepy_animation", config=cfg))
             continue
 
         # ====================================================
@@ -113,7 +113,7 @@ def parse_script_lines(
                 cfg["appear"] = True
 
             last_sb.actions.append(ActionSpec(
-                type="remotion_picture",
+                type="moviepy_animation",
                 config=cfg,
             ))
             continue
@@ -178,7 +178,7 @@ def parse_script_lines(
                     }
                 ))
                 sb.actions.append(ActionSpec(
-                    type="remotion_picture",
+                    type="moviepy_animation",
                     config={
                     "template": "ElasticClip",
                     "workdir": ".",
@@ -187,7 +187,7 @@ def parse_script_lines(
                 ))
 
         # ============================================
-        # Step 3: Character overlay (remotion_picture)
+        # Step 3: Character overlay (moviepy_animation)
         # ============================================
         if show_character_overlay:
             slide_template = (
@@ -219,7 +219,7 @@ def parse_script_lines(
                 picture_config["imageMode"] = custom_image_mode
 
             sb.actions.append(ActionSpec(
-                type="remotion_picture",
+                type="moviepy_animation",
                 config=picture_config
             ))
 

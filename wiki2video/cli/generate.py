@@ -9,7 +9,7 @@ from typing import Optional
 import typer
 from dotenv import load_dotenv
 
-from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project
+from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project_from_wiki
 from wiki2video.pipeline.pipeline import run_pipeline
 
 load_dotenv()
@@ -49,7 +49,7 @@ def generate(
 
     # Step 1 — Build project
     try:
-        script_result: ScriptBuildResult = build_project(
+        script_result: ScriptBuildResult = build_project_from_wiki(
             wiki_input=url_or_topic,
             project_name=project_name,
             size=size,

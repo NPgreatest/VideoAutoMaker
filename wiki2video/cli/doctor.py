@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import os
 import subprocess
-from pathlib import Path
 from typing import List, Tuple
 
 import typer
@@ -37,19 +36,17 @@ def _check_ffmpeg() -> Tuple[str, str]:
     return _run_version(["ffmpeg", "-version"])
 
 
-def _check_node() -> Tuple[str, str]:
-    return _run_version(["node", "-v"])
+def _check_moviepy() -> Tuple[str, str]:
+    try:
+        import moviepy  # noqa: F401
+        import moviepy.editor as mpe  # noqa: F401
 
-
-def _check_remotion_env() -> Tuple[str, str]:
-    project_dir = Path("wiki2video/methods/remotion_animation/remotion_project")
-    pkg = project_dir / "package.json"
-    node_modules = project_dir / "node_modules"
-    if not pkg.exists():
-        return "error", f"package.json missing under {project_dir}"
-    if not node_modules.exists():
-        return "warn", f"Install dependencies in {project_dir} (npm install)"
-    return "ok", "package.json and node_modules detected"
+        version = getattr(moviepy, "__version__", "installed")
+        return "ok", f"moviepy {version}"
+    except ImportError:
+        return "error", "moviepy not installed (pip install moviepy)"
+    except Exception as exc:  # pragma: no cover - defensive
+        return "warn", f"moviepy import issue: {exc}"
 
 
 def _check_keys() -> List[Tuple[str, str, str]]:
@@ -88,8 +85,7 @@ def main(ctx: typer.Context) -> None:
         return
 
     _print_result("ffmpeg", *_check_ffmpeg())
-    _print_result("node", *_check_node())
-    _print_result("Remotion", *_check_remotion_env())
+    _print_result("moviepy", *_check_moviepy())
 
     for name, status, detail in _check_keys():
         _print_result(name, status, detail)
