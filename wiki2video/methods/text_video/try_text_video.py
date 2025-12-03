@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-try_text_video.py - Concise examples of using TextVideoSilicon with the new worker system
+try_text_video.py - Concise examples of using TextVideo with the new worker system
 Demonstrates the method-integrated worker system for text-to-video generation
 Limited to 3 videos to minimize API costs
 """
@@ -8,7 +8,7 @@ Limited to 3 videos to minimize API costs
 from __future__ import annotations
 import time
 from pathlib import Path
-from wiki2video.methods.text_video_silicon import TextVideoSilicon
+from wiki2video.methods.text_video import TextVideo
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.schema.schema import ScriptBlock
 
@@ -23,7 +23,7 @@ def create_test_output_dir():
 def wait_for_video_completion(working_id: str, timeout_seconds: int = 300) -> bool:
     """Wait for a video generation task to complete by polling the process_working_block method"""
     dao = WorkingBlockDAO()
-    method = TextVideoSilicon()
+    method = TextVideo()
     start_time = time.time()
     
     print(f"⏳ Waiting for video generation to complete...")
@@ -65,7 +65,7 @@ def wait_for_video_completion(working_id: str, timeout_seconds: int = 300) -> bo
 def process_working_block_directly(working_id: str) -> bool:
     """Process a WorkingBlock directly using the method (single check)"""
     dao = WorkingBlockDAO()
-    method = TextVideoSilicon()
+    method = TextVideo()
     
     working_block = dao.get_working_block(working_id)
     if not working_block:
@@ -88,7 +88,7 @@ def example_1_basic_video():
     print("🎬 Example 1: Basic Text-to-Video")
     print("=" * 40)
     
-    method = TextVideoSilicon()
+    method = TextVideo()
     workdir = create_test_output_dir()
     
     block = ScriptBlock(
@@ -135,7 +135,7 @@ def example_2_multiple_videos():
     print("🎬 Example 2: Multiple Videos (2 more)")
     print("=" * 40)
     
-    method = TextVideoSilicon()
+    method = TextVideo()
     workdir = create_test_output_dir()
     
     blocks = [
@@ -191,7 +191,7 @@ def example_3_prompt_generation():
     print("🎬 Example 3: Prompt Generation")
     print("=" * 40)
     
-    method = TextVideoSilicon()
+    method = TextVideo()
     
     test_texts = [
         "人工智能正在改变世界",
@@ -208,7 +208,7 @@ def example_3_prompt_generation():
 
 def main():
     """Run all examples"""
-    print("🎥 TextVideoSilicon Examples (3 Videos Total)")
+    print("🎥 TextVideo Examples (3 Videos Total)")
     print("=" * 50)
     print("Limited to 3 videos to minimize API costs")
     print()

@@ -1,17 +1,35 @@
-from dotenv import load_dotenv
-import os
+from __future__ import annotations
 
-# 自动加载当前目录下的 .env 文件
-load_dotenv()
+from wiki2video.config.config_manager import config
 
 
+def get_llm_timeout_seconds() -> int:
+    value = config.get("global_config", "llm_timeout_seconds")
+    try:
+        return int(value) if value is not None else 120
+    except (TypeError, ValueError):
+        return 120
 
-# 环境变量（可在 .env 中配置）
-LLM_API_URL = os.getenv("LLM_API_URL", "https://api.siliconflow.cn/v1/chat/completions")
-LLM_API_KEY = os.getenv("SILICONFLOW_API_TOKEN")
-LLM_DEFAULT_MODEL = os.getenv("LLM_DEFAULT_MODEL", "deepseek-ai/DeepSeek-V3")
 
-# 请求超时/重试
-LLM_TIMEOUT_SECONDS = int(os.getenv("LLM_TIMEOUT_SECONDS", "120"))
-LLM_MAX_RETRIES = int(os.getenv("LLM_MAX_RETRIES", "3"))
-LLM_BACKOFF_BASE = float(os.getenv("LLM_BACKOFF_BASE", "0.6"))
+def get_llm_backoff_base() -> float:
+    value = config.get("global_config", "llm_backoff_base")
+    try:
+        return float(value) if value is not None else 0.6
+    except (TypeError, ValueError):
+        return 0.6
+
+
+def get_llm_backoff_max_tries() -> int:
+    value = config.get("backoff_max_tries")
+    try:
+        return int(value) if value is not None else 5
+    except (TypeError, ValueError):
+        return 5
+
+
+def get_llm_backoff_max_time() -> int:
+    value = config.get("backoff_max_time")
+    try:
+        return int(value) if value is not None else 30
+    except (TypeError, ValueError):
+        return 30

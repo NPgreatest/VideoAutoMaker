@@ -120,13 +120,13 @@ Wiki2Video 是一个 **可投入生产的自动化 AI 视频制作系统**，可
 python videogen/gradio_app.py
 ```
 
-配置环境变量：
+配置文件位于 `~/.config/wiki2video/config.json`，会在首次运行时自动创建。可以通过以下命令查看或写入：
 
 ```
-cp .env_example .env
+wiki2video config --show
+wiki2video config --set platforms.llm=openai
+wiki2video config --set api_keys.openai_api_key=sk-xxx
 ```
-
-并填入所需 API Key。
 
 ---
 

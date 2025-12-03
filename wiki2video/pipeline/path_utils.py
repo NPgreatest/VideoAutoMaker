@@ -22,7 +22,7 @@ def get_action_output_dir(
         project_root: Root directory (usually workdir)
         project_name: Project identifier under /project/
         block_id: ScriptBlock.id (e.g., "L1")
-        method_name: BaseMethod.NAME (e.g., "fish_audio", "remotion_picture")
+        method_name: BaseMethod.NAME (e.g., "text_audio", "remotion_picture")
         working_block_id: WorkingBlock.id (unique UUID)
         
     Returns:
@@ -62,4 +62,3 @@ def get_meta_file_path(action_dir: Path) -> Path:
         Path to meta.json: {action_dir}/meta.json
     """
     return action_dir / "meta.json"
-

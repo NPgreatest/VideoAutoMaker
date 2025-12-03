@@ -3,18 +3,14 @@
 Base validator class for the videogen validation system.
 
 This is the base class of validator, every validator should extend this class.
-This base class need to have abstract method of validate, and make a global validator 
-instance, every file can use the validator list or function to validate the project, 
-the entry point is just the project name.
-
-And add a main function, using .env project name to validate the specific project.
+This base class need to have abstract method of validate, and make a global validator
+instance, every file can use the validator list or function to validate the project,
+the entry point is just the project name provided on the command line.
 """
 
 from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from pathlib import Path
-import os
-from dotenv import load_dotenv
 
 
 class BaseValidator(ABC):
@@ -147,13 +143,13 @@ def validate_project(project_name: str, validator_names: Optional[List[str]] = N
 
 
 def main():
-    """Main function to validate a specific project using .env PROJECT_NAME."""
-    load_dotenv()
-    project_name = os.getenv("PROJECT_NAME")
-    
-    if not project_name:
-        print("❌ Error: PROJECT_NAME not set in .env file")
-        return
+    """Main function to validate a specific project."""
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Validate a wiki2video project.")
+    parser.add_argument("project_name", help="Name of the project under ./project/")
+    args = parser.parse_args()
+    project_name = args.project_name
     
     print(f"🔍 Validating project: {project_name}")
     

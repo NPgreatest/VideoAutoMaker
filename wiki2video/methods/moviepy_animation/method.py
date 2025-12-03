@@ -15,7 +15,7 @@ from typing import Any, Dict, Optional, Tuple
 
 from dacite import from_dict
 
-from wiki2video.core.config_manager import ConfigManager
+from wiki2video.config.config_manager import config
 from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.moviepy_animation.renderer import MoviePyRenderer
 from wiki2video.methods.moviepy_animation.template_registry import TEMPLATE_REGISTRY
@@ -76,16 +76,19 @@ class MoviePyAnimationMethod(BaseMethod):
 
     def _env_defaults(self) -> Dict[str, float]:
         keys = [
-            "TIKTOK_FORMAT_PICTURE_WIDTH_RATIO",
-            "TIKTOK_FORMAT_PICTURE_X_RATIO",
-            "TIKTOK_FORMAT_PICTURE_Y_RATIO",
-            "TIKTOK_FORMAT_PICTURE_BOTTOM_MARGIN_RATIO",
-            "LANDSCAPE_FORMAT_PICTURE_WIDTH_RATIO",
-            "LANDSCAPE_FORMAT_PICTURE_X_RATIO",
-            "LANDSCAPE_FORMAT_PICTURE_Y_RATIO",
-            "LANDSCAPE_FORMAT_PICTURE_BOTTOM_MARGIN_RATIO",
+            "tiktok_format_picture_width_ratio",
+            "tiktok_format_picture_x_ratio",
+            "tiktok_format_picture_y_ratio",
+            "tiktok_format_picture_bottom_margin_ratio",
+            "landscape_format_picture_width_ratio",
+            "landscape_format_picture_x_ratio",
+            "landscape_format_picture_y_ratio",
+            "landscape_format_picture_bottom_margin_ratio",
         ]
-        return {key: self._coalesce_numeric(ConfigManager.get(key), default=0.0) or 0.0 for key in keys}
+        return {
+            key: self._coalesce_numeric(config.get("global_config", key), default=0.0) or 0.0
+            for key in keys
+        }
 
     def _probe_video_duration(self, video_path: Path) -> Optional[float]:
         try:
@@ -230,7 +233,7 @@ class MoviePyAnimationMethod(BaseMethod):
                             error=None,
                         )
 
-                    if prev_wb.method_name == "fish_audio" and duration_sec is None:
+                    if prev_wb.method_name == "text_audio" and duration_sec is None:
                         result_data = json.loads(prev_wb.result_json or "{}")
                         duration_sec = result_data.get("duration_sec")
                         continue

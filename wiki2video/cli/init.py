@@ -9,14 +9,11 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from dotenv import load_dotenv
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.pipeline.parse_script import parse_script_lines
 from wiki2video.pipeline.utils import load_character_config, write_json
 from wiki2video.schema.project_schema import ProjectStatus
-
-load_dotenv()
 
 app = typer.Typer(
     help="Create a project by pasting a script manually.",

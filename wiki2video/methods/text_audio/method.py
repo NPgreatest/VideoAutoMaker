@@ -2,40 +2,30 @@
 from __future__ import annotations
 
 import json
-import os
 import re
 import uuid
+from datetime import datetime, UTC
 from pathlib import Path
 from typing import List
-from datetime import datetime, UTC
 
-import backoff
-import requests
-from dotenv import load_dotenv
-from fish_audio_sdk import Session, TTSRequest, Prosody
-from pydub import AudioSegment
 from dacite import from_dict, Config
+from pydub import AudioSegment
 
+from wiki2video.config.config_manager import config
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.registry import register_method
-from wiki2video.methods.audio_fish.schema import AudioFishSchema
+from wiki2video.methods.text_audio.api_router import tts_router
+from wiki2video.pipeline.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.pipeline.utils import get_character_info
 from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
-from wiki2video.pipeline.utils import get_character_info
-from wiki2video.pipeline.path_utils import get_action_output_dir, get_output_file_path
 
 # -------------------------------
-# 环境变量和 Fish Audio 初始化
+# 环境变量和 Text Audio 初始化
 # -------------------------------
-load_dotenv()
-AUDIO_FISH_API_KEY = os.getenv("AUDIO_FISH_API_KEY")
-BACKOFF_MAX_TRIES = int(os.getenv("BACKOFF_MAX_TRIES", "5"))
-BACKOFF_MAX_TIME = int(os.getenv("BACKOFF_MAX_TIME", "120"))
-
-session = Session(AUDIO_FISH_API_KEY)
 
 
 def _split_text_into_phrases(text: str) -> List[str]:
@@ -46,36 +36,9 @@ def _split_text_into_phrases(text: str) -> List[str]:
     return [p.strip() for p in phrases if len(p.strip()) > 0]
 
 
-# -------------------------------
-# TTS 核心函数
-# -------------------------------
-@backoff.on_exception(
-    backoff.expo,
-    (requests.exceptions.RequestException, requests.exceptions.HTTPError),
-    max_tries=BACKOFF_MAX_TRIES,
-    max_time=BACKOFF_MAX_TIME,
-    jitter=backoff.random_jitter
-)
-def _tts_fish_request_internal(text: str, out_path: Path, model_id: str) -> bytes:
-    """调用 Fish Audio TTS，返回音频字节"""
-    request = TTSRequest(
-        text=text,
-        reference_id=model_id,
-        prosody=Prosody(volume=-4.0, speed=1.2)
-    )
-    out_path.parent.mkdir(parents=True, exist_ok=True)
-    audio_buffer = bytearray()
-    with open(out_path, "wb") as f:
-        for chunk in session.tts(request):
-            f.write(chunk)
-            audio_buffer.extend(chunk)
-    print(f"[FishTTS] ✅ Segment audio saved to {out_path}")
-    return bytes(audio_buffer)
-
-
 @register_method
-class FishAudioMethod(BaseMethod):
-    NAME = "fish_audio"
+class TextAudioMethod(BaseMethod):
+    NAME = "text_audio"
     OUTPUT_KIND = "audio"
 
     def run(self, spec: ActionSpec) -> WorkingBlock:
@@ -129,7 +92,7 @@ class FishAudioMethod(BaseMethod):
             schema_class = get_schema(self.NAME)
             # Use Config to allow missing fields with default values
             config = from_dict(schema_class, config_dict, config=Config(check_types=False))
-            
+
             # Get text and model_id
             text = config.text
             if not text or not text.strip():
@@ -142,7 +105,7 @@ class FishAudioMethod(BaseMethod):
                 character_info = get_character_info(character)
                 if character_info and "model_id" in character_info:
                     model_id = character_info["model_id"]
-                    print(f"[FishTTS] Using model_id from character '{character}': {model_id}")
+                    print(f"[TextAudio] Using model_id from character '{character}': {model_id}")
             
             if not model_id:
                 raise Exception("Model id cannot be empty")
@@ -174,7 +137,7 @@ class FishAudioMethod(BaseMethod):
             for idx, phrase in enumerate(phrases):
                 segment_path = action_dir / f"seg{idx+1}.wav"
                 try:
-                    segment_bytes = _tts_fish_request_internal(phrase, segment_path, model_id)
+                    segment_bytes = tts_router(phrase, segment_path, model_id)
                     if not segment_bytes:
                         continue
                     
@@ -191,7 +154,7 @@ class FishAudioMethod(BaseMethod):
                     })
                     cursor_ms += seg_duration
                 except Exception as e:
-                    print(f"[FishTTS] Error generating segment {idx+1}: {e}")
+                    print(f"[TextAudio] Error generating segment {idx+1}: {e}")
                     continue
             
             if len(segments_meta) == 0:
@@ -202,7 +165,7 @@ class FishAudioMethod(BaseMethod):
             combined_audio.export(output_path, format="wav")
             total_duration = len(combined_audio) / 1000.0  # Convert to seconds
             
-            print(f"[FishTTS] ✅ Combined audio exported: {output_path}")
+            print(f"[TextAudio] ✅ Combined audio exported: {output_path}")
             
             # Update WorkingBlock
             wb.status = WorkingBlockStatus.SUCCESS
@@ -221,11 +184,11 @@ class FishAudioMethod(BaseMethod):
             for prev_id in wb.prev_ids:
                 prev_working_block = dao.get_working_block(prev_id)
                 print(f"have prev_id, prev_working_block = {prev_working_block}")
-                if prev_working_block and prev_working_block.method_name == "fish_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
+                if prev_working_block and prev_working_block.method_name == "text_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
                     start_time_sec = prev_working_block.accumulated_duration_sec
                     prev_result = json.loads(prev_working_block.result_json or "{}")
                     prev_duration = prev_result.get("duration_sec",0)
-                    print(f"find prev fish audio {prev_id} , {prev_duration}")
+                    print(f"find prev text audio {prev_id} , {prev_duration}")
 
             wb.accumulated_duration_sec = start_time_sec + prev_duration
             wb.result_json = json.dumps({
@@ -240,7 +203,7 @@ class FishAudioMethod(BaseMethod):
             
         except Exception as e:
             error_msg = f"Audio generation error: {str(e)}"
-            print(f"[FishTTS] ❌ {error_msg}")
+            print(f"[TextAudio] ❌ {error_msg}")
             import traceback
             traceback.print_exc()
             

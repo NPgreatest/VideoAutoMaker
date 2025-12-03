@@ -27,7 +27,6 @@ API Response format:
 """
 
 import requests
-import os
 from typing import Dict, Any, Optional
 from pathlib import Path
 
@@ -35,6 +34,8 @@ try:
     from .base_validator import BaseValidator
 except ImportError:
     from base_validator import BaseValidator
+
+from wiki2video.config.config_manager import config
 
 
 class SiliconFlowAccountValidator(BaseValidator):
@@ -112,8 +113,8 @@ class SiliconFlowAccountValidator(BaseValidator):
     
     def _get_api_token(self) -> Optional[str]:
         """Get SiliconFlow API token from environment variables."""
-        # Try different possible environment variable names
-        token = os.getenv("SILICONFLOW_API_TOKEN") or os.getenv("SILICONFLOW_TOKEN") or os.getenv("API_TOKEN")
+        platform = config.get("platforms", "text_to_video")
+        token = config.get_api_key(platform) or config.get("api_keys", "siliconflow_api_key")
         return token
     
     def _fetch_account_info(self, api_token: str) -> Optional[Dict[str, Any]]:

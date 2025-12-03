@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import os, json, subprocess, shutil
+import json, subprocess, shutil
 from pathlib import Path
 from collections import Counter, defaultdict
 from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
-from dotenv import load_dotenv
+from wiki2video.config.config_manager import config
 from wiki2video.pipeline.utils import read_json
 from wiki2video.pipeline.gen_cover import gen_cover
 from wiki2video.schema.project_schema import ScriptBlock
@@ -20,9 +20,8 @@ AUDIO_RATE = "44100"
 AUDIO_BR = "192k"
 PIX_FMT = "yuv420p"
 
-load_dotenv()
-BGM_PATH = os.getenv("BGM_PATH")
-FONT_PATH = os.getenv("FONT_PATH")
+BGM_PATH = config.get("global_config", "bgm_path")
+FONT_PATH = config.get("global_config", "font_path")
 
 
 # ========== 辅助函数 ==========
@@ -79,11 +78,11 @@ def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: st
     return block_blocks[-1].id
 
 def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
-    """Find the fish_audio working block for a given block_id.
-    Uses action_index to find the first fish_audio action (typically action_index=0).
+    """Find the text_audio working block for a given block_id.
+    Uses action_index to find the first text_audio action (typically action_index=0).
     """
     # Try to get by method_name first (optimized query)
-    audio_block = dao.get_by_method_name(project_name, block_id, "fish_audio")
+    audio_block = dao.get_by_method_name(project_name, block_id, "text_audio")
     if audio_block and audio_block.status == WorkingBlockStatus.SUCCESS:
         return audio_block.id
     
@@ -92,7 +91,7 @@ def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_
     audio_blocks = [
         wb for wb in all_blocks 
         if wb.block_id == block_id 
-        and wb.method_name == "fish_audio" 
+        and wb.method_name == "text_audio" 
         and wb.status == WorkingBlockStatus.SUCCESS
     ]
     
@@ -597,7 +596,10 @@ def concat_pipeline(project_name:str):
 
 # ========== 入口 ==========
 if __name__=="__main__":
-    load_dotenv()
-    name=os.getenv("PROJECT_NAME")
-    if not name: raise SystemExit("Please set PROJECT_NAME")
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Concat stage runner.")
+    parser.add_argument("project_name", help="Project name under ./project/")
+    args = parser.parse_args()
+    name = args.project_name
     concat_pipeline(name)

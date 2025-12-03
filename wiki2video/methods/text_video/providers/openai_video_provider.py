@@ -1,0 +1,54 @@
+# text_video/providers/openai_video_provider.py
+from __future__ import annotations
+from pathlib import Path
+from openai import OpenAI
+
+from wiki2video.config.config_manager import config
+from .status_adapter import normalize_status
+
+
+client = OpenAI(api_key=config.get_api_key("openai"))
+
+
+def openai_submit_video(prompt: str, size: str) -> str | None:
+    try:
+        video = client.videos.create(
+            model="sora-2",
+            prompt=prompt,
+            size=size,
+        )
+        print(f"[OpenAI] Submitted: {video.id}")
+        return video.id
+    except Exception as e:
+        print("[OpenAI] Submit error:", e)
+        return None
+
+
+def openai_check_status(video_id: str) -> dict:
+    try:
+        video = client.videos.retrieve(video_id)
+        raw_status = video.status
+        return {
+            "raw": video,
+            "status": normalize_status("openai", raw_status)
+        }
+    except Exception as e:
+        return {"status": "error", "raw": {"error": str(e)}}
+
+
+def openai_extract_url(raw_video_obj):
+    # raw_video_obj 是 openai.Video 对象
+    try:
+        # 最新 SDK 的下载方式
+        return raw_video_obj.assets.get("video")
+    except:
+        return None
+
+
+def openai_download_video(video_id: str, output_path: Path):
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+
+    content = client.videos.download_content(video_id, variant="video")
+    content.write_to_file(str(output_path))
+
+    print(f"[OpenAI] Video saved → {output_path}")

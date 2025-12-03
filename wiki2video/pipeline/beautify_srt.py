@@ -1,12 +1,9 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-import os
 import re
 from pathlib import Path
 from typing import List, Tuple
-
-from dotenv import load_dotenv
 
 
 # Chinese and common punctuation marks. We keep them as individual tokens and break lines after them
@@ -508,5 +505,4 @@ def beautify_srt_at_path(srt_path: Path, dest_path: Path | None = None) -> Path:
     out_path = dest_path if dest_path is not None else srt_path
     out_path.write_text(render_srt_blocks(new_blocks), encoding="utf-8")
     return out_path
-
 

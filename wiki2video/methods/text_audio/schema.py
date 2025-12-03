@@ -1,5 +1,5 @@
 """
-ActionSchema for audio_fish method.
+ActionSchema for text_audio method.
 """
 from dataclasses import dataclass
 from typing import Optional
@@ -7,9 +7,9 @@ from wiki2video.schema.schema_registry import register_schema
 
 
 @dataclass
-class AudioFishSchema:
+class TextAudioSchema:
     """
-    Schema for audio_fish method configuration.
+    Schema for text_audio method configuration.
     
     Attributes:
         text: Text to convert to speech
@@ -30,5 +30,4 @@ class AudioFishSchema:
 
 
 # Register schema
-register_schema("fish_audio", AudioFishSchema)
-
+register_schema("text_audio", TextAudioSchema)

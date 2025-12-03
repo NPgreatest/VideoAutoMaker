@@ -4,14 +4,14 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from wiki2video.methods.audio_fish.method import FishAudioMethod
+from wiki2video.methods.text_audio.method import TextAudioMethod
 from wiki2video.schema.schema import ScriptBlock
 
 
 def try_audio_engine():
-    """测试 SiliconAudioMethod，生成默认角色和 Mark 角色的两段音频。"""
+    """测试 TextAudioMethod，生成默认角色和指定角色的两段音频。"""
     workdir = Path("_test_out").resolve()
-    project = "audio_demo_fish"
+    project = "audio_demo_text_audio"
 
     # ===================== 测试文本 =====================
     text_huzi = (
@@ -19,10 +19,10 @@ def try_audio_engine():
     )
 
 
-    m = FishAudioMethod()
+    m = TextAudioMethod()
     res_default = m.run(
         project=project,
-        target_name="fish_audio_default",
+        target_name="text_audio_default",
         text=text_huzi,
         workdir=workdir,
         block=ScriptBlock(character="huchenfeng",id="L1",text=text_huzi),

@@ -126,13 +126,13 @@ Run the interface:
 python videogen/gradio_app.py
 ```
 
-Set up environment variables by copying:
+Configuration lives in `~/.config/wiki2video/config.json`. It is created automatically; inspect or update it via:
 
 ```
-cp .env_example .env
+wiki2video config --show
+wiki2video config --set platforms.llm=openai
+wiki2video config --set api_keys.openai_api_key=sk-xxx
 ```
-
-And fill in required API keys.
 
 ---
 

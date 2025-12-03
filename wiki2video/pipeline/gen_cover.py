@@ -1,19 +1,17 @@
 #!/usr/bin/env python3
 from __future__ import annotations
-import os
 import re
 from pathlib import Path
 from typing import Dict, List
 from dacite import from_dict
-from dotenv import load_dotenv
 import cv2
 from PIL import Image, ImageDraw, ImageFont
 
+from wiki2video.config.config_manager import config
 from wiki2video.schema.project_schema import ScriptBlock
 
 # ========== 配置项 ==========
-load_dotenv()
-FONT_PATH = os.getenv("FONT_PATH")
+FONT_PATH = config.get("global_config", "font_path")
 
 
 # ============================================================
@@ -274,11 +272,12 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
 
 
 if __name__ == "__main__":
-    load_dotenv()
-    project_name = os.getenv("PROJECT_NAME")
+    import argparse
 
-    if not project_name:
-        raise SystemExit("Please set PROJECT_NAME in .env file")
+    parser = argparse.ArgumentParser(description="Generate cover images for a project.")
+    parser.add_argument("project_name", help="Project name under ./project/")
+    args = parser.parse_args()
+    project_name = args.project_name
 
     project_dir = Path(f"project/{project_name}")
     json_path = project_dir / f"{project_name}.json"

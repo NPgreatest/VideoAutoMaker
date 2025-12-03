@@ -58,7 +58,7 @@ def _collect_video_dashboard(project_name: str):
 
     dao = WorkingBlockDAO()
     video_blocks = [
-        wb for wb in dao.get_all(project_name) if wb.method_name != "fish_audio"
+        wb for wb in dao.get_all(project_name) if wb.method_name != "text_audio"
     ]
 
     rows: List[Dict[str, Any]] = []
@@ -144,7 +144,7 @@ def retry_video_block(project_name: str, working_block_id: str):
 
     dao = WorkingBlockDAO()
     wb = dao.get_by_id(working_block_id)
-    if not wb or wb.method_name == "fish_audio":
+    if not wb or wb.method_name == "text_audio":
         return "⚠️ 未找到对应的视频任务。", gr.update(value=None)
 
     wb.status = WorkingBlockStatus.PENDING
@@ -218,4 +218,3 @@ def build_video_page() -> None:
         inputs=video_project,
         outputs=[video_table, video_status, final_video_view, video_retry_dropdown, generate_video_btn],
     )
-

@@ -3,14 +3,11 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from typing import List, Tuple
 
 import typer
-from dotenv import load_dotenv
-
-load_dotenv()
+from wiki2video.config.config_manager import config
 
 app = typer.Typer(
     help="Verify local dependencies and API keys.",
@@ -51,24 +48,51 @@ def _check_moviepy() -> Tuple[str, str]:
 
 def _check_keys() -> List[Tuple[str, str, str]]:
     checks: List[Tuple[str, str, str]] = []
-    silicon = os.getenv("SILICONFLOW_API_TOKEN")
-    audio_fish = os.getenv("AUDIO_FISH_API_KEY")
-    openai_key = os.getenv("OPENAI_API_KEY")
-
-    if silicon:
-        checks.append(("SiliconFlow API", "ok", "SILICONFLOW_API_TOKEN is set"))
+    llm_platform = config.get("platforms", "llm")
+    llm_key = config.get_api_key(llm_platform)
+    if not llm_key and (llm_platform is None or llm_platform == "siliconflow"):
+        llm_key = config.get("api_keys", "siliconflow_api_key")
+    if llm_platform:
+        if llm_key:
+            checks.append(("LLM", "ok", f"{llm_platform} API key is set"))
+        else:
+            checks.append(("LLM", "error", f"{llm_platform} API key is missing"))
     else:
-        checks.append(("SiliconFlow API", "error", "SILICONFLOW_API_TOKEN is missing"))
+        checks.append(("LLM", "warn", "LLM platform not selected"))
 
-    if audio_fish:
-        checks.append(("AudioFish", "ok", "AUDIO_FISH_API_KEY is set"))
+    tts_platform = config.get("platforms", "tts")
+    tts_key = config.get_api_key(tts_platform)
+    if not tts_key and (tts_platform is None or tts_platform == "text_audio"):
+        tts_key = config.get("api_keys", "text_audio_api_key")
+    if tts_platform:
+        if tts_key:
+            checks.append(("TTS", "ok", f"{tts_platform} API key is set"))
+        else:
+            checks.append(("TTS", "warn", f"{tts_platform} API key is missing"))
     else:
-        checks.append(("AudioFish", "warn", "AUDIO_FISH_API_KEY is missing"))
+        checks.append(("TTS", "warn", "TTS platform not selected"))
 
-    if openai_key:
-        checks.append(("OpenAI (optional)", "ok", "OPENAI_API_KEY is set"))
+    video_platform = config.get("platforms", "text_to_video")
+    video_key = config.get_api_key(video_platform)
+    if not video_key and (video_platform is None or video_platform == "siliconflow"):
+        video_key = config.get("api_keys", "siliconflow_api_key")
+    if video_platform:
+        if video_key:
+            checks.append(("Text-to-Video", "ok", f"{video_platform} API key is set"))
+        else:
+            checks.append(("Text-to-Video", "warn", f"{video_platform} API key is missing"))
     else:
-        checks.append(("OpenAI (optional)", "warn", "OPENAI_API_KEY not set"))
+        checks.append(("Text-to-Video", "warn", "Text-to-video platform not selected"))
+
+    image_platform = config.get("platforms", "image")
+    image_key = config.get_api_key(image_platform)
+    if image_platform:
+        if image_key:
+            checks.append(("Image generation", "ok", f"{image_platform} API key is set"))
+        else:
+            checks.append(("Image generation", "warn", f"{image_platform} API key is missing"))
+    else:
+        checks.append(("Image generation", "warn", "Image platform not selected"))
 
     return checks
 

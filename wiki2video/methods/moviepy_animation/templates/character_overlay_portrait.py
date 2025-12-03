@@ -104,7 +104,12 @@ class CharacterOverlayPortrait(VideoTemplate):
         final_x = width - image_width - base_x if self.config.appear_from == "right" else base_x
 
         if self.config.image_is_video:
-            overlay = VideoFileClip(self.config.image_path, has_mask=True, audio=False)
+            # MOV with alpha support
+            if str(self.config.image_path).lower().endswith(".mov"):
+                overlay = VideoFileClip(self.config.image_path, has_mask=True, audio=False)
+            else:
+                # fallback to normal video (no alpha)
+                overlay = VideoFileClip(self.config.image_path, audio=False)
         else:
             overlay = ImageClip(self.config.image_path)
 

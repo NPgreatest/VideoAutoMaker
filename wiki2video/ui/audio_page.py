@@ -51,7 +51,7 @@ def _collect_audio_data(project_name: str):
     audio_blocks = {
         (wb.block_id or wb.id): wb
         for wb in dao.get_all(project_name)
-        if wb.method_name == "fish_audio"
+        if wb.method_name == "text_audio"
     }
 
     rows = []
@@ -64,7 +64,7 @@ def _collect_audio_data(project_name: str):
         text = block["text"]
 
         audio_action = next(
-            (a for a in block["actions"] if a.get("type") == "fish_audio"),
+            (a for a in block["actions"] if a.get("type") == "text_audio"),
             {}
         )
         character = audio_action.get("config", {}).get("character", "")
@@ -124,7 +124,7 @@ def _collect_audio_data(project_name: str):
 # ----------------------------------------
 # Pagination helper
 # ----------------------------------------
-ITEMS_PER_PAGE = 10
+ITEMS_PER_PAGE = 2
 
 
 def _paginate_audio(audio_items: List[Dict], page: int):
@@ -194,7 +194,7 @@ def retry_audio_block(project_name: str, block_id: str):
     dao = WorkingBlockDAO()
     blocks = [
         wb for wb in dao.get_all(project_name)
-        if wb.method_name == "fish_audio" and (wb.block_id or wb.id) == block_id
+        if wb.method_name == "text_audio" and (wb.block_id or wb.id) == block_id
     ]
 
     if not blocks:

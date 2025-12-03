@@ -52,12 +52,12 @@ def parse_script_lines(
         # 🔥 global flag extraction
         # ============================================
         blank_flag = bool(re.search(r"--blank\b", line))
-        image_mode_match = re.search(r"-imageMode='([^']+)'", line)
+        image_mode_match = re.search(r"--imageMode='([^']+)'", line)
         custom_image_mode = image_mode_match.group(1) if image_mode_match else None
         appear_flag = bool(re.search(r"--appear", line))
 
         line_clean = re.sub(r"--blank", "", line)
-        line_clean = re.sub(r"-imageMode='([^']+)'", "", line_clean).strip()
+        line_clean = re.sub(r"--imageMode='([^']+)'", "", line_clean).strip()
         line_clean = re.sub(r"--appear", "", line_clean).strip()
         print(line_clean, end="\n\n")
         # ============================================
@@ -148,7 +148,7 @@ def parse_script_lines(
 
         # --- Step1: audio ---
         sb.actions.append(ActionSpec(
-            type="fish_audio",
+            type="text_audio",
             config={
                 "text": text,
                 "character": character,

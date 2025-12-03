@@ -37,7 +37,7 @@ class Pipeline:
         self.global_context = global_context
         self.dao = dao or WorkingBlockDAO()
 
-    def build(self, script_block: ScriptBlock, prev_fish_audio_id: Optional[str]) -> Optional[str]:
+    def build(self, script_block: ScriptBlock, prev_text_audio_id: Optional[str]) -> Optional[str]:
         working_blocks = []
 
         block_id = script_block.id
@@ -47,14 +47,14 @@ class Pipeline:
 
         # ---- 遍历 ActionSpec ----
         last_wb_id = None
-        fish_audio_wb_id = None
+        text_audio_wb_id = None
 
         for action_index, action in enumerate(script_block.actions):
 
             # normalize config
             action.config = action.config or {}
             action.config.setdefault("project_name", self.project_name)
-            if self.global_context is not None and action.type in {"fish_audio", "text_video"}:
+            if self.global_context is not None and action.type in {"text_audio", "text_video"}:
                 action.config.setdefault("global_context", self.global_context)
             config_json = json.dumps(action.config, sort_keys=True)
 
@@ -94,9 +94,9 @@ class Pipeline:
                 print(f"[Pipeline] ⏭️  Skipping action {action_index} ({action.type}) - duplicate config found (wb.id: {existing_wb.id})")
                 last_wb_id = existing_wb.id
                 
-                # 保存 fish_audio id（供下一 block 用）
-                if action.type == "fish_audio":
-                    fish_audio_wb_id = existing_wb.id
+                # 保存 text_audio id（供下一 block 用）
+                if action.type == "text_audio":
+                    text_audio_wb_id = existing_wb.id
                 
                 continue
 
@@ -111,28 +111,28 @@ class Pipeline:
             wb.config_json = config_json
 
             # ---- 构建 prev_ids ----
-            if action_index == 0 and action.type == "fish_audio":
-                # ★ 第一 action 且是 fish_audio → 跨 block 依赖
-                if prev_fish_audio_id:
-                    wb.prev_ids = [prev_fish_audio_id]
+            if action_index == 0 and action.type == "text_audio":
+                # ★ 第一 action 且是 text_audio → 跨 block 依赖
+                if prev_text_audio_id:
+                    wb.prev_ids = [prev_text_audio_id]
                 else:
                     wb.prev_ids = []
             else:
                 # ★ 本 block 内链式依赖
                 wb.prev_ids = [last_wb_id] if last_wb_id else []
                 if action.type == "moviepy_animation" and action.config.get("template", None) == "ElasticClip":
-                    wb.prev_ids.append(fish_audio_wb_id)
+                    wb.prev_ids.append(text_audio_wb_id)
 
             # ---- 插 DB ----
             if self.dao.insert(wb):
                 last_wb_id = wb.id
                 working_blocks.append(wb)
 
-                if action.type == "fish_audio":
-                    fish_audio_wb_id = wb.id
+                if action.type == "text_audio":
+                    text_audio_wb_id = wb.id
 
-        # 返回本 block 的 fish_audio working_block.id
-        return fish_audio_wb_id
+        # 返回本 block 的 text_audio working_block.id
+        return text_audio_wb_id
 
     # ----------------------------------------------------------------------
     # 2. Dependency checking (DAG)
@@ -271,7 +271,7 @@ def _parse_project(input_path: Path) -> ProjectJSON:
 
 def _reset_video_error_blocks(project_name: str) -> int:
     """
-    Reset all video (non fish_audio) blocks that are in ERROR status back to PENDING.
+    Reset all video (non text_audio) blocks that are in ERROR status back to PENDING.
     Returns the count of blocks reset.
     """
     dao = WorkingBlockDAO()
@@ -279,7 +279,7 @@ def _reset_video_error_blocks(project_name: str) -> int:
     reset_count = 0
 
     for wb in blocks:
-        if wb.method_name == "fish_audio":
+        if wb.method_name == "text_audio":
             continue
         if wb.status != WorkingBlockStatus.ERROR:
             continue
@@ -303,13 +303,13 @@ def _build_full_dag(project: ProjectJSON) -> Pipeline:
 
 def rebuild_audio_timeline(project_name: str):
     """
-    Rebuild accumulate_duration_sec for all fish_audio working blocks.
+    Rebuild accumulate_duration_sec for all text_audio working blocks.
     Ensures timeline continuity even after partial retries.
     """
     dao = WorkingBlockDAO()
     blocks = dao.get_all(project_name)
 
-    audio_blocks = [wb for wb in blocks if wb.method_name == "fish_audio"]
+    audio_blocks = [wb for wb in blocks if wb.method_name == "text_audio"]
     if not audio_blocks:
         return
 
@@ -374,7 +374,7 @@ def rebuild_audio_timeline(project_name: str):
 
 def run_audio_pipeline(input_path):
     """
-    Stage A: execute fish_audio actions only.
+    Stage A: execute text_audio actions only.
     """
     path = _coerce_input_path(input_path)
     raw = read_json(path)
@@ -387,8 +387,8 @@ def run_audio_pipeline(input_path):
     pipeline = _build_full_dag(project)
     worker = Worker(pipeline)
 
-    print("[Audio Pipeline] Running fish_audio blocks…")
-    jobs = worker.run_until_complete(allowed_methods={"fish_audio"})
+    print("[Audio Pipeline] Running text_audio blocks…")
+    jobs = worker.run_until_complete(allowed_methods={"text_audio"})
     print(f"[Audio Pipeline] Completed {jobs} jobs")
 
     rebuild_audio_timeline(project.project_name)
@@ -396,7 +396,7 @@ def run_audio_pipeline(input_path):
     dao = WorkingBlockDAO()
     audio_blocks = [
         wb for wb in dao.get_all(project.project_name)
-        if wb.method_name == "fish_audio"
+        if wb.method_name == "text_audio"
     ]
 
     if not audio_blocks:
@@ -434,31 +434,19 @@ def run_video_pipeline(input_path):
     pipeline = _build_full_dag(project)
     worker = Worker(pipeline)
 
-    allowed_methods: Set[str] = {
-        action.type
-        for block in project.script
-        for action in block.actions
-        if action.type != "fish_audio"
-    }
-
-    if not allowed_methods:
-        print("[Video Pipeline] No video actions detected. Marking finished.")
-        set_project_status(path, ProjectStatus.FINISHED)
-        return
-
     print("[Video Pipeline] Running non-audio blocks…")
-    jobs = worker.run_until_complete(allowed_methods=allowed_methods)
+    jobs = worker.run_until_complete()
     print(f"[Video Pipeline] Completed {jobs} jobs")
 
     dao = WorkingBlockDAO()
     blocks = dao.get_all(project.project_name)
     errors = [
         wb for wb in blocks
-        if wb.method_name != "fish_audio" and wb.status == WorkingBlockStatus.ERROR
+        if wb.method_name != "text_audio" and wb.status == WorkingBlockStatus.ERROR
     ]
     pending = [
         wb for wb in blocks
-        if wb.method_name != "fish_audio" and wb.status == WorkingBlockStatus.PENDING
+        if wb.method_name != "text_audio" and wb.status == WorkingBlockStatus.PENDING
     ]
 
     if errors or pending:

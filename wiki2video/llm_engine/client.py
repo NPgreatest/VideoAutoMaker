@@ -1,12 +1,16 @@
 from __future__ import annotations
-from typing import List, Dict, Any, Optional
+from typing import List, Optional
 
 from .types import ChatMessage, ChatResult
 from .errors import LLMConfigError
+from .api_router import get_llm_provider_config
 from .settings import (
-    LLM_API_URL, LLM_API_KEY, LLM_DEFAULT_MODEL,
+    get_llm_backoff_base,
+    get_llm_backoff_max_time,
+    get_llm_backoff_max_tries,
+    get_llm_timeout_seconds,
 )
-from .providers import OpenAICompatProvider
+
 
 class LLMEngine:
     """
@@ -16,11 +20,37 @@ class LLMEngine:
     - ask_decision(prompt, keywords) 关键词判定
     - gen_react_jsx(prompt, width, height) 生成 React 组件 JSX
     """
-    def __init__(self, api_url: str = LLM_API_URL, api_key: Optional[str] = LLM_API_KEY, default_model: str = LLM_DEFAULT_MODEL):
-        if not api_key:
-            raise LLMConfigError("Missing LLM_API_KEY / SILICONFLOW_API_TOKEN")
-        self.default_model = default_model
-        self.provider = OpenAICompatProvider(api_url=api_url, api_key=api_key)
+
+    def __init__(
+        self,
+        api_url: Optional[str] = None,
+        api_key: Optional[str] = None,
+        default_model: Optional[str] = None,
+    ):
+        provider_cfg = get_llm_provider_config()
+
+        resolved_api_url = api_url or provider_cfg["api_url"]
+        resolved_api_key = api_key or provider_cfg["api_key"]
+        resolved_default_model = default_model or provider_cfg["default_model"]
+
+        if not resolved_api_key:
+            raise LLMConfigError(
+                f"Missing API key for LLM platform '{provider_cfg['name']}'. "
+                "Set the corresponding api_keys entry or pass api_key explicitly."
+            )
+
+        self.default_model = resolved_default_model
+        provider_cls = provider_cfg["provider_cls"]
+        self.provider_name = provider_cfg["name"]
+
+        self.provider = provider_cls(
+            api_url=resolved_api_url,
+            api_key=resolved_api_key,
+            timeout_seconds=get_llm_timeout_seconds(),
+            max_retries=get_llm_backoff_max_tries(),
+            backoff_base=get_llm_backoff_base(),
+            backoff_max_time=get_llm_backoff_max_time(),
+        )
 
     # -------- 基础接口 --------
     def chat(self, messages: List[ChatMessage], *, model: Optional[str] = None, **kw) -> ChatResult:
@@ -39,9 +69,9 @@ class LLMEngine:
         return next((k for k in positive_keywords if k in text), fallback)
 
 
-
 # -------- 全局单例（简单好用） --------
 _engine_singleton: Optional[LLMEngine] = None
+
 
 def get_engine() -> LLMEngine:
     global _engine_singleton

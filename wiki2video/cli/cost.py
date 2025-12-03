@@ -7,9 +7,6 @@ import json
 from pathlib import Path
 
 import typer
-from dotenv import load_dotenv
-
-load_dotenv()
 
 app = typer.Typer(
     help="Estimate cost based on text_to_video actions inside project JSON.",

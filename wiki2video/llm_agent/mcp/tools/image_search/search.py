@@ -1,7 +1,7 @@
 import requests
 from urllib.parse import urlencode
 
-from wiki2video.core.config_manager import ConfigManager
+from wiki2video.config.config_manager import config
 
 
 def google_image_search(query: str) -> list[str]:
@@ -10,19 +10,17 @@ def google_image_search(query: str) -> list[str]:
     Ordered exactly as Google returns.
     """
 
-    api_key = ConfigManager.get("GOOGLE_API_KEY")
-    # 支持 GOOGLE_CX_KEY 和 GOOGLE_CX 两种键名
-    cx = ConfigManager.get("GOOGLE_CX_KEY")
+    api_key = config.get("api_keys", "google_api_key")
+    cx = config.get("api_keys", "google_cx_key")
 
     if not api_key or not cx:
-        # 提供更详细的错误信息，帮助调试
         api_key_status = "已设置" if api_key else "未设置或为空"
         cx_status = "已设置" if cx else "未设置或为空"
         raise RuntimeError(
             f"缺少 Google API 配置。\n"
             f"GOOGLE_API_KEY: {api_key_status}\n"
-            f"GOOGLE_CX/GOOGLE_CX_KEY: {cx_status}\n"
-            f"请在 Config 页面设置这些值，或确保 .env 文件中包含正确的配置。"
+            f"GOOGLE_CX_KEY: {cx_status}\n"
+            f"请在 Config 页面设置这些值。"
         )
 
     params = {
@@ -43,4 +41,3 @@ def google_image_search(query: str) -> list[str]:
         return []
 
     return [item["link"] for item in data["items"] if "link" in item]
-

@@ -7,12 +7,9 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from dotenv import load_dotenv
 
 from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project_from_wiki
 from wiki2video.pipeline.pipeline import run_pipeline
-
-load_dotenv()
 
 app = typer.Typer(
     help="Generate a video from a Wikipedia topic.",

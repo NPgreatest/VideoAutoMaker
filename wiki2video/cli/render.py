@@ -8,13 +8,10 @@ from pathlib import Path
 from typing import Optional
 
 import typer
-from dotenv import load_dotenv
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.pipeline.pipeline import run_pipeline
 from wiki2video.pipeline.utils import read_json
-
-load_dotenv()
 
 app = typer.Typer(
     help="Render a video from a prepared script JSON file.",
