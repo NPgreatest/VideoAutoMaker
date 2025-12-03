@@ -7,7 +7,7 @@ def normalize_status(platform: str, raw_status: str) -> str:
     - wait
     - error
     """
-    s = raw_status.lower().strip()
+    s = raw_status.strip()
 
     if platform == "siliconflow":
         if s == "Succeed":

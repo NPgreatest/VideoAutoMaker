@@ -34,17 +34,27 @@ def _check_ffmpeg() -> Tuple[str, str]:
 
 
 def _check_moviepy() -> Tuple[str, str]:
+    """
+    Strictly require MoviePy >= 2.x.
+    Older versions using moviepy.editor are not supported.
+    """
     try:
-        import moviepy  # noqa: F401
-        import moviepy.editor as mpe  # noqa: F401
-
-        version = getattr(moviepy, "__version__", "installed")
-        return "ok", f"moviepy {version}"
+        import moviepy
+        version = getattr(moviepy, "__version__", "unknown")
     except ImportError:
         return "error", "moviepy not installed (pip install moviepy)"
-    except Exception as exc:  # pragma: no cover - defensive
-        return "warn", f"moviepy import issue: {exc}"
 
+    # Strict validation for 2.x API
+    try:
+        from moviepy import VideoFileClip  # noqa: F401
+    except Exception:
+        return (
+            "error",
+            f"MoviePy {version} detected but it is not 2.x. "
+            "Please reinstall: pip install moviepy>=2.0.0"
+        )
+
+    return "ok", f"moviepy {version}"
 
 def _check_keys() -> List[Tuple[str, str, str]]:
     checks: List[Tuple[str, str, str]] = []

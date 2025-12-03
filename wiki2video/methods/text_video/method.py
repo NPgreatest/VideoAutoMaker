@@ -130,6 +130,8 @@ class TextVideo(BaseMethod):
             status = resp["status"]
             raw_resp = resp["raw"]
 
+            # print(f"[siliconflow] poll status = {status}, response = {resp}")
+
             # ⏳ 等待中
             if status == "wait":
                 return GenerationResult(

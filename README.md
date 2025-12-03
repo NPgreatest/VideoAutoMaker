@@ -1,145 +1,196 @@
-# 📚➡️🎬 **Wiki2Video — Turn Any Wikipedia Page Into a Visual Story**
+# 📚➡️🎬 **Wiki2Video — Turn Any Wikipedia Page Into a Video**
 
 <p align="center">
   <img src="example/picture/W2V.png" width="180"/>
 </p>
 
-> **Every wiki, instantly visualized.**
-> Transform long Wikipedia pages into short, cinematic videos — fully automatically.
+> **Convert any Wikipedia page into a fully edited video — instantly, with a single CLI command.**
 
-**Wiki2Video** is an AI-powered pipeline that converts **Wikipedia articles** into **high-engagement short videos** for YouTube, TikTok, Instagram Reels, and educational platforms.
-It reads an article, summarizes key sections, generates narration, visuals, subtitles, and produces a polished video — with zero manual editing.
+Wiki2Video is an AI-powered pipeline that transforms **Wikipedia articles** into **high-engagement short videos** with narration, AI-generated visuals, subtitles, and cinematic editing.
 
-**Input:** a Wikipedia URL
-**Output:** a publish-ready short video or long-form explainer
+No UI, no timeline dragging — just:
 
-**[中文版本](README_CN.md) | [English](README.md)**
+```bash
+wiki2video generate https://en.wikipedia.org/wiki/Rongorongo
+```
 
----
+Wiki2Video will automatically:
 
-# 🎬 Examples (YouTube)
+* Fetch the article
+* Summarize and rewrite it into a script
+* Generate narration (TTS)
+* Generate scenes (text-to-video or images)
+* Build subtitles
+* Render the final mp4
 
-| Type               | Description                                    | Preview                                                                                                                        |
-|--------------------| ---------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
-| 🇺🇸 English Short | **Oak Island Curse — Wiki2Video storytelling** | <a href="https://www.youtube.com/shorts/QA5oeompLAU"><img src="https://img.youtube.com/vi/QA5oeompLAU/0.jpg" width="260"></a>  |
-| 🇺🇸 English Short | **Roosevelt & Oak Island — wiki adaptation**   | <a href="https://www.youtube.com/shorts/dA4ruxwJqSw"><img src="https://img.youtube.com/vi/dA4ruxwJqSw/0.jpg" width="260"></a>  |
-| 🇺🇸 English Long  | **Full Wiki2Video workflow demo**              | <a href="https://www.youtube.com/watch?v=0eWaZLgr14M"><img src="https://img.youtube.com/vi/0eWaZLgr14M/0.jpg" width="260"></a> |
-| 🇨🇳 Chinese Long  | **MH370 storytelling in Laogao style** | <a href="https://youtu.be/MPJBOrTR8v0"><img src="https://img.youtube.com/vi/MPJBOrTR8v0/0.jpg" width="260"></a> |
-
----
-
-# 🌟 What Is Wiki2Video?
-
-Wiki2Video is a **production-ready AI pipeline** that transforms raw Wikipedia text into a narrative video. It handles:
-
-* Section extraction from Wikipedia
-* LLM-powered summarization + restructuring
-* Storyboard generation
-* Cinematic narration in English or Chinese
-* Text-to-video generation
-* Auto subtitles + timing alignment
-* Background music + mixing
-* Final rendering in **both vertical (9:16)** and **horizontal (16:9)** formats
-
-Whether you’re building educational content, history explainers, knowledge channels, or fully automated content studios — Wiki2Video lets you scale instantly.
+A complete video pipeline, entirely automated.
 
 ---
 
-# 🧠 How It Works (High-Level Pipeline)
+# 🎬 Example Output (YouTube)
 
-1. **Fetch Wikipedia article**
-   Automatically fetch text, infobox, images, and section structure.
-
-2. **Section-by-section summarization**
-   Using LLMs to generate concise, factual summaries.
-
-3. **Story rewriting for video**
-
-   * Punchy
-   * Hook-driven
-   * 5–8 sec per line
-   * Visual-first wording
-     Optimized for YouTube/TikTok retention.
-
-4. **Visual generation**
-
-   * AI text-to-video for scenes
-   * AI diagram generation when necessary
-   * Automatic image selection from Wikimedia
-
-5. **TTS narration**
-   Multi-voice
-   Emotional control
-   Supports long-form videos
-
-6. **Video editing & rendering**
-
-   * MoviePy templates
-   * Subtitles
-   * Music
-   * Transitions
-   * Final export
+| Type               | Description                                 | Preview                                                                                                                        |
+| ------------------ | ------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------ |
+| 🇺🇸 English Short | Oak Island Mystery — TikTok/Shorts          | <a href="https://www.youtube.com/shorts/QA5oeompLAU"><img src="https://img.youtube.com/vi/QA5oeompLAU/0.jpg" width="260"></a>  |
+| 🇺🇸 English Long  | Voynich Manuscript — YouTube Explainer      | <a href="https://www.youtube.com/watch?v=0eWaZLgr14M"><img src="https://img.youtube.com/vi/0eWaZLgr14M/0.jpg" width="260"></a> |
+| 🇨🇳 Chinese Story | MH370 Explained — Laogao-style storytelling | <a href="https://youtu.be/MPJBOrTR8v0"><img src="https://img.youtube.com/vi/MPJBOrTR8v0/0.jpg" width="260"></a>                |
 
 ---
 
-# 🧩 Features
+# ⚡ Key Features
 
-### ✔ Fully Automated
+### ✅ **Lightning-Fast CLI Workflow**
 
-Just paste a wiki link — everything else is done by the pipeline.
+**Designed for creators and automation pipelines — everything works headless, scriptable, and batch-friendly.**
+You can generate 1 or 100 videos with the same CLI.
 
+### ✅ **Regeneratable, Editable JSON Pipeline**
 
-### ✔ Vertical + Horizontal Modes
+Each project is stored as:
+
+* script blocks
+* narration text
+* video prompts
+* assets
+* timing
+
+Modify only what you want. Re-render anytime.
+
+### ✅ **Vertical + Horizontal Output**
 
 Produce:
 
-* **YouTube Shorts**
-* **TikTok videos**
-* **Long-form 16:9 explainers**
+* **9:16 TikTok / Shorts**
+* **16:9 YouTube explainers**
 
-### ✔ Regeneratable JSON Pipeline
+### ✅ **Professional Rendering (MoviePy + FFmpeg)**
 
-Modify only the blocks you need.
-Everything is stored as editable JSON + assets.
+Under the hood:
 
-### ✔ Creator + Developer Friendly
+* transitions
+* overlays
+* subtitles
+* effects
+* BGM mixing
 
-You can:
+Fully open-source, fully customizable.
 
-* Run locally
-* Extend templates
-* Add custom TTS voices
-* Add your own video assets
-* Run batch jobs
+### ✅ **Flexible AI Provider System**
 
----
+Mix and match AI engines you prefer:
 
-# 🖥️ Web UI (Gradio)
+* **LLM:** OpenAI / Google / SiliconFlow
+* **TTS:** OpenAI / Fish Audio
+* **Text-to-Video:** OpenAI Sora API / SiliconFlow
+* **Images:** OpenAI / SiliconFlow
 
-<p align="center">
-  <img src="example/picture/ui1.png" width="600"/>
-</p>
-
-Run the interface:
+Configure everything via CLI:
 
 ```bash
-python videogen/gradio_app.py
-```
-
-Configuration lives in `~/.config/wiki2video/config.json`. It is created automatically; inspect or update it via:
-
-```
-wiki2video config --show
 wiki2video config --set platforms.llm=openai
 wiki2video config --set api_keys.openai_api_key=sk-xxx
 ```
 
 ---
 
-# 🔧 Technologies Behind Wiki2Video
+# 🛠️ Installation
 
-* **LLMs:** DeepSeek-V3 / OpenAI / Qwen
-* **Text-to-Video:** Wan2.1 / Wan 2.2 Turbo
-* **TTS:** GPT-SoVITS (supports custom voices)
-* **Video Rendering:** MoviePy (Python + FFmpeg)
-* **Backend:** Python, SQLite, JSON-structured pipeline
+### 📦 Coming soon to PyPI
+
+This project will be published to PyPI soon.
+Once available, you will be able to install it directly via:
+
+```bash
+pip install wiki2video
+```
+
+Until then, please install from source:
+
+```bash
+git clone https://github.com/NPgreatest/Wiki2Video.git
+cd wiki2video
+pip install -e .
+```
+
+Check environment:
+
+```bash
+wiki2video doctor
+```
+
+---
+
+# 🧠 Full CLI Overview
+
+Available commands:
+
+```
+wiki2video generate <wiki-url>     # Convert a Wikipedia page into a full project + video
+wiki2video script <wiki-url>       # Generate only a script/story (no video)
+wiki2video render <project_name>   # Render an existing project folder
+wiki2video config --show           # View config.json
+wiki2video config --set ...        # Update config.json
+wiki2video doctor                  # Environment diagnostics
+wiki2video cost                    # Estimate API cost
+wiki2video init                    # Create an empty project template
+```
+
+Powered by **Typer** — includes autocomplete, help menus, and colorized output.
+
+---
+
+# 🎛️ Configuration (config.json)
+
+Config file lives at:
+
+```
+~/.config/wiki2video/config.json
+```
+
+It is generated automatically on first run.
+
+---
+
+# 🖥️ Web UI (Optional)
+
+If you prefer a graphical interface:
+
+```bash
+python wiki2video/gradio_app.py
+```
+
+<p align="center">
+  <img src="example/picture/ui1.png" width="600"/>
+</p>
+
+---
+
+# ⭐ Why Wiki2Video Is Unique
+
+🔥 **The first fully-automated “Wikipedia → Video” CLI pipeline on GitHub.**
+While most tools rely on heavy UI timelines, Wiki2Video is:
+
+* headless
+* programmable
+* automation-friendly
+* suitable for batch video generation
+* ideal for content studios and educational channels
+
+Perfect for:
+
+* automated YouTube channels
+* TikTok/Shorts production
+* research/education content
+* narrative explainers
+* batch processing systems
+* AI-driven content studios
+
+---
+
+# 🎉 Try It Now
+
+```bash
+wiki2video generate https://en.wikipedia.org/wiki/Rongorongo
+```
+
+Sit back — the AI will write, narrate, visualize, subtitle, and render the whole video for you.
