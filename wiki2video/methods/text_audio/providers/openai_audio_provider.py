@@ -4,7 +4,7 @@ import requests
 
 from openai import OpenAI
 
-from wiki2video.methods.text_audio.config_vars import (
+from wiki2video.config.config_vars import (
     BACKOFF_MAX_TRIES,
     BACKOFF_MAX_TIME,
     TEXT_AUDIO_API_KEY,

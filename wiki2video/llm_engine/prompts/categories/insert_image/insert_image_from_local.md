@@ -46,8 +46,8 @@ Your output must be ONLY the final enhanced script. No explanations, no headers.
 
 images:
 
-{IMAGE_SUMMARY}
+{{IMAGE_SUMMARY}}
 
 script text lines:
 
-{SCRIPT_TEXT}
+{{SCRIPT_TEXT}}

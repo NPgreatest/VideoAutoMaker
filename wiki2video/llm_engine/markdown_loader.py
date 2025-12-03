@@ -26,12 +26,12 @@ class MarkdownPromptLoader:
 
     REGISTRY_FILENAME = "registry.json"
 
-    def __init__(self, base_dir: Path | str | None = None) -> None:
-        default_dir = Path(__file__).resolve().parents[1] / "prompts"
-        self.base_dir = Path(base_dir) if base_dir is not None else default_dir
+    def __init__(self) -> None:
+        default_dir = Path(__file__).resolve().parents[0] / "prompts"
+        self.base_dir = default_dir
         if not self.base_dir.exists():
             raise FileNotFoundError(f"Prompt 目录不存在: {self.base_dir}")
-        self.registry_path = self.base_dir / self.REGISTRY_FILENAME
+        self.registry_path = default_dir / self.REGISTRY_FILENAME
 
     def _resolve(self, relative_path: str) -> Path:
         path = (self.base_dir / relative_path).resolve()
@@ -52,12 +52,6 @@ class MarkdownPromptLoader:
         return self._load_registry()
 
     @lru_cache(maxsize=64)
-    def load(self, relative_path: str) -> str:
-        """直接按照 prompts 目录下的相对路径加载模板。"""
-        path = self._resolve(relative_path)
-        return load_markdown(str(path))
-
-    @lru_cache(maxsize=64)
     def load_from_registry(self, category: str, key: str) -> str:
         """根据 registry 的分类与 key 获取模板正文。"""
         registry = self._load_registry()
@@ -67,7 +61,8 @@ class MarkdownPromptLoader:
         relative_path = category_data.get(key)
         if relative_path is None:
             raise KeyError(f"Registry 分类 {category} 中不存在 {key}")
-        return self.load(relative_path)
+        path = self._resolve(relative_path)
+        return load_markdown(str(path))
 
 
 __all__ = ["MarkdownPromptLoader", "load_markdown"]
