@@ -6,16 +6,16 @@ from pathlib import Path
 import requests
 import time
 
-from ...utils.markdown_loader import MarkdownPromptLoader
 from ....llm_engine.client import get_engine
-
-loader = MarkdownPromptLoader()
 
 
 class WikiFetcherAndCleanerWorker:
 
     COMMONS = mwclient.Site("commons.wikimedia.org")
     ENWIKI = mwclient.Site("en.wikipedia.org")
+
+    def __init__(self) -> None:
+        self.engine = get_engine()
 
     # ---------------------------
     # 工具函数：解析输入 URL 或标题
@@ -90,34 +90,13 @@ class WikiFetcherAndCleanerWorker:
 
     def summarize_section(self, text: str):
         print(f"    🔵 STEP: summarize_section (len={len(text)} chars)")
-        system_prompt = (
-            "You are a highly accurate summarization assistant specialized in Wikipedia content. "
-            "Your job is to extract the core meaning of a section using only the provided text. "
-            "Your summaries must be factual, neutral, and strictly grounded in the source. "
-            "Never add external knowledge, assumptions, or interpretations."
-        )
-
-        user_prompt = (
-            "Summarize the following Wikipedia section.\n"
-            "Requirements:\n"
-            "1. Length: 1–3 sentences.\n"
-            "2. Style: objective, concise, Wikipedia-like.\n"
-            "3. No hallucination. Use ONLY information contained in the text.\n"
-            "4. No lists, no bullets—only plain sentences.\n\n"
-            f"=== BEGIN TEXT ===\n{text}\n=== END TEXT ==="
-        )
-
         try:
-            engine = get_engine()
-            res = engine.chat(
-                messages=[
-                    {"role": "system", "content": system_prompt},
-                    {"role": "user", "content": user_prompt},
-                ],
+            summary = self.engine.ask_template(
+                template_ref="wiki_summary.section_summary",
+                variables={"SECTION_TEXT": text},
                 temperature=0.3,
                 max_tokens=180,
             )
-            summary = res["content"].strip()
             print(f"    🟡 Summary done (len={len(summary)} chars)")
             return summary
         except Exception as e:

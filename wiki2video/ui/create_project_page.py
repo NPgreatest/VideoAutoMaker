@@ -2,19 +2,14 @@
 from __future__ import annotations
 
 import gradio as gr
-from dataclasses import asdict
 from pathlib import Path
 import re
 from typing import Any, Dict, List, Tuple
 
 from wiki2video.cli.core_project_builder import build_project_from_script
-from wiki2video.cli.script import build_project_from_wiki
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.llm_agent.mcp.tools.image_search.tool import ImageSearchTool
-from wiki2video.llm_agent.utils.markdown_loader import MarkdownPromptLoader
-from wiki2video.pipeline.parse_script import parse_script_lines
-from wiki2video.pipeline.utils import write_json
-from wiki2video.schema.project_schema import ProjectStatus
+from wiki2video.llm_engine.markdown_loader import MarkdownPromptLoader
 from wiki2video.ui.shared import (
     PROJECT_ROOT,
     get_background_video_choices,

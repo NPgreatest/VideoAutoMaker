@@ -27,25 +27,33 @@ class TextVideo(BaseMethod):
     def __init__(self):
         super().__init__()
 
-    def generate_prompt(self, text: str, global_context: str | None = None) -> str:
+    def generate_prompt(self, text: str, global_context: str | None = "", project_name: str | None = "") -> str:
+        """
+        Convert a line of dialogue into a vivid cinematic scene prompt for text-to-video models.
+        """
         engine = get_engine()
-
-        system_prompt = (
-            "You are an expert cinematic visual director...\n"
-            "Focus only on what the camera would show...\n"
+        context_block = (
+            f"\nGlobal context for the video: {global_context.strip()}"
+            if global_context
+            else project_name
         )
-        context_block = f"\nGlobal context: {global_context.strip()}" if global_context else ""
 
-        user_prompt = f"Input:\n{text.strip()}{context_block}\n\nOutput:"
-
-        res = engine.chat(
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt},
-            ]
+        content = engine.ask_template(
+            template_ref="text_video.cinematic_prompt",
+            variables={
+                "SCRIPT_TEXT": text.strip(),
+                "GLOBAL_CONTEXT_BLOCK": context_block,
+            },
+            temperature=0.6,
+            max_tokens=500,
         )
-        print(res)
-        return res["content"].strip()
+
+        prompt = "\n".join(
+            l for l in content.splitlines() if not l.strip().lower().startswith("title:")
+        ).strip()
+
+        return prompt
+
 
     def run(self, spec: ActionSpec) -> WorkingBlock:
         """
@@ -80,7 +88,7 @@ class TextVideo(BaseMethod):
             # ============ Step 1: 提交任务 ============
             if not request_id:
                 if not config.prompt:
-                    config.prompt = self.generate_prompt(config.text, config.global_context)
+                    config.prompt = self.generate_prompt(config.text, config.global_context,wb.project_name)
                     config_dict["prompt"] = config.prompt
 
                 # 解析项目 video 格式
@@ -102,13 +110,20 @@ class TextVideo(BaseMethod):
                     wb.status = WorkingBlockStatus.ERROR
                     return GenerationResult(
                         status=WorkingBlockStatus.ERROR,
+                        output_path=None,
+                        duration_sec=None,
                         error="Submit failed"
                     )
 
                 config_dict["request_id"] = request_id
                 wb.config_json = json.dumps(config_dict)
 
-                return GenerationResult(status=WorkingBlockStatus.PENDING)
+                return GenerationResult(
+                    status=WorkingBlockStatus.PENDING,
+                    output_path=None,
+                    duration_sec=None,
+                    error=None,
+                )
 
             # ============ Step 2: 轮询状态 ============
             resp = provider["check"](request_id)
@@ -117,7 +132,12 @@ class TextVideo(BaseMethod):
 
             # ⏳ 等待中
             if status == "wait":
-                return GenerationResult(status=WorkingBlockStatus.PENDING)
+                return GenerationResult(
+                    status=WorkingBlockStatus.PENDING,
+                    output_path=None,
+                    duration_sec=None,
+                    error=None,
+                )
 
             # ❌ 错误 → 自动重试（清除 request_id）
             if status == "error":
@@ -126,6 +146,8 @@ class TextVideo(BaseMethod):
                 wb.status = WorkingBlockStatus.PENDING
                 return GenerationResult(
                     status=WorkingBlockStatus.PENDING,
+                    output_path=None,
+                    duration_sec=None,
                     error="AutoRetry: generation failed"
                 )
 
@@ -134,7 +156,12 @@ class TextVideo(BaseMethod):
                 url = provider["extract_url"](raw_resp)
                 if not url:
                     wb.status = WorkingBlockStatus.ERROR
-                    return GenerationResult(status=WorkingBlockStatus.ERROR, error="No video URL")
+                    return GenerationResult(
+                        status=WorkingBlockStatus.ERROR,
+                        output_path=None,
+                        duration_sec=None,
+                        error="No video URL",
+                    )
 
                 # 输出路径
                 workdir = Path(config_dict.get("workdir", "."))
@@ -169,15 +196,23 @@ class TextVideo(BaseMethod):
                 return GenerationResult(
                     status=WorkingBlockStatus.SUCCESS,
                     output_path=wb.output_path,
-                    duration_sec=duration
+                    duration_sec=duration,
+                    error=None,
                 )
 
             # 理论不会走到这里
-            return GenerationResult(status=WorkingBlockStatus.ERROR, error="Unknown status")
+            return GenerationResult(
+                status=WorkingBlockStatus.ERROR,
+                output_path=None,
+                duration_sec=None,
+                error="Unknown status",
+            )
 
         except Exception as e:
             wb.status = WorkingBlockStatus.ERROR
             return GenerationResult(
                 status=WorkingBlockStatus.ERROR,
+                output_path=None,
+                duration_sec=None,
                 error=str(e)
             )

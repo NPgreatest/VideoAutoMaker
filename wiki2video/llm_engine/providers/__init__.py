@@ -1,3 +1,9 @@
-from .openai_compat import OpenAICompatProvider
+from .openai_llm_provider import OpenAILLMProvider
+from .silicon_llm_provider import SiliconLLMProvider
 
-__all__ = ["OpenAICompatProvider"]
+PROVIDER_REGISTRY = {
+    "openai": OpenAILLMProvider,
+    "siliconflow": SiliconLLMProvider,
+}
+
+__all__ = ["PROVIDER_REGISTRY"]

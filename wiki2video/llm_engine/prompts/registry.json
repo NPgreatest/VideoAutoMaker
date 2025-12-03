@@ -16,5 +16,14 @@
   },
   "insert_image": {
     "local": "categories/insert_image/insert_image_from_local.md"
+  },
+  "text_video": {
+    "cinematic_prompt": "categories/text_video/cinematic_prompt.md"
+  },
+  "wiki_summary": {
+    "section_summary": "categories/wiki_summary/section_summary.md"
+  },
+  "test_prompt": {
+    "test_prompt" : "categories/test_prompt/test_prompt.md"
   }
 }

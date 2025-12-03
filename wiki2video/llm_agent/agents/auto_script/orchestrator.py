@@ -7,7 +7,7 @@ from typing import Any, Dict
 
 from ....llm_engine.client import LLMEngine, get_engine
 from ...mcp.tools.image_search.tool import ImageSearchTool
-from ...utils.markdown_loader import MarkdownPromptLoader
+from wiki2video.llm_engine.markdown_loader import MarkdownPromptLoader
 
 
 @dataclass(slots=True)
