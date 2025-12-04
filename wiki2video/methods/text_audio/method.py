@@ -106,9 +106,6 @@ class TextAudioMethod(BaseMethod):
                 if character_info and "model_id" in character_info:
                     model_id = character_info["model_id"]
                     print(f"[TextAudio] Using model_id from character '{character}': {model_id}")
-            
-            if not model_id:
-                raise Exception("Model id cannot be empty")
 
             # Split text into phrases
             phrases = _split_text_into_phrases(text)

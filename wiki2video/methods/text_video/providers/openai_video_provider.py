@@ -37,12 +37,8 @@ def openai_check_status(video_id: str) -> dict:
 
 
 def openai_extract_url(raw_video_obj):
-    # raw_video_obj 是 openai.Video 对象
-    try:
-        # 最新 SDK 的下载方式
-        return raw_video_obj.assets.get("video")
-    except:
-        return None
+    return raw_video_obj.id   # 将 video_id 作为“URL”返回
+
 
 
 def openai_download_video(video_id: str, output_path: Path):

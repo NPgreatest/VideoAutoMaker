@@ -17,6 +17,7 @@ def normalize_status(platform: str, raw_status: str) -> str:
         return "wait"
 
     if platform == "openai":
+        print(f"[text_video] s={s}")
         if s == "completed":
             return "success"
         if s == "failed":

@@ -272,12 +272,8 @@ def gen_cover(project_dir: Path, project_name: str, raw: Dict, blocks: List[Scri
 
 
 if __name__ == "__main__":
-    import argparse
 
-    parser = argparse.ArgumentParser(description="Generate cover images for a project.")
-    parser.add_argument("project_name", help="Project name under ./project/")
-    args = parser.parse_args()
-    project_name = args.project_name
+    project_name = "aaaa"
 
     project_dir = Path(f"project/{project_name}")
     json_path = project_dir / f"{project_name}.json"

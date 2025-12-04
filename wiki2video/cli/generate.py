@@ -35,8 +35,8 @@ def generate(
     character: Optional[str] = typer.Option("young_man_english", "--character", "-c"),
     bgm: Optional[str] = typer.Option(None, "--bgm"),
     bg_video: Optional[str] = typer.Option(None, "--bg-video"),
-    burn_subtitle: bool = typer.Option(True, "--burn/--no-burn"),
-    overlay: bool = typer.Option(True, "--overlay/--no-overlay"),
+    burn_subtitle: bool = typer.Option(False, "--burn/--no-burn"),
+    overlay: bool = typer.Option(False, "--overlay/--no-overlay"),
     project_name: Optional[str] = typer.Option(None, "--name", "-n"),
     output: Optional[Path] = typer.Option(None, "--out", "-o"),
 ):

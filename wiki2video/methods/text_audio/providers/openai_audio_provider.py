@@ -41,6 +41,7 @@ def openai_tts(text: str, out_path: Path, model_id: str) -> bytes:
             input=text,
             instructions="Speak naturally, with normal intonation.",
             response_format="mp3",
+            speed=1.4,
     ) as response:
         # 流式写入文件
         with open(out_path, "wb") as f:
