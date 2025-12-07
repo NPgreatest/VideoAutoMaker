@@ -180,7 +180,6 @@ class TextAudioMethod(BaseMethod):
             prev_duration = 0
             for prev_id in wb.prev_ids:
                 prev_working_block = dao.get_working_block(prev_id)
-                print(f"have prev_id, prev_working_block = {prev_working_block}")
                 if prev_working_block and prev_working_block.method_name == "text_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
                     start_time_sec = prev_working_block.accumulated_duration_sec
                     prev_result = json.loads(prev_working_block.result_json or "{}")
