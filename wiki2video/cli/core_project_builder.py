@@ -7,8 +7,9 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
-from wiki2video.pipeline.parse_script import parse_script_lines
-from wiki2video.pipeline.utils import write_json
+from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.core.parse_script import parse_script_lines
+from wiki2video.core.utils import write_json
 from wiki2video.schema.project_schema import ScriptBlock, ProjectStatus
 from wiki2video.llm_agent.agents.wiki2video.wiki2video_interactive import (
     Wiki2VideoInteractiveOrchestrator,
@@ -25,7 +26,7 @@ def _resolve_project_name(topic: str, override: Optional[str]) -> str:
     suffix = time.strftime("%Y%m%d-%H%M%S") if not override else ""
     candidate = f"{base}-{suffix}" if suffix else base or "wiki2video"
 
-    project_root = Path("project")
+    project_root = WORKING_DIR
     idx = 1
     while (project_root / candidate).exists():
         idx += 1
@@ -72,7 +73,7 @@ def build_project_from_wiki(
     if not blocks:
         raise RuntimeError("Failed to parse script into blocks.")
 
-    project_dir = Path("project") / project_name
+    project_dir = WORKING_DIR / project_name
     project_dir.mkdir(parents=True, exist_ok=True)
 
     # save script.txt
@@ -128,7 +129,7 @@ def build_project_from_script(
     if not blocks:
         raise RuntimeError("Failed to parse script into blocks.")
 
-    project_dir = Path("project") / project_name
+    project_dir = WORKING_DIR / project_name
     project_dir.mkdir(parents=True, exist_ok=True)
 
     # save script.txt

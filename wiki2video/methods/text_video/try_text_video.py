@@ -29,7 +29,7 @@ def wait_for_video_completion(working_id: str, timeout_seconds: int = 300) -> bo
     print(f"⏳ Waiting for video generation to complete...")
     
     while time.time() - start_time < timeout_seconds:
-        working_block = dao.get_working_block(working_id)
+        working_block = dao.get_by_id(working_id)
         if not working_block:
             print(f"❌ WorkingBlock {working_id} not found")
             return False
@@ -67,7 +67,7 @@ def process_working_block_directly(working_id: str) -> bool:
     dao = WorkingBlockDAO()
     method = TextVideo()
     
-    working_block = dao.get_working_block(working_id)
+    working_block = dao.get_by_id(working_id)
     if not working_block:
         print(f"❌ WorkingBlock {working_id} not found")
         return False
@@ -115,7 +115,7 @@ def example_1_basic_video():
         success = wait_for_video_completion(working_id)
         if success:
             dao = WorkingBlockDAO()
-            updated_block = dao.get_working_block(working_id)
+            updated_block = dao.get_by_id(working_id)
             if updated_block and updated_block.block and updated_block.block.video_generation:
                 video_result = updated_block.block.video_generation
                 if hasattr(video_result, 'ok') and video_result.ok:
@@ -171,7 +171,7 @@ def example_2_multiple_videos():
             success = wait_for_video_completion(working_id)
             if success:
                 dao = WorkingBlockDAO()
-                updated_block = dao.get_working_block(working_id)
+                updated_block = dao.get_by_id(working_id)
                 if updated_block and updated_block.block and updated_block.block.video_generation:
                     video_result = updated_block.block.video_generation
                     if hasattr(video_result, 'ok') and video_result.ok:

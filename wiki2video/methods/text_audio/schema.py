@@ -14,7 +14,7 @@ class TextAudioSchema:
     Attributes:
         text: Text to convert to speech
         target_name: Target audio file name
-        project_name: Project name (optional, will be set by PipelineBuilder)
+        project_id: Project id (optional, will be set by PipelineBuilder)
         workdir: Working directory path
         global_context: Global theme/context for the video
         character: Character name for TTS (optional)
@@ -22,7 +22,7 @@ class TextAudioSchema:
     """
     text: str
     target_name: str
-    project_name: Optional[str] = None  # Will be set by PipelineBuilder
+    project_id: Optional[str] = None  # Will be set by PipelineBuilder
     workdir: str = "."
     global_context: Optional[str] = None
     character: Optional[str] = None

@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from typing import Optional
 
-from wiki2video.pipeline.working_block import WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlockStatus
 
 
 @dataclass

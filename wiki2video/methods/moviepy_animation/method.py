@@ -20,13 +20,13 @@ from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.moviepy_animation.renderer import MoviePyRenderer
 from wiki2video.methods.moviepy_animation.template_registry import TEMPLATE_REGISTRY
 from wiki2video.methods.registry import register_method
-from wiki2video.pipeline.utils import get_character_info
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.utils import get_character_info
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
 
 
 @dataclass
@@ -172,6 +172,10 @@ class MoviePyAnimationMethod(BaseMethod):
         schema_class = get_schema(self.NAME)
         config = from_dict(schema_class, spec.config or {})
 
+        if not spec.config:
+            spec.config = {}
+        spec.config.setdefault("project_id", "default")
+
         template_name = getattr(config, "animation_type", None) or (spec.config or {}).get("template")
         template_name = self.TEMPLATE_ALIASES.get(template_name, template_name)
 
@@ -182,7 +186,7 @@ class MoviePyAnimationMethod(BaseMethod):
 
         working_block = WorkingBlock(
             id=working_id,
-            project_name=config_json.get("project_name", "default"),
+            project_id=config_json.get("project_id", "default"),
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
             prev_ids=[],
@@ -190,7 +194,6 @@ class MoviePyAnimationMethod(BaseMethod):
             config_json=json.dumps(config_json),
             result_json="",
             create_time=now,
-            modify_time=now,
         )
 
         return working_block
@@ -223,7 +226,7 @@ class MoviePyAnimationMethod(BaseMethod):
 
             if wb.prev_ids:
                 for prev_id in wb.prev_ids:
-                    prev_wb = dao.get_working_block(prev_id)
+                    prev_wb = dao.get_by_id(prev_id)
 
                     if not prev_wb or prev_wb.status != WorkingBlockStatus.SUCCESS:
                         return GenerationResult(
@@ -247,12 +250,12 @@ class MoviePyAnimationMethod(BaseMethod):
                             continue
 
             workdir = Path(config_dict.get("workdir", ".")).resolve()
-            project_name = wb.project_name or config_dict.get("project_name", "default")
+            project_id = wb.project_id or config_dict.get("project_id", "default")
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
 
             action_dir = get_action_output_dir(
                 project_root=workdir,
-                project_name=project_name,
+                project_id=project_id,
                 block_id=block_id,
                 method_name=wb.method_name,
                 working_block_id=wb.id,
@@ -262,7 +265,7 @@ class MoviePyAnimationMethod(BaseMethod):
             assets_dir = action_dir / "assets"
             assets_dir.mkdir(parents=True, exist_ok=True)
 
-            project_dir = workdir / "project" / project_name
+            project_dir = workdir / "project" / project_id
             copied_assets: list[Path] = []
 
             assets: Dict[str, Optional[str | Path]] = {"video": None, "image": None, "character": None}
@@ -369,7 +372,7 @@ class MoviePyAnimationMethod(BaseMethod):
 
             max_prev_end = 0.0
             for prev_id in wb.prev_ids:
-                prev_wb = dao.get_working_block(prev_id)
+                prev_wb = dao.get_by_id(prev_id)
                 if prev_wb and prev_wb.status == WorkingBlockStatus.SUCCESS:
                     prev_result = json.loads(prev_wb.result_json or "{}")
                     prev_duration = prev_result.get("duration_sec") or 0.0

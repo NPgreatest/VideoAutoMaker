@@ -2,7 +2,10 @@ import json
 from pathlib import Path
 from typing import Any, Dict, Optional
 
-from wiki2video.schema.project_schema import ProjectStatus
+from dacite import from_dict
+
+from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.schema.project_schema import ProjectStatus, ProjectJSON
 
 
 def read_json(path: Path) -> Dict[str, Any]:
@@ -33,15 +36,6 @@ def load_character_config() -> Dict[str, Any]:
         return {}
 
 def get_character_info(character: str) -> Optional[Dict[str, Any]]:
-    """
-    根据角色名获取角色配置信息（model_id 和 image_path）。
-    
-    Args:
-        character: 角色名（如 "hu", "huchenfeng"）
-    
-    Returns:
-        角色配置字典，包含 name, model_id, image_path，如果未找到则返回 None
-    """
     if not character:
         return None
     
@@ -72,8 +66,26 @@ def get_project_status(raw: Dict[str, Any]) -> ProjectStatus:
             return ProjectStatus.CREATED
     return ProjectStatus.CREATED
 
-def set_project_status(path: Path, status: ProjectStatus) -> None:
+def set_project_status(project_id: str, status: ProjectStatus) -> None:
     """Update project status in JSON file."""
-    raw = read_json(path)
+    raw = read_json(WORKING_DIR / project_id / f"{project_id}.json")
     raw["project_status"] = status.value
-    write_json(path, raw)
+    write_json(WORKING_DIR / project_id / f"{project_id}.json", raw)
+
+
+def parse_project(project_id: str) -> ProjectJSON:
+    raw = read_json(WORKING_DIR / project_id / f"{project_id}.json")
+    project_name = raw.get("project_name")
+    if not project_name:
+        raise RuntimeError("Missing project_name in JSON")
+
+    raw.setdefault("project_id", project_id)
+
+    if "project_status" in raw and isinstance(raw["project_status"], str):
+        try:
+            raw["project_status"] = ProjectStatus(raw["project_status"])
+        except ValueError:
+            raw["project_status"] = ProjectStatus.CREATED
+
+    project = from_dict(ProjectJSON, raw)
+    return project

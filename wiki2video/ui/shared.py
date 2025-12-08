@@ -5,9 +5,10 @@ from pathlib import Path
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from wiki2video.pipeline.utils import load_character_config, read_json
+from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.core.utils import load_character_config, read_json
 
-PROJECT_ROOT = Path("project")
+PROJECT_ROOT = WORKING_DIR
 BGM_ROOT = Path("assets/bgm")
 BACKGROUND_VIDEO_ROOT = Path("assets/background_videos")
 
@@ -33,14 +34,14 @@ def list_projects() -> List[str]:
     return sorted(projects, key=str.lower)
 
 
-def project_json_path(project_name: str) -> Path:
-    return PROJECT_ROOT / project_name / f"{project_name}.json"
+def project_json_path(project_id: str) -> Path:
+    return PROJECT_ROOT / project_id / f"{project_id}.json"
 
 
-def load_project_raw(project_name: str) -> Optional[Dict[str, Any]]:
-    if not project_name:
+def load_project_raw(project_id: str) -> Optional[Dict[str, Any]]:
+    if not project_id:
         return None
-    json_path = project_json_path(project_name)
+    json_path = project_json_path(project_id)
     if not json_path.exists():
         return None
     try:
@@ -109,17 +110,15 @@ def project_file_exists(path: Path) -> bool:
     return path.exists()
 
 
-def is_pipeline_running(project_name: str) -> bool:
-    thread = _pipeline_threads.get(project_name)
+def is_pipeline_running(project_id: str) -> bool:
+    thread = _pipeline_threads.get(project_id)
     return bool(thread and thread.is_alive())
 
 
-def launch_pipeline_thread(project_name: str, target: Callable[[], None]) -> bool:
-    if is_pipeline_running(project_name):
+def launch_pipeline_thread(project_id: str, target: Callable[[], None]) -> bool:
+    if is_pipeline_running(project_id):
         return False
     thread = threading.Thread(target=target, daemon=True)
-    _pipeline_threads[project_name] = thread
+    _pipeline_threads[project_id] = thread
     thread.start()
     return True
-
-

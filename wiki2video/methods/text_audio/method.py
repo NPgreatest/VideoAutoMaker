@@ -16,9 +16,9 @@ from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.registry import register_method
 from wiki2video.methods.text_audio.api_router import tts_router
-from wiki2video.pipeline.path_utils import get_action_output_dir, get_output_file_path
-from wiki2video.pipeline.utils import get_character_info
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.core.utils import get_character_info
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
@@ -46,11 +46,11 @@ class TextAudioMethod(BaseMethod):
         Create a new WorkingBlock for audio generation.
         Does NOT execute heavy work - just creates and saves the block.
         """
-        # Ensure project_name is set (should be set by PipelineBuilder, but ensure it here)
+        # Ensure project_id is set (should be set by PipelineBuilder, but ensure it here)
         if not spec.config:
             spec.config = {}
-        if "project_name" not in spec.config or not spec.config["project_name"]:
-            spec.config["project_name"] = "default"
+        if "project_id" not in spec.config or not spec.config["project_id"]:
+            spec.config["project_id"] = "default"
         
         # Parse config using schema
         schema_class = get_schema(self.NAME)
@@ -63,7 +63,7 @@ class TextAudioMethod(BaseMethod):
         
         working_block = WorkingBlock(
             id=working_id,
-            project_name=spec.config.get("project_name", "default"),
+            project_id=spec.config.get("project_id", "default"),
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
             prev_ids=[],
@@ -71,7 +71,6 @@ class TextAudioMethod(BaseMethod):
             config_json=json.dumps(spec.config),
             result_json="",
             create_time=now,
-            modify_time=now
         )
         
         return working_block
@@ -85,9 +84,9 @@ class TextAudioMethod(BaseMethod):
             # Load config from config_json
             config_dict = json.loads(wb.config_json)
             
-            # Ensure project_name is set
-            if "project_name" not in config_dict or not config_dict["project_name"]:
-                config_dict["project_name"] = wb.project_name or "default"
+            # Ensure project_id is set
+            if "project_id" not in config_dict or not config_dict["project_id"]:
+                config_dict["project_id"] = wb.project_id or "default"
             
             schema_class = get_schema(self.NAME)
             # Use Config to allow missing fields with default values
@@ -115,11 +114,11 @@ class TextAudioMethod(BaseMethod):
             # Get action output directory using new path structure
             workdir = Path(config_dict.get("workdir", "."))
             project_root = workdir.resolve()
-            project_name = wb.project_name or config_dict.get("project_name", "default")
+            project_id = wb.project_id or config_dict.get("project_id", "default")
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
             action_dir = get_action_output_dir(
                 project_root=project_root,
-                project_name=project_name,
+                project_id=project_id,
                 block_id=block_id,
                 method_name=wb.method_name,
                 working_block_id=wb.id
@@ -179,7 +178,7 @@ class TextAudioMethod(BaseMethod):
             start_time_sec = 0
             prev_duration = 0
             for prev_id in wb.prev_ids:
-                prev_working_block = dao.get_working_block(prev_id)
+                prev_working_block = dao.get_by_id(prev_id)
                 if prev_working_block and prev_working_block.method_name == "text_audio" and prev_working_block.status == WorkingBlockStatus.SUCCESS:
                     start_time_sec = prev_working_block.accumulated_duration_sec
                     prev_result = json.loads(prev_working_block.result_json or "{}")

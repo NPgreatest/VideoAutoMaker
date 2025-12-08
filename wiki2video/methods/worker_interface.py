@@ -5,7 +5,7 @@ Methods that need background processing can implement this interface.
 
 from abc import ABC, abstractmethod
 
-from wiki2video.pipeline.working_block import WorkingBlock
+from wiki2video.core.working_block import WorkingBlock
 
 
 class WorkerInterface(ABC):

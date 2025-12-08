@@ -8,7 +8,7 @@ from typing import List, Dict
 from pathlib import Path
 
 from wiki2video.schema.action_spec import ActionSpec
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 
 
 def build_working_blocks(action_specs: List[ActionSpec]) -> List[WorkingBlock]:
@@ -34,19 +34,18 @@ def build_working_blocks(action_specs: List[ActionSpec]) -> List[WorkingBlock]:
             prev_working_ids = [prev_working_id]
         
         # Create working block
+        config = action.config or {}
         working_block = WorkingBlock(
             id=str(uuid.uuid4()),
+            project_id=config.get("project_id", "default"),
             method_name=action.type,
             status=WorkingBlockStatus.PENDING,
-            retries=0,
-            output_path=None,
             prev_ids=prev_working_ids,
             action_index=action_index,  # Add action_index support
-            config_json=json.dumps(action.config or {}, ensure_ascii=False)
+            config_json=json.dumps(config, ensure_ascii=False)
         )
         
         working_blocks.append(working_block)
         prev_working_id = working_block.id
     
     return working_blocks
-

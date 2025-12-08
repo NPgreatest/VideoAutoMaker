@@ -13,7 +13,7 @@ class TextToVideoSchema:
     Attributes:
         text: Original text content
         prompt: Text prompt for video generation (generated from text if not provided)
-        project_name: Project name
+        project_id: Project id
         target_name: Target video file name
         workdir: Working directory path
         image_size: Image size for video generation (e.g., "1280x720")
@@ -22,7 +22,7 @@ class TextToVideoSchema:
     """
     text: str
     prompt: str = None
-    project_name: str = None
+    project_id: str = None
     target_name: str = None
     workdir: str = "."
     image_size: str = None
@@ -32,4 +32,3 @@ class TextToVideoSchema:
 
 # Register schema
 register_schema("text_video", TextToVideoSchema)
-

@@ -7,11 +7,11 @@ from dataclasses import dataclass
 from typing import Dict, List, Tuple, Optional
 from dacite import from_dict
 from wiki2video.config.config_manager import config
-from wiki2video.pipeline.utils import read_json
-from wiki2video.pipeline.gen_cover import gen_cover
+from wiki2video.core.utils import read_json
+from wiki2video.core.gen_cover import gen_cover
 from wiki2video.schema.project_schema import ScriptBlock
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.working_block import WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlockStatus
 
 # ========== 配置项 ==========
 CRF = "14"             # 画质（越低越好）
@@ -62,13 +62,13 @@ def get_clip_info(p: Path) -> ClipInfo:
     return ClipInfo(p,w,h,fps,bool(a))
 
 # ========== 阶段 1：从 WorkingBlockDAO 获取 block 的最后一个节点 ==========
-def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
+def get_last_node_in_chain(dao: WorkingBlockDAO, project_id: str, block_id: str) -> Optional[str]:
     """
     Find the last node (leaf node) in the chain for a given block_id.
     The last node is the one that has no other nodes depending on it (not in any prev_ids).
     """
     # Get all working blocks for this project and block_id
-    all_blocks = dao.get_all(project_name)
+    all_blocks = dao.get_all(project_id)
     block_blocks = [wb for wb in all_blocks if wb.block_id == block_id and wb.status == WorkingBlockStatus.SUCCESS]
     
     if not block_blocks:
@@ -77,22 +77,15 @@ def get_last_node_in_chain(dao: WorkingBlockDAO, project_name: str, block_id: st
     block_blocks.sort(key=lambda wb: wb.action_index)
     return block_blocks[-1].id
 
-def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_id: str) -> Optional[str]:
+def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_id: str, block_id: str) -> Optional[str]:
     """Find the text_audio working block for a given block_id.
     Uses action_index to find the first text_audio action (typically action_index=0).
     """
     # Try to get by method_name first (optimized query)
-    audio_block = dao.get_by_method_name(project_name, block_id, "text_audio")
-    if audio_block and audio_block.status == WorkingBlockStatus.SUCCESS:
-        return audio_block.id
-    
-    # Fallback: search all blocks (for backward compatibility)
-    all_blocks = dao.get_all(project_name)
+    block_actions = dao.get_by_block(project_id, block_id)
     audio_blocks = [
-        wb for wb in all_blocks 
-        if wb.block_id == block_id 
-        and wb.method_name == "text_audio" 
-        and wb.status == WorkingBlockStatus.SUCCESS
+        wb for wb in block_actions
+        if wb.method_name == "text_audio" and wb.status == WorkingBlockStatus.SUCCESS
     ]
     
     if not audio_blocks:
@@ -102,7 +95,7 @@ def get_audio_block_for_block_id(dao: WorkingBlockDAO, project_name: str, block_
     audio_blocks.sort(key=lambda wb: wb.action_index if wb.action_index is not None else 999)
     return audio_blocks[0].id
 
-def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: WorkingBlockDAO, project_name: str) -> Optional[Path]:
+def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: WorkingBlockDAO, project_id: str) -> Optional[Path]:
     """
     Generate muxed video from the last node in chain for a block_id.
     Uses WorkingBlockDAO to find the last node and audio source.
@@ -113,12 +106,12 @@ def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: Working
         return mux
     
     # Get the last node in chain for this block
-    last_node_id = get_last_node_in_chain(dao, project_name, block_id)
+    last_node_id = get_last_node_in_chain(dao, project_id, block_id)
     if not last_node_id:
         print(f"[mux] ⚠️ No last node found for block {block_id}, skipping")
         return None
     
-    last_node = dao.get_working_block(last_node_id)
+    last_node = dao.get_by_id(last_node_id)
     if not last_node or not last_node.output_path:
         print(f"[mux] ⚠️ Last node {last_node_id} has no output_path, skipping")
         return None
@@ -129,12 +122,12 @@ def ensure_muxed(project_dir: Path, block_id: str, muxed_dir: Path, dao: Working
         return None
     
     # Get audio block for this block_id
-    audio_node_id = get_audio_block_for_block_id(dao, project_name, block_id)
+    audio_node_id = get_audio_block_for_block_id(dao, project_id, block_id)
     if not audio_node_id:
         print(f"[mux] ⚠️ No audio block found for block {block_id}, skipping")
         return None
     
-    audio_node = dao.get_working_block(audio_node_id)
+    audio_node = dao.get_by_id(audio_node_id)
     if not audio_node or not audio_node.output_path:
         print(f"[mux] ⚠️ Audio node {audio_node_id} has no output_path, skipping")
         return None
@@ -231,7 +224,7 @@ def fmt_time(x: float) -> str:
     ms = int(round((x - int(x)) * 1000))
     return f"{h:02}:{m:02}:{s:02},{ms:03}"
 
-def generate_srt_from_blocks(dao: WorkingBlockDAO, project_name: str, block_ids: List[str], clips: List[Path], out_path: Path) -> None:
+def generate_srt_from_blocks(dao: WorkingBlockDAO, project_id: str, block_ids: List[str], clips: List[Path], out_path: Path) -> None:
     """
     Generate SRT file from WorkingBlockDAO data.
     优先使用 audio block 的 result_json 里的 segments，
@@ -247,12 +240,12 @@ def generate_srt_from_blocks(dao: WorkingBlockDAO, project_name: str, block_ids:
         block_offset = sum(float(get_duration(c)) for c in clips[:block_index])
         
         # 获取该 block 的 audio block
-        audio_node_id = get_audio_block_for_block_id(dao, project_name, block_id)
+        audio_node_id = get_audio_block_for_block_id(dao, project_id, block_id)
         segments = None
         block_text = None
         
         if audio_node_id:
-            audio_node = dao.get_working_block(audio_node_id)
+            audio_node = dao.get_by_id(audio_node_id)
             if audio_node and audio_node.result_json:
                 try:
                     result_data = json.loads(audio_node.result_json)
@@ -292,7 +285,7 @@ def generate_srt_from_blocks(dao: WorkingBlockDAO, project_name: str, block_ids:
         text = ""
         
         # Try to get text from any working block's config_json for this block_id
-        all_blocks = dao.get_all(project_name)
+        all_blocks = dao.get_all(project_id)
         for wb in all_blocks:
             if wb.block_id == block_id:
                 try:
@@ -324,19 +317,17 @@ def concat_videos(files: List[Path], out: Path)->bool:
     if ok: print(f"[concat] ✅ {out}")
     return ok
 
-# ========== 阶段 10：生成封面照片 ==========
-# 封面生成功能已移至 videogen.pipeline.gen_cover 模块
 
 # ========== 主函数 ==========
-def concat_pipeline(project_name:str):
-    project_dir=Path(f"project/{project_name}")
+def concat_pipeline(project_id: str):
+    project_dir=Path(f"project/{project_id}")
     work=project_dir/"_work"; work.mkdir(exist_ok=True)
     muxed_dir=work/"muxed"; muxed_dir.mkdir(exist_ok=True)
     norm_dir=work/"norm"; norm_dir.mkdir(exist_ok=True)
 
     # Get working blocks from DAO
     dao = WorkingBlockDAO()
-    all_blocks = dao.get_all(project_name)
+    all_blocks = dao.get_all(project_id)
     
     # Group by block_id and get unique block_ids
     block_ids_set = {wb.block_id for wb in all_blocks if wb.block_id}
@@ -351,7 +342,7 @@ def concat_pipeline(project_name:str):
     clips=[]
     clip_block_ids=[]
     for block_id in block_ids:
-        p=ensure_muxed(project_dir, block_id, muxed_dir, dao, project_name)
+        p=ensure_muxed(project_dir, block_id, muxed_dir, dao, project_id)
         if p:
             clips.append(p)
             clip_block_ids.append(block_id)
@@ -359,7 +350,7 @@ def concat_pipeline(project_name:str):
 
     # Try to get project config for choose_target
     project_config = None
-    project_json_path = project_dir / f"{project_name}.json"
+    project_json_path = project_dir / f"{project_id}.json"
     if project_json_path.exists():
         try:
             project_config = read_json(project_json_path)
@@ -386,14 +377,14 @@ def concat_pipeline(project_name:str):
     if not concat_videos(norm,final):
         raise SystemExit("concat failed")
 
-    # Generate and beautify SRT directly -> project_name.srt
-    out_srt = work / f"{project_name}.srt"
+    # Generate and beautify SRT directly -> project_id.srt
+    out_srt = work / f"{project_id}.srt"
     # First generate raw SRT to a temp file
     temp_srt = work / "temp_srt.srt"
-    generate_srt_from_blocks(dao, project_name, clip_block_ids, norm, temp_srt)
+    generate_srt_from_blocks(dao, project_id, clip_block_ids, norm, temp_srt)
     # Beautify and save directly to final location
     try:
-        from wiki2video.pipeline.beautify_srt import beautify_srt_at_path
+        from wiki2video.core.beautify_srt import beautify_srt_at_path
         beautify_srt_at_path(temp_srt, out_srt)
         # Remove temp file
         temp_srt.unlink()
@@ -407,7 +398,7 @@ def concat_pipeline(project_name:str):
     print("✅ pipeline complete!")
 
     # ====== 阶段 7：字幕硬烧录 ======
-    burn_out = project_dir / f"{project_name}_nobgm.mp4"
+    burn_out = project_dir / f"{project_id}_nobgm.mp4"
 
     # Check if subtitle burning is enabled
     burn_subtitle = True
@@ -422,7 +413,7 @@ def concat_pipeline(project_name:str):
         print("[burn] ⏭️ Subtitle burning is disabled, skipping.")
         shutil.copy2(final, burn_out)
     else:
-        chosen_srt = work / f"{project_name}.srt"
+        chosen_srt = work / f"{project_id}.srt"
         if not chosen_srt.exists():
             print("[burn] ⚠️ No subtitle file found, skipping burn-in.")
             shutil.copy2(final, burn_out)
@@ -486,7 +477,7 @@ def concat_pipeline(project_name:str):
 
     # ====== 阶段 8：添加背景音乐 ======
     # 确定无 BGM 成品：若字幕烧录成功，burn_out 已在项目根目录；
-    # 若未烧录（或失败），则将当前 final 复制为 {project_name}_nobgm.mp4
+    # 若未烧录（或失败），则将当前 final 复制为 {project_id}_nobgm.mp4
     if not burn_out.exists():
         try:
             shutil.copy2(final, burn_out)
@@ -526,8 +517,8 @@ def concat_pipeline(project_name:str):
             print(f"[bgm] ℹ️ No BGM specified in project, skipping BGM addition.")
         final_with_bgm = None
     else:
-        # 按新规范：带 BGM 的最终成品输出到项目根目录，命名为 {project_name}.mp4
-        final_with_bgm = project_dir / f"{project_name}.mp4"
+        # 按新规范：带 BGM 的最终成品输出到项目根目录，命名为 {project_id}.mp4
+        final_with_bgm = project_dir / f"{project_id}.mp4"
         video_dur = get_duration(input_video)
         bgm_dur = get_duration(bgm_path)
         
@@ -584,7 +575,7 @@ def concat_pipeline(project_name:str):
             blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
         except Exception:
             pass
-    gen_cover(project_dir, project_name, raw, blocks)
+    gen_cover(project_dir, project_id, raw, blocks)
 
     # ====== 阶段 9：清理临时目录 ======
     # try:
@@ -599,7 +590,7 @@ if __name__=="__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Concat stage runner.")
-    parser.add_argument("project_name", help="Project name under ./project/")
+    parser.add_argument("project_id", help="Project id under ./project/")
     args = parser.parse_args()
-    name = args.project_name
+    name = args.project_id
     concat_pipeline(name)

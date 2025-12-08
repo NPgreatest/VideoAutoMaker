@@ -281,7 +281,7 @@ if __name__ == "__main__":
     if not json_path.exists():
         raise SystemExit(f"Project JSON not found: {json_path}")
 
-    from wiki2video.pipeline.utils import read_json
+    from wiki2video.core.utils import read_json
 
     raw = read_json(json_path)
 

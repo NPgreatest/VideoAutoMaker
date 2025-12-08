@@ -9,9 +9,9 @@ import gradio as gr
 import pandas as pd
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.pipeline import run_video_pipeline
-from wiki2video.pipeline.utils import get_project_status
-from wiki2video.pipeline.working_block import WorkingBlockStatus
+from wiki2video.core.pipeline import run_video_pipeline
+from wiki2video.core.utils import get_project_status
+from wiki2video.core.working_block import WorkingBlockStatus
 from wiki2video.schema.project_schema import ProjectStatus
 from wiki2video.ui.shared import (
     PROJECT_ROOT,
@@ -46,24 +46,24 @@ def _parse_result_json(wb) -> Dict[str, Any]:
     return {}
 
 
-def _collect_video_dashboard(project_name: str):
-    if not project_name:
+def _collect_video_dashboard(project_id: str):
+    if not project_id:
         empty_df = pd.DataFrame(columns=VIDEO_TABLE_COLUMNS)
         return empty_df, "请选择项目以查看视频状态。", [], None
 
-    raw = load_project_raw(project_name)
+    raw = load_project_raw(project_id)
     if not raw:
         empty_df = pd.DataFrame(columns=VIDEO_TABLE_COLUMNS)
-        return empty_df, f"❌ 未找到项目：{project_name}", [], None
+        return empty_df, f"❌ 未找到项目：{project_id}", [], None
 
     dao = WorkingBlockDAO()
     video_blocks = [
-        wb for wb in dao.get_all(project_name) if wb.method_name != "text_audio"
+        wb for wb in dao.get_all(project_id) if wb.method_name != "text_audio"
     ]
 
     rows: List[Dict[str, Any]] = []
     dropdown_choices: List[Tuple[str, str]] = []
-    final_video_path = PROJECT_ROOT / project_name / f"{project_name}.mp4"
+    final_video_path = PROJECT_ROOT / project_id / f"{project_id}.mp4"
     final_video_value = str(final_video_path) if final_video_path.exists() else None
 
     for wb in video_blocks:
@@ -105,39 +105,39 @@ def _refresh_dropdown():
     return gr.update(choices=list_projects())
 
 
-def _update_video_panel(project_name: str):
-    df, status_text, dropdown_choices, video_value = _collect_video_dashboard(project_name)
+def _update_video_panel(project_id: str):
+    df, status_text, dropdown_choices, video_value = _collect_video_dashboard(project_id)
     dropdown_update = gr.update(choices=dropdown_choices, value=None)
     video_update = gr.update(value=video_value)
-    button_state = gr.update(interactive=not is_pipeline_running(project_name))
+    button_state = gr.update(interactive=not is_pipeline_running(project_id))
     return df, status_text, video_update, dropdown_update, button_state
 
 
-def start_video_pipeline(project_name: str):
-    project_name = (project_name or "").strip()
-    if not project_name:
+def start_video_pipeline(project_id: str):
+    project_id = (project_id or "").strip()
+    if not project_id:
         return "❌ 请先选择项目。", gr.update()
 
-    json_path = project_json_path(project_name)
+    json_path = project_json_path(project_id)
     if not json_path.exists():
-        return f"❌ 未找到项目：{project_name}", gr.update()
+        return f"❌ 未找到项目：{project_id}", gr.update()
 
-    raw = load_project_raw(project_name)
+    raw = load_project_raw(project_id)
     if not raw:
-        return f"❌ 未找到项目：{project_name}", gr.update()
+        return f"❌ 未找到项目：{project_id}", gr.update()
 
     def _runner():
-        run_video_pipeline(json_path)
+        run_video_pipeline(project_id)
 
-    started = launch_pipeline_thread(project_name, _runner)
+    started = launch_pipeline_thread(project_id, _runner)
     if not started:
         return "⚙️ 当前已有任务在运行，请稍候。", gr.update(interactive=False)
 
-    return f"🎬 已启动 `{project_name}` 的视频阶段。", gr.update(interactive=False)
+    return f"🎬 已启动 `{project_id}` 的视频阶段。", gr.update(interactive=False)
 
 
-def retry_video_block(project_name: str, working_block_id: str):
-    if not project_name:
+def retry_video_block(project_id: str, working_block_id: str):
+    if not project_id:
         return "❌ 请先选择项目。", gr.update()
     if not working_block_id:
         return "❌ 请先选择需要重试的工作块。", gr.update(value=None)

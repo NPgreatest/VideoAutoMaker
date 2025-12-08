@@ -8,8 +8,8 @@ import gradio as gr
 import pandas as pd
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.pipeline import run_audio_pipeline
-from wiki2video.pipeline.working_block import WorkingBlockStatus
+from wiki2video.core.pipeline import run_audio_pipeline
+from wiki2video.core.working_block import WorkingBlockStatus
 from wiki2video.ui.shared import (
     AUDIO_POLL_SECONDS,
     AUDIO_TABLE_COLUMNS,
@@ -38,19 +38,19 @@ def sanitize_path(p: str) -> str:
 # ----------------------------------------
 # Collect audio info
 # ----------------------------------------
-def _collect_audio_data(project_name: str):
+def _collect_audio_data(project_id: str):
     """Return df, banner, audio list, dropdown list"""
-    if not project_name:
+    if not project_id:
         return pd.DataFrame(columns=AUDIO_TABLE_COLUMNS), "请选择项目", [], [], False
 
-    raw = load_project_raw(project_name)
+    raw = load_project_raw(project_id)
     if not raw:
-        return pd.DataFrame(columns=AUDIO_TABLE_COLUMNS), f"❌ 未找到项目 {project_name}", [], [], False
+        return pd.DataFrame(columns=AUDIO_TABLE_COLUMNS), f"❌ 未找到项目 {project_id}", [], [], False
 
     dao = WorkingBlockDAO()
     audio_blocks = {
         (wb.block_id or wb.id): wb
-        for wb in dao.get_all(project_name)
+        for wb in dao.get_all(project_id)
         if wb.method_name == "text_audio"
     }
 
@@ -143,8 +143,8 @@ def _paginate_audio(audio_items: List[Dict], page: int):
 # ----------------------------------------
 # Update UI
 # ----------------------------------------
-def _update_audio_panel(project_name: str, page: int, audio_slots: int):
-    df, banner, audio_items, dropdown, _ = _collect_audio_data(project_name)
+def _update_audio_panel(project_id: str, page: int, audio_slots: int):
+    df, banner, audio_items, dropdown, _ = _collect_audio_data(project_id)
 
     page_items, page, max_page = _paginate_audio(audio_items, page)
 
@@ -165,35 +165,35 @@ def _update_audio_panel(project_name: str, page: int, audio_slots: int):
         max_page,
         *updates,
         gr.update(choices=dropdown, value=None),
-        gr.update(interactive=not is_pipeline_running(project_name)),
+        gr.update(interactive=not is_pipeline_running(project_id)),
     )
 
 
 # ----------------------------------------
 # Pipeline actions
 # ----------------------------------------
-def start_audio_pipeline(project_name: str):
-    if not project_name:
+def start_audio_pipeline(project_id: str):
+    if not project_id:
         return "❌ 请选择项目", gr.update()
 
-    json_path = project_json_path(project_name)
+    json_path = project_json_path(project_id)
     if not json_path.exists():
-        return f"❌ 项目不存在 {project_name}", gr.update()
+        return f"❌ 项目不存在 {project_id}", gr.update()
 
-    ok = launch_pipeline_thread(project_name, lambda: run_audio_pipeline(json_path))
+    ok = launch_pipeline_thread(project_id, lambda: run_audio_pipeline(project_id))
     if not ok:
         return "⚙️ pipeline 正在运行", gr.update(interactive=False)
 
-    return f"🚀 开始运行 {project_name} 音频 pipeline", gr.update(interactive=False)
+    return f"🚀 开始运行 {project_id} 音频 pipeline", gr.update(interactive=False)
 
 
-def retry_audio_block(project_name: str, block_id: str):
+def retry_audio_block(project_id: str, block_id: str):
     if not block_id:
         return "❌ 请选择脚本块", gr.update()
 
     dao = WorkingBlockDAO()
     blocks = [
-        wb for wb in dao.get_all(project_name)
+        wb for wb in dao.get_all(project_id)
         if wb.method_name == "text_audio" and (wb.block_id or wb.id) == block_id
     ]
 

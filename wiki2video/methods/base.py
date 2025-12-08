@@ -3,14 +3,14 @@ import json
 import os.path
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 
 
 def check_previous_done(previous_id: str) -> WorkingBlockStatus:
     dao = WorkingBlockDAO()
-    block = dao.get_working_block(previous_id)
+    block = dao.get_by_id(previous_id)
 
     # 1. 上一个 block 不存在 → DAG 损坏
     if block is None:
@@ -56,5 +56,4 @@ class BaseMethod(abc.ABC):
         Must update wb.status, wb.output_path, wb.result_json.
         """
         raise NotImplementedError
-
 

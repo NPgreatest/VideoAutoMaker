@@ -12,11 +12,11 @@ from wiki2video.methods.registry import register_method
 from wiki2video.methods.text_video.constants import FORMATS
 from .api_router import get_provider
 from wiki2video.llm_engine import get_engine
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
-from wiki2video.pipeline.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
 
 
 @register_method
@@ -27,7 +27,7 @@ class TextVideo(BaseMethod):
     def __init__(self):
         super().__init__()
 
-    def generate_prompt(self, text: str, global_context: str | None = "", project_name: str | None = "") -> str:
+    def generate_prompt(self, text: str, global_context: str | None = "", project_id: str | None = "") -> str:
         """
         Convert a line of dialogue into a vivid cinematic scene prompt for text-to-video models.
         """
@@ -35,7 +35,7 @@ class TextVideo(BaseMethod):
         context_block = (
             f"\nGlobal context for the video: {global_context.strip()}"
             if global_context
-            else project_name
+            else project_id
         )
 
         content = engine.ask_template(
@@ -61,9 +61,12 @@ class TextVideo(BaseMethod):
         """
         now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
 
+        spec.config = spec.config or {}
+        spec.config.setdefault("project_id", "default")
+
         return WorkingBlock(
             id=str(uuid.uuid4()),
-            project_name=spec.config.get("project_name", "default"),
+            project_id=spec.config.get("project_id", "default"),
             method_name=self.NAME,
             status=WorkingBlockStatus.PENDING,
             prev_ids=[],
@@ -71,7 +74,6 @@ class TextVideo(BaseMethod):
             config_json=json.dumps(spec.config),
             result_json="",
             create_time=now,
-            modify_time=now,
         )
 
     def poll(self, wb: WorkingBlock) -> GenerationResult:
@@ -88,14 +90,14 @@ class TextVideo(BaseMethod):
             # ============ Step 1: 提交任务 ============
             if not request_id:
                 if not config.prompt:
-                    config.prompt = self.generate_prompt(config.text, config.global_context,wb.project_name)
+                    config.prompt = self.generate_prompt(config.text, config.global_context, wb.project_id)
                     config_dict["prompt"] = config.prompt
 
                 # 解析项目 video 格式
                 workdir = Path(config_dict.get("workdir", "."))
                 project_root = workdir.resolve()
-                project_name = wb.project_name
-                project_cfg_path = workdir / "project" / project_name / f"{project_name}.json"
+                project_id = wb.project_id
+                project_cfg_path = workdir / "project" / project_id / f"{project_id}.json"
 
                 image_size = "1280x720"
                 if project_cfg_path.exists():
@@ -169,8 +171,8 @@ class TextVideo(BaseMethod):
                 workdir = Path(config_dict.get("workdir", "."))
                 project_root = workdir.resolve()
                 block_id = wb.block_id or config_dict.get("target_name", wb.id)
-                action_dir = get_action_output_dir(project_root, wb.project_name, block_id, wb.method_name, wb.id)
-                output_path = get_output_file_path(action_dir, "mp4")
+                action_dir = get_action_output_dir(project_root, wb.project_id, block_id, wb.method_name, wb.id)
+                output_path = get_output_file_path(action_dir, block_id, "mp4")
 
                 provider["download"](url, output_path)
 

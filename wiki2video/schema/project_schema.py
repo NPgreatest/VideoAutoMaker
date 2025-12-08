@@ -38,6 +38,7 @@ class ProjectStatus(Enum):
 class ProjectJSON(BaseModel):
     """Project info and blocks, stored in JSON file."""
     project_name: str
+    project_id: str
     script: List[ScriptBlock] = field(default_factory=list)
     project_status: ProjectStatus = ProjectStatus.CREATED
     global_context: Optional[str] = None

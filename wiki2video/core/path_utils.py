@@ -9,7 +9,7 @@ from pathlib import Path
 
 def get_action_output_dir(
     project_root: Path,
-    project_name: str,
+    project_id: str,
     block_id: str,
     method_name: str,
     working_block_id: str
@@ -20,7 +20,7 @@ def get_action_output_dir(
     
     Args:
         project_root: Root directory (usually workdir)
-        project_name: Project identifier under /project/
+        project_id: Project identifier under /project/
         block_id: ScriptBlock.id (e.g., "L1")
         method_name: BaseMethod.NAME (e.g., "text_audio", "remotion_picture")
         working_block_id: WorkingBlock.id (unique UUID)
@@ -31,7 +31,7 @@ def get_action_output_dir(
     action_dir = (
         project_root
         / "project"
-        / project_name
+        / project_id
         / "blocks"
         / block_id
         / method_name

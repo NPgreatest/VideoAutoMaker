@@ -16,6 +16,7 @@ def _default_config() -> Dict[str, Any]:
 
         "backoff_max_time": 300,
         "backoff_max_tries": 5,
+        "working_dir": "project",
 
         "global_config": {
             "font_path": "assets/microhei.ttc",

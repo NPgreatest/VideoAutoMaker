@@ -11,7 +11,7 @@ class MoviepyAnimationSchema:
     """
     Schema for remotion_picture method configuration.
     """
-    project_name: str = None
+    project_id: str = None
     target_name: str = None
     workdir: str = "."
     template: str = None

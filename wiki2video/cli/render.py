@@ -10,8 +10,8 @@ from typing import Optional
 import typer
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.pipeline import run_pipeline
-from wiki2video.pipeline.utils import read_json
+from wiki2video.core.pipeline import run_video_pipeline
+from wiki2video.core.utils import read_json
 
 app = typer.Typer(
     help="Render a video from a prepared script JSON file.",
@@ -74,15 +74,16 @@ def main(
         raise typer.Exit(code=1)
 
     project_name = raw.get("project_name")
-    if not project_name:
-        typer.secho("❌ project_name missing in JSON", fg="red", err=True)
+    project_id = raw.get("project_id") or project_name
+    if not project_id:
+        typer.secho("❌ project identifier missing in JSON", fg="red", err=True)
         raise typer.Exit(code=1)
 
-    canonical_path = _mirror_to_project_dir(path, project_name)
-    _reset_working_blocks(project_name)
+    canonical_path = _mirror_to_project_dir(path, project_id)
+    _reset_working_blocks(project_id)
 
     try:
-        run_pipeline(canonical_path)
+        run_video_pipeline(project_id)
     except Exception as exc:  # pragma: no cover - CLI path
         typer.secho(f"❌ Pipeline failed: {exc}", fg="red", err=True)
         raise typer.Exit(code=1)
@@ -93,14 +94,14 @@ def main(
     except Exception:
         pass
 
-    final_video = _locate_final_video(project_name)
+    final_video = _locate_final_video(project_id)
     if not final_video:
         typer.secho("⚠️ Could not locate final video output.", fg="yellow")
         raise typer.Exit(code=1)
 
     out_dir = Path("out")
     out_dir.mkdir(parents=True, exist_ok=True)
-    target = out or out_dir / f"{project_name}.mp4"
+    target = out or out_dir / f"{project_id}.mp4"
     target.parent.mkdir(parents=True, exist_ok=True)
     shutil.copy2(final_video, target)
 

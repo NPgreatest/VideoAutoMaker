@@ -13,15 +13,17 @@ project_root = Path(__file__).parent
 sys.path.insert(0, str(project_root))
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
-from wiki2video.pipeline.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 
 
 REQUIRED_COLUMNS = [
     "id",
-    "project_name",
+    "project_id",
     "method_name",
     "status",
-    "retries",
+    "polling_count",
+    "error_count",
+    "priority",
     "prev_ids",
     "output_path",
     "accumulated_duration_sec",
@@ -29,10 +31,8 @@ REQUIRED_COLUMNS = [
     "action_index",
     "config_json",
     "result_json",
-    "priority",
-    "last_scheduled_at",
     "create_time",
-    "modify_time"
+    "last_scheduled_at",
 ]
 
 
@@ -70,10 +70,9 @@ def setup_database():
     now = datetime.now(UTC).isoformat(timespec="seconds") + "Z"
     test_block = WorkingBlock(
         id="test_working_id",
-        project_name="test_project",
+        project_id="test_project",
         method_name="remotion_picture",
         status=WorkingBlockStatus.PENDING,
-        retries=0,
         prev_ids=["upstream_block"],
         output_path="./output/test.mp4",
         accumulated_duration_sec=1.5,
@@ -87,7 +86,6 @@ def setup_database():
         last_scheduled_at=123456.0,
 
         create_time=now,
-        modify_time=now,
     )
 
     # clean before test

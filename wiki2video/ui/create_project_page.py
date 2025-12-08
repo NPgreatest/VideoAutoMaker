@@ -43,8 +43,8 @@ def _parse_image_targets(script_text: str) -> List[str]:
     return [name for name, _ in _parse_image_markers(script_text)]
 
 
-def _build_image_review_data(project_name: str, script_text: str):
-    images_dir = PROJECT_ROOT / project_name / "images"
+def _build_image_review_data(project_id: str, script_text: str):
+    images_dir = PROJECT_ROOT / project_id / "images"
     targets = _parse_image_targets(script_text)
 
     if not images_dir.exists() or not targets:
@@ -82,8 +82,8 @@ def _gallery_payload(entry):
     return payload
 
 
-def refresh_image_review(project_name: str, script_text: str):
-    data = _build_image_review_data(project_name, script_text)
+def refresh_image_review(project_id: str, script_text: str):
+    data = _build_image_review_data(project_id, script_text)
     targets = [d["target"] for d in data]
 
     if not data:
@@ -121,11 +121,11 @@ def update_target_view(target: str, image_state: List[Dict[str, Any]]):
     )
 
 
-def apply_image_choice(project_name: str, script_text: str, target: str, selected_img: str):
-    if not project_name or not target or not selected_img:
+def apply_image_choice(project_id: str, script_text: str, target: str, selected_img: str):
+    if not project_id or not target or not selected_img:
         return gr.update(), gr.update(), gr.update(), gr.update(), [], "❌ 缺少必要参数"
 
-    images_dir = PROJECT_ROOT / project_name / "images"
+    images_dir = PROJECT_ROOT / project_id / "images"
     tgt_path = images_dir / target
     selected_path = Path(selected_img)
 
@@ -137,23 +137,23 @@ def apply_image_choice(project_name: str, script_text: str, target: str, selecte
         if f.name != target:
             f.unlink()
 
-    return refresh_image_review(project_name, script_text)
+    return refresh_image_review(project_id, script_text)
 
 
-def rerun_image_search(project_name: str, script_text: str):
+def rerun_image_search(project_id: str, script_text: str):
     markers = _parse_image_markers(script_text)
     if not markers:
-        return refresh_image_review(project_name, script_text)
+        return refresh_image_review(project_id, script_text)
 
     ok = 0
     for target, q in markers:
         res = IMAGE_SEARCH_TOOL.run(
-            {"query": q, "project_name": project_name, "target_name": target}
+            {"query": q, "project_name": project_id, "target_name": target}
         )
         if "error" not in res:
             ok += 1
 
-    base = refresh_image_review(project_name, script_text)
+    base = refresh_image_review(project_id, script_text)
     return (*base[:-1], f"🖼️ 重新获取成功 {ok}/{len(markers)} 组\n" + base[-1])
 
 
@@ -161,9 +161,9 @@ def rerun_image_search(project_name: str, script_text: str):
 # Save Project
 # ============================================================
 
-def _reset_project_blocks(project_name: str):
+def _reset_project_blocks(project_id: str):
     dao = WorkingBlockDAO()
-    for wb in dao.get_all(project_name):
+    for wb in dao.get_all(project_id):
         dao.delete(wb.id)
 
 
@@ -171,7 +171,7 @@ def _reset_project_blocks(project_name: str):
 # UI Wrapper for build_project (fix argument mismatch)
 # ============================================================
 def build_project_ui(
-    project_name,
+    project_id,
     size,
     default_character,
     global_context,
@@ -189,7 +189,7 @@ def build_project_ui(
         # ⚠ 关键：严格按照错误提示中的 keyword-only 参数传入
         result = build_project_from_script(
             script_text,
-            project_name,
+            project_id,
             size=size,
             character=default_character,
             global_context=global_context,
@@ -199,7 +199,7 @@ def build_project_ui(
             burn=burn_subtitle,
         )
 
-        return f"✅ 项目创建成功：{project_name}\n\n{result}"
+        return f"✅ 项目创建成功：{project_id}\n\n{result}"
 
     except Exception as e:
         return f"❌ 创建项目失败：{e}"
@@ -218,8 +218,8 @@ def build_create_project_page():
     with gr.Column():
         gr.Markdown("# 🆕 Wiki → Video Project Builder")
 
-        project_name = gr.Textbox(
-            label="Project Name (Required)",
+        project_id = gr.Textbox(
+            label="Project ID (Required)",
             placeholder="例如：mohenjo_demo",
         )
 
@@ -281,7 +281,7 @@ def build_create_project_page():
 
     async def _run_full_pipeline(url, pname):
         if not pname.strip():
-            return "❌ 请先填写 Project Name", ""
+            return "❌ 请先填写 Project ID", ""
 
         script, gctx = await orchestrator.run_full(url, pname)
         return script, gctx
@@ -293,7 +293,7 @@ def build_create_project_page():
     # ---- RUN (script + global_context) ----
     fetch_btn.click(
         _run_full_pipeline,
-        inputs=[wiki_input, project_name],
+        inputs=[wiki_input, project_id],
         outputs=[script_text, global_context],   # AUTO FILL CONTEXT
     ).then(
         _after_script_fetched,
@@ -301,7 +301,7 @@ def build_create_project_page():
         outputs=[script_text],
     ).then(
         refresh_image_review,
-        inputs=[project_name, script_text],
+        inputs=[project_id, script_text],
         outputs=[
             image_target_dropdown,
             main_image_preview,
@@ -315,7 +315,7 @@ def build_create_project_page():
     # ---- Image Review Buttons ----
     refresh_images_btn.click(
         refresh_image_review,
-        inputs=[project_name, script_text],
+        inputs=[project_id, script_text],
         outputs=[
             image_target_dropdown, main_image_preview, image_gallery,
             image_choice_radio, image_state, image_status
@@ -324,7 +324,7 @@ def build_create_project_page():
 
     regrab_images_btn.click(
         rerun_image_search,
-        inputs=[project_name, script_text],
+        inputs=[project_id, script_text],
         outputs=[
             image_target_dropdown, main_image_preview, image_gallery,
             image_choice_radio, image_state, image_status
@@ -339,7 +339,7 @@ def build_create_project_page():
 
     apply_image_btn.click(
         apply_image_choice,
-        inputs=[project_name, script_text, image_target_dropdown, image_choice_radio],
+        inputs=[project_id, script_text, image_target_dropdown, image_choice_radio],
         outputs=[
             image_target_dropdown, main_image_preview, image_gallery,
             image_choice_radio, image_state, image_status
@@ -350,7 +350,7 @@ def build_create_project_page():
     create_btn.click(
         build_project_ui,
         inputs=[
-            project_name,
+            project_id,
             size,
             default_character,
             global_context,
@@ -362,4 +362,3 @@ def build_create_project_page():
         ],
         outputs=[status],
     )
-

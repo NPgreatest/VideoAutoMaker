@@ -9,7 +9,7 @@ from typing import Optional
 import typer
 
 from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project_from_wiki
-from wiki2video.pipeline.pipeline import run_pipeline
+from wiki2video.core.pipeline import  run_video_pipeline
 
 app = typer.Typer(
     help="Generate a video from a Wikipedia topic.",
@@ -64,7 +64,7 @@ def generate(
 
     # Step 2 — Render pipeline
     try:
-        run_pipeline(script_result.project_path)
+        run_video_pipeline(script_result.project_name)
     except Exception as exc:
         typer.secho(f"❌ Render pipeline failed: {exc}", fg="red", err=True)
         raise typer.Exit(code=1)
