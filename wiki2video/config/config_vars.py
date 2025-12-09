@@ -16,7 +16,11 @@ OPENAI_CHARACTER = config.get("openai_character")
 WORKING_DIR = Path(config.get("working_dir") or "project").expanduser()
 WORKING_DIR.mkdir(parents=True, exist_ok=True)
 
+TEXT_TO_IMAGE_MODEL = config.get("text_to_image_model")
 
-WORKINGBLOCK_POLLING_INTERVAL = int(config.get("workingblock_polling_interval") or 5)
+GENERATE_MODE = config.get("generate_mode")
+
+# WORKINGBLOCK_POLLING_INTERVAL = int(config.get("workingblock_polling_interval") or 5)
+WORKINGBLOCK_POLLING_INTERVAL = 0
 WORKINGBLOCK_POLLING_COUNT_MAX = int(config.get("workingblock_polling_count_max") or 20)
 WORKINGBLOCK_ERROR_COUNT_MAX = int(config.get("workingblock_error_count_max") or 3)

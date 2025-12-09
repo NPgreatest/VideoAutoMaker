@@ -213,8 +213,6 @@ class MoviePyAnimationMethod(BaseMethod):
             template_cls = TEMPLATE_REGISTRY[template_name]
             dao = WorkingBlockDAO()
 
-            def _is_video_file(path: Path) -> bool:
-                return path.suffix.lower() in self.VIDEO_EXTENSIONS
 
             video_path: Optional[Path] = None
             duration_sec = self._coalesce_numeric(
@@ -243,8 +241,6 @@ class MoviePyAnimationMethod(BaseMethod):
 
                     if prev_wb.output_path:
                         prev_path = Path(prev_wb.output_path)
-                        if not _is_video_file(prev_path):
-                            continue
                         if prev_path.exists():
                             video_path = prev_path
                             continue

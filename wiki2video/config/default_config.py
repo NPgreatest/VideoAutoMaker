@@ -11,13 +11,14 @@ def _default_config() -> Dict[str, Any]:
             "google_api_key": None,
             "openai_api_key": None,
             "runway_api_key": None,
+            "kling_api_key": None,
             "siliconflow_api_key": None,
         },
 
         "backoff_max_time": 300,
         "backoff_max_tries": 5,
         "working_dir": "project",
-
+        "generate_mode": "video",
         "global_config": {
             "font_path": "assets/microhei.ttc",
             "landscape_format_picture_bottom_margin_ratio": 0.1,
@@ -33,10 +34,12 @@ def _default_config() -> Dict[str, Any]:
         },
 
         "llm_default_model": "deepseek-ai/DeepSeek-V3.1-Terminus",
+        "text_to_image_model": "Qwen/Qwen-Image-Edit-2509",
         "openai_character": "alloy",
+
         "platforms": {
-            "image": "openai",
             "llm": "siliconflow",
+            "text_image": "siliconflow",
             "text_to_video": "siliconflow",
             "tts": "fish_audio",
         },

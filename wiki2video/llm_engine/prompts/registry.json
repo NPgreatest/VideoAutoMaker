@@ -20,6 +20,9 @@
   "text_video": {
     "cinematic_prompt": "categories/text_video/cinematic_prompt.md"
   },
+  "text_image": {
+    "film_frame_prompt": "categories/text_image/film_frame_prompt.md"
+  },
   "wiki_summary": {
     "section_summary": "categories/wiki_summary/section_summary.md"
   },

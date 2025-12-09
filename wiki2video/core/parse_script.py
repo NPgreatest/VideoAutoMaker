@@ -11,6 +11,8 @@ Script parsing with:
 
 from typing import Any, Dict, List
 import re
+
+from wiki2video.config.config_vars import GENERATE_MODE
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.project_schema import ScriptBlock
 
@@ -170,7 +172,7 @@ def parse_script_lines(
         else:
             if not blank_flag:   # 👈 NEW
                 sb.actions.append(ActionSpec(
-                    type="text_video",
+                    type="text_video" if GENERATE_MODE=="video" else "text_image",
                     config={
                         "text": text,
                         "target_name": sb.id,

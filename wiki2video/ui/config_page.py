@@ -120,7 +120,7 @@ def build_config_page() -> None:
             )
             image_platform = gr.Dropdown(
                 label="Image Platform",
-                choices=SUPPORTED_PLATFORMS["image"],
+                choices=SUPPORTED_PLATFORMS["text_image"],
                 allow_custom_value=False,
             )
 
