@@ -136,7 +136,19 @@ def _reset_video_error_blocks(project_id: str) -> int:
         if wb.status != WorkingBlockStatus.ERROR:
             continue
 
+        if wb.error_count > WORKINGBLOCK_ERROR_COUNT_MAX:
+            print(f"[RESET ERROR] Error Count > {WORKINGBLOCK_ERROR_COUNT_MAX}, pipeline failed")
+            continue
+
         wb.status = WorkingBlockStatus.PENDING
+        # Reset request
+        s = wb.config_json
+        obj = json.loads(s)
+        if "request_id" in obj:
+            del obj["request_id"]
+        cleaned_s = json.dumps(obj, ensure_ascii=False)
+        wb.config_json = cleaned_s
+
         wb.output_path = None
         wb.result_json = ""
         dao.update(wb)
