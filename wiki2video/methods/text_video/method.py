@@ -17,6 +17,7 @@ from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
 from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
+from ...config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX
 
 
 @register_method
@@ -86,6 +87,10 @@ class TextVideo(BaseMethod):
 
             # 读取 request_id
             request_id = config_dict.get("request_id")
+            if wb.polling_count >= WORKINGBLOCK_POLLING_COUNT_MAX - 1:
+                print("Polling time exceeded, resetting request_id")
+                wb.polling_count = 0
+                request_id = None
 
             # ============ Step 1: 提交任务 ============
             if not request_id:
@@ -145,9 +150,12 @@ class TextVideo(BaseMethod):
 
             # ❌ 错误 → 自动重试（清除 request_id）
             if status == "error":
+                print("[SF] Video Generation Error occurred, resetting request_id")
                 config_dict.pop("request_id", None)
                 wb.config_json = json.dumps(config_dict)
                 wb.status = WorkingBlockStatus.PENDING
+                wb.polling_count = 0
+                wb.error_count += 1
                 return GenerationResult(
                     status=WorkingBlockStatus.PENDING,
                     output_path=None,

@@ -16,6 +16,13 @@ from .providers.openai_video_provider import (
     openai_download_video,
     openai_extract_url,
 )
+from .providers.google_video_provider import (
+    google_submit_video,
+    google_check_status,
+    google_download_video,
+    google_extract_url,
+)
+
 
 def get_provider():
     """
@@ -44,6 +51,15 @@ def get_provider():
             "check": openai_check_status,
             "download": openai_download_video,
             "extract_url": openai_extract_url,
+        }
+
+    if platform == "google":
+        return {
+            "name": "google",
+            "submit": google_submit_video,
+            "check": google_check_status,
+            "download": google_download_video,
+            "extract_url": google_extract_url,
         }
 
     raise Exception(f"Unsupported text_to_video platform: {platform}")

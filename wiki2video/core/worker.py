@@ -5,7 +5,8 @@ import os
 import time
 from typing import TYPE_CHECKING, Optional, Set
 
-from wiki2video.config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX, WORKINGBLOCK_POLLING_INTERVAL
+from wiki2video.config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX, WORKINGBLOCK_POLLING_INTERVAL, \
+    WORKINGBLOCK_ERROR_COUNT_MAX
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.methods.registry import create_method
 from wiki2video.core.working_block import WorkingBlockStatus, WorkingBlock
@@ -117,8 +118,8 @@ class Worker:
             wb.polling_count += 1
             wb.status = result.status
 
-            if wb.status== WorkingBlockStatus.PENDING and wb.polling_count > WORKINGBLOCK_POLLING_COUNT_MAX:
-                raise Exception(f"Polling time exceeded, {wb.id}, {wb.method_name} failed")
+            if wb.status== WorkingBlockStatus.PENDING and wb.error_count > WORKINGBLOCK_ERROR_COUNT_MAX:
+                raise Exception(f"[Worker] too many retry, working block error, {wb.id}, {wb.method_name} failed")
             
         except Exception as e:
             print(f"[Worker] ❌ Exception during job {wb.id}: {e}")

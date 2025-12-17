@@ -8,10 +8,8 @@ def _default_config() -> Dict[str, Any]:
     return {
         "api_keys": {
             "fish_audio_api_key": None,
-            "google_api_key": None,
             "openai_api_key": None,
             "runway_api_key": None,
-            "kling_api_key": None,
             "siliconflow_api_key": None,
         },
 
@@ -36,7 +34,7 @@ def _default_config() -> Dict[str, Any]:
         "llm_default_model": "deepseek-ai/DeepSeek-V3.1-Terminus",
         "text_to_image_model": "Qwen/Qwen-Image-Edit-2509",
         "openai_character": "alloy",
-
+        "story_mode": "long_cine",
         "platforms": {
             "llm": "siliconflow",
             "text_image": "siliconflow",
