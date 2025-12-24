@@ -31,7 +31,7 @@ class MoviePyRenderer:
         try:
             clip.write_videofile(
                 str(out_path),
-                fps=template_cls.metadata.fps,
+                fps=template.fps(),
                 codec="libx264",
                 audio_codec="aac",
                 threads=4,

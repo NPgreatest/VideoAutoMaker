@@ -22,6 +22,7 @@ from wiki2video.methods.moviepy_animation.template_registry import TEMPLATE_REGI
 from wiki2video.methods.registry import register_method
 from wiki2video.core.utils import get_character_info
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.methods.text_video.constants import FORMATS
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
@@ -320,6 +321,15 @@ class MoviePyAnimationMethod(BaseMethod):
             render_config["template"] = template_name
             render_config["duration_sec"] = duration_sec
             render_config.setdefault("env_defaults", self._env_defaults())
+
+            video_size = "1280x720"
+            project_cfg_path = workdir / "project" / project_id / f"{project_id}.json"
+            if project_cfg_path.exists():
+                with open(project_cfg_path) as f:
+                    pj = json.load(f)
+                    fmt = pj.get("size", "landscape")
+                    video_size = FORMATS.get(fmt, "1280x720")
+            render_config["video_size"] = video_size
 
             template_config = template_cls.build_config(render_config, assets)
 

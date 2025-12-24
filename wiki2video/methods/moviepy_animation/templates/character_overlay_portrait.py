@@ -7,7 +7,6 @@ import numpy as np
 from moviepy import CompositeVideoClip, ImageClip, VideoClip, VideoFileClip
 
 from wiki2video.methods.moviepy_animation.base_template import (
-    TemplateMetadata,
     VideoTemplate,
     clamp,
     coerce_number,
@@ -28,10 +27,12 @@ class CharacterOverlayPortraitConfig:
     appear_from: str
     duration: float
     video_path: Optional[str]
+    width: int
+    height: int
+    fps: int
 
 
 class CharacterOverlayPortrait(VideoTemplate):
-    metadata = TemplateMetadata(width=1080, height=1920, fps=30)
     Config = CharacterOverlayPortraitConfig
 
     @classmethod
@@ -74,6 +75,18 @@ class CharacterOverlayPortrait(VideoTemplate):
         image_path = default_image
         image_is_video = str(image_path).lower().endswith((".mp4", ".mov", ".webm", ".mkv"))
 
+        video_size = config.get("video_size", "1080x1920")
+        if isinstance(video_size, str) and "x" in video_size:
+            w, h = video_size.split("x")
+            width = int(w)
+            height = int(h)
+        elif isinstance(video_size, (tuple, list)) and len(video_size) == 2:
+            width, height = int(video_size[0]), int(video_size[1])
+        else:
+            width, height = 1080, 1920
+
+        fps = config.get("fps", 30)
+
         return CharacterOverlayPortraitConfig(
             image_path=str(image_path),
             image_is_video=image_is_video,
@@ -83,6 +96,9 @@ class CharacterOverlayPortrait(VideoTemplate):
             appear_from=str(pick_field(config, ("appear_from", "appearFrom"), "left")),
             duration=safe_duration,
             video_path=str(assets.get("video")) if assets.get("video") else None,
+            width=width,
+            height=height,
+            fps=fps,
         )
 
     def render(self):
@@ -117,7 +133,7 @@ class CharacterOverlayPortrait(VideoTemplate):
 
         animate = self.config.appear
         slide_frames = 30
-        anim_duration = slide_frames / self.metadata.fps
+        anim_duration = slide_frames / self.fps()
         start_offset = image_width if self.config.appear_from == "right" else -image_width
 
         if animate:

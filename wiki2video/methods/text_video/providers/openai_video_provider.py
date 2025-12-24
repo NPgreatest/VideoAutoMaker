@@ -29,16 +29,15 @@ def openai_check_status(video_id: str) -> dict:
         video = client.videos.retrieve(video_id)
         raw_status = video.status
         return {
-            "raw": video,
-            "status": normalize_status("openai", raw_status)
+            "status": normalize_status("openai", raw_status),
+            "operation": video,
         }
     except Exception as e:
         return {"status": "error", "raw": {"error": str(e)}}
 
 
-def openai_extract_url(raw_video_obj):
-    return raw_video_obj.id   # 将 video_id 作为“URL”返回
-
+def openai_extract_url(operation):
+    return operation.id
 
 
 def openai_download_video(video_id: str, output_path: Path):

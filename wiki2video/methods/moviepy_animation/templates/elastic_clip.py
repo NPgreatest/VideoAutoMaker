@@ -5,7 +5,6 @@ from typing import Any, Dict
 
 from moviepy import VideoFileClip, ImageClip
 from wiki2video.methods.moviepy_animation.base_template import (
-    TemplateMetadata,
     VideoTemplate,
     coerce_number,
     cover_clip,
@@ -41,10 +40,11 @@ class ElasticClipConfig:
     video_path: str
     duration: float
     original_length: float
-
+    width: int
+    height: int
+    fps: int
 
 class ElasticClip(VideoTemplate):
-    metadata = TemplateMetadata(width=1080, height=1920, fps=30)
     Config = ElasticClipConfig
 
     @classmethod
@@ -75,10 +75,25 @@ class ElasticClip(VideoTemplate):
                 real_video_seconds or preview_duration,
             )
 
+        video_size = config.get("video_size", "1280x720")
+        if isinstance(video_size, str) and "x" in video_size:
+            w, h = video_size.split("x")
+            width = int(w)
+            height = int(h)
+        elif isinstance(video_size, (tuple, list)) and len(video_size) == 2:
+            width, height = int(video_size[0]), int(video_size[1])
+        else:
+            width, height = 1920, 1080
+
+        fps = config.get("fps", 30)
+
         return ElasticClipConfig(
             video_path=str(video_or_image),
             duration=safe_duration,
             original_length=original_length,
+            width=width,
+            height=height,
+            fps=fps,
         )
 
     @staticmethod
@@ -120,7 +135,7 @@ class ElasticClip(VideoTemplate):
         playback_rate = self._playback_rate(
             self.config.duration,
             self.config.original_length,
-            self.metadata.fps,
+            self.fps(),
         )
 
         clip = VideoFileClip(self.config.video_path)

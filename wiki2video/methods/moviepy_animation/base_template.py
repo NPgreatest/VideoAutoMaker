@@ -124,7 +124,6 @@ def pick_env_default(config: Dict[str, Any], key: str, fallback: float) -> float
 
 
 class VideoTemplate(ABC):
-    metadata: TemplateMetadata
     Config: Any
 
     def __init__(self, config: Any, assets: Dict[str, Any]):
@@ -144,13 +143,26 @@ class VideoTemplate(ABC):
     def duration_from_config(cls, config: Dict[str, Any]) -> Optional[float]:
         return None
 
-    @classmethod
-    def size(cls) -> Tuple[int, int]:
-        return (cls.metadata.width, cls.metadata.height)
+    def size(self) -> Tuple[int, int]:
+        """从配置中获取视频尺寸"""
+        if hasattr(self.config, 'width') and hasattr(self.config, 'height'):
+            return (self.config.width, self.config.height)
+        # 向后兼容：如果没有 width/height，尝试从 video_size 解析
+        if hasattr(self.config, 'video_size') and self.config.video_size:
+            if isinstance(self.config.video_size, tuple):
+                return self.config.video_size
+            if isinstance(self.config.video_size, str) and "x" in self.config.video_size:
+                w, h = self.config.video_size.split("x")
+                return (int(w), int(h))
+        # 默认值（向后兼容）
+        return (1920, 1080)
 
-    @classmethod
-    def fps(cls) -> int:
-        return cls.metadata.fps
+    def fps(self) -> int:
+        """从配置中获取帧率"""
+        if hasattr(self.config, 'fps'):
+            return self.config.fps
+        # 默认值
+        return 30
 
 
 def silence_clip(duration: float, size: Tuple[int, int]) -> ColorClip:

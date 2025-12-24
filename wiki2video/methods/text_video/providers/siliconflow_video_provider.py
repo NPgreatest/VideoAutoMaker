@@ -49,13 +49,13 @@ def sf_check_status(request_id: str) -> dict:
     raw = r.json()
     status = raw.get("status", "")
     return {
-        "raw": raw,
-        "status": normalize_status("siliconflow", status)
+        "status": normalize_status("siliconflow", status),
+        "operation": raw,  # ✅ 统一叫 operation
     }
 
 
-def sf_extract_url(raw_resp: dict) -> str | None:
-    videos = raw_resp.get("results", {}).get("videos", [])
+def sf_extract_url(operation: dict) -> str | None:
+    videos = operation.get("results", {}).get("videos", [])
     if videos:
         return videos[0].get("url")
     return None

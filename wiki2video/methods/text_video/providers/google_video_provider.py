@@ -1,16 +1,12 @@
 from __future__ import annotations
 
-import time
 from pathlib import Path
 from typing import Optional
 
 from google import genai
-from google.auth.environment_vars import GOOGLE_CLOUD_QUOTA_PROJECT
-from google.genai.types import GenerateVideosConfig
+from google.genai.types import GenerateVideosConfig, GenerateVideosOperation, GenerateVideosResponse
 
 from wiki2video.config.config_manager import config
-from .status_adapter import normalize_status
-
 
 client = genai.Client(
     vertexai=True,
@@ -34,6 +30,7 @@ def google_submit_video(prompt: str, size: str) -> Optional[str]:
                 output_gcs_uri=output_gcs_uri,
             ),
         )
+        print(f"operation: {operation}")
 
         print(f"[Google] Submitted operation: {operation.name}")
         return operation.name
@@ -42,66 +39,61 @@ def google_submit_video(prompt: str, size: str) -> Optional[str]:
         print("[Google] Submit error:", e)
         return None
 
-
 def google_check_status(operation_name: str) -> dict:
-    """
-    查询 Veo 生成状态
-    """
-    try:
-        operation = client.operations.get(operation_name)
+    stub = GenerateVideosOperation.model_construct(name=operation_name)
+    op = client.operations.get(stub)
+    print(f"[Google] , op {op}")
+    if not op.done:
+        return {"status": "wait"}
 
-        if not operation.done:
-            return {
-                "status": normalize_status("google", "running"),
-                "raw": operation,
-            }
+    if op.error:
+        return {"status": "error", "error": op.error}
 
-        if operation.error:
-            return {
-                "status": normalize_status("google", "error"),
-                "raw": operation.error,
-            }
-
-        return {
-            "status": normalize_status("google", "succeeded"),
-            "raw": operation,
-        }
-
-    except Exception as e:
-        return {
-            "status": normalize_status("google", "error"),
-            "raw": {"error": str(e)},
-        }
+    return {
+        "status": "success",
+        "operation": op,   # ✅ 唯一权威返回
+    }
 
 
 
-def google_extract_url(raw_operation) -> Optional[str]:
+def google_extract_url(op: GenerateVideosOperation) -> Optional[str]:
     """
     从 completed operation 中提取 GCS 视频路径
     """
     try:
-        videos = raw_operation.result.generated_videos
-        if not videos:
+        result: GenerateVideosResponse = op.result
+        if not result or not result.generated_videos:
             return None
-        return videos[0].video.uri  # gs://bucket/path/video.mp4
-    except Exception:
+
+        return result.generated_videos[0].video.uri
+    except Exception as e:
+        print("[Google] Extract URL error:", e)
         return None
 
 
 
-import subprocess
+
+
+from google.cloud import storage
+from pathlib import Path
 
 def google_download_video(gcs_uri: str, output_path: Path):
     """
-    使用 gsutil 下载视频
+    使用 google-cloud-storage SDK 下载视频
     """
-    output_path.parent.mkdir(parents=True, exist_ok=True)
+    assert gcs_uri.startswith("gs://")
 
-    subprocess.run(
-        ["gsutil", "cp", gcs_uri, str(output_path)],
-        check=True,
+    _, _, bucket_name, *blob_parts = gcs_uri.split("/")
+    blob_name = "/".join(blob_parts)
+
+    bucket_client = storage.Client(
+        project=config.get("google", "project_id")  # ✅ 关键修复
     )
 
+    bucket = bucket_client.bucket(bucket_name)
+    blob = bucket.blob(blob_name)
+
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    blob.download_to_filename(str(output_path))
+
     print(f"[Google] Video saved → {output_path}")
-
-

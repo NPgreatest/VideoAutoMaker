@@ -110,7 +110,7 @@ class TextVideo(BaseMethod):
                         pj = json.load(f)
                         fmt = pj.get("size", "landscape")
                         image_size = FORMATS.get(fmt, "1280x720")
-
+                print(f"[TEXT_VIDEO] Submitting video with size {image_size}")
                 request_id = provider["submit"](config.prompt, image_size)
 
                 if not request_id:
@@ -131,13 +131,10 @@ class TextVideo(BaseMethod):
                     duration_sec=None,
                     error=None,
                 )
-
             # ============ Step 2: 轮询状态 ============
             resp = provider["check"](request_id)
             status = resp["status"]
-            raw_resp = resp["raw"]
-
-            # print(f"[siliconflow] poll status = {status}, response = {resp}")
+            op = resp.get("operation")
 
             # ⏳ 等待中
             if status == "wait":
@@ -148,9 +145,9 @@ class TextVideo(BaseMethod):
                     error=None,
                 )
 
-            # ❌ 错误 → 自动重试（清除 request_id）
+            # ❌ 错误 → 自动重试
             if status == "error":
-                print("[SF] Video Generation Error occurred, resetting request_id")
+                print("[TEXT_VIDEO] Video Generation Error occurred, resetting request_id")
                 config_dict.pop("request_id", None)
                 wb.config_json = json.dumps(config_dict)
                 wb.status = WorkingBlockStatus.PENDING
@@ -165,7 +162,9 @@ class TextVideo(BaseMethod):
 
             # 🎉 成功 → 下载视频
             if status == "success":
-                url = provider["extract_url"](raw_resp)
+                print("[TEXT_VIDEO] Video Generation Success")
+
+                url = provider["extract_url"](op)
                 if not url:
                     wb.status = WorkingBlockStatus.ERROR
                     return GenerationResult(
@@ -175,14 +174,17 @@ class TextVideo(BaseMethod):
                         error="No video URL",
                     )
 
-                # 输出路径
                 workdir = Path(config_dict.get("workdir", "."))
                 project_root = workdir.resolve()
                 block_id = wb.block_id or config_dict.get("target_name", wb.id)
-                action_dir = get_action_output_dir(project_root, wb.project_id, block_id, wb.method_name, wb.id)
+                action_dir = get_action_output_dir(
+                    project_root, wb.project_id, block_id, wb.method_name, wb.id
+                )
                 output_path = get_output_file_path(action_dir, block_id, "mp4")
 
                 provider["download"](url, output_path)
+
+
 
                 # 时长
                 result_probe = subprocess.run(

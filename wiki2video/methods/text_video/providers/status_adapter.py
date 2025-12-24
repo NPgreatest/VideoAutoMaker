@@ -24,6 +24,15 @@ def normalize_status(platform: str, raw_status: str) -> str:
             return "error"
         return "wait"
 
+    if platform == "google":
+        print(f"[text_video] s={s}")
+        if s == "success":
+            return "success"
+        if s == "error":
+            return "error"
+        return "wait"
+
+
     # fallback
     print("[text_video] ERROR, Unknown platform")
     return "error"

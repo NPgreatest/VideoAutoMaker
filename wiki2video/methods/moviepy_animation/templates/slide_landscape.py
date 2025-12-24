@@ -18,7 +18,6 @@ from moviepy import (
 from moviepy.audio.fx import AudioFadeOut
 
 from wiki2video.methods.moviepy_animation.base_template import (
-    TemplateMetadata,
     VideoTemplate,
     clamp,
     coerce_number,
@@ -40,10 +39,12 @@ class SlideLandscapeConfig:
     image_mode: str
     sound_effect: Optional[str]
     appear: bool
+    width: int
+    height: int
+    fps: int
 
 
 class SlideLandscape(VideoTemplate):
-    metadata = TemplateMetadata(width=1920, height=1080, fps=30)
     Config = SlideLandscapeConfig
 
     @classmethod
@@ -57,6 +58,18 @@ class SlideLandscape(VideoTemplate):
         )
         safe_duration = coerce_number(duration, 5.0)
 
+        video_size = config.get("video_size", "1920x1080")
+        if isinstance(video_size, str) and "x" in video_size:
+            w, h = video_size.split("x")
+            width = int(w)
+            height = int(h)
+        elif isinstance(video_size, (tuple, list)) and len(video_size) == 2:
+            width, height = int(video_size[0]), int(video_size[1])
+        else:
+            width, height = 1920, 1080
+
+        fps = config.get("fps", 30)
+
         return SlideLandscapeConfig(
             title=str(pick_field(config, ("title",), "")),
             description=str(pick_field(config, ("description",), "")),
@@ -66,6 +79,9 @@ class SlideLandscape(VideoTemplate):
             image_mode=str(pick_field(config, ("image_mode", "imageMode"), "top")),
             sound_effect=str(pick_field(config, ("sound_effect", "soundEffect"), "")) or None,
             appear=bool(pick_field(config, ("appear",), False)),
+            width=width,
+            height=height,
+            fps=fps,
         )
 
     def _make_background(self) -> VideoClip:
@@ -102,8 +118,8 @@ class SlideLandscape(VideoTemplate):
         if not animate:
             return scaled.with_position(position)
 
-        fade_end = 25 / self.metadata.fps
-        scale_start = 10 / self.metadata.fps
+        fade_end = 25 / self.fps()
+        scale_start = 10 / self.fps()
         spring_duration = 1.0
 
         def opacity(t: float) -> float:
@@ -136,9 +152,9 @@ class SlideLandscape(VideoTemplate):
         if not animate:
             return clip.with_position(("center", y_top))
 
-        fade_start = 10 / self.metadata.fps
-        fade_end = 40 / self.metadata.fps
-        scale_start = 10 / self.metadata.fps
+        fade_start = 10 / self.fps()
+        fade_end = 40 / self.fps()
+        scale_start = 10 / self.fps()
         spring_duration = 1.0
 
         def opacity(t: float) -> float:
@@ -172,8 +188,8 @@ class SlideLandscape(VideoTemplate):
         if not animate:
             return clip.with_position(("center", y_top))
 
-        fade_start = 40 / self.metadata.fps
-        fade_end = 70 / self.metadata.fps
+        fade_start = 40 / self.fps()
+        fade_end = 70 / self.fps()
 
         def opacity(t: float) -> float:
             return progress_in_range(t, fade_start, fade_end)
@@ -218,7 +234,7 @@ class SlideLandscape(VideoTemplate):
         video = CompositeVideoClip(layers, size=self.size()).with_duration(duration)
 
         if self.config.sound_effect and os.path.exists(self.config.sound_effect):
-            start = 10 / self.metadata.fps
+            start = 10 / self.fps()
             sfx = (AudioFileClip(self.config.sound_effect).with_start(start)
                    .with_effects([afx.AudioLoop(duration=duration), AudioFadeOut(duration=0.3)]))
 

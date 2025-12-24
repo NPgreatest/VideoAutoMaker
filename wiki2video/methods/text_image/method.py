@@ -108,12 +108,16 @@ class TextImageMethod(BaseMethod):
                 resp = openai_generate_image(prompt, cfg.negative_prompt, cfg.size)
                 raise RuntimeError(resp.get("reason", "OpenAI text_image provider not implemented"))
 
-            if provider != "siliconflow":
+            if provider == "google":
+                from .providers.google_image_provider import google_generate_image
+
+                image_bytes = google_generate_image(prompt, cfg.negative_prompt, cfg.size)
+            elif provider == "siliconflow":
+                from .providers.siliconflow_image_provider import siliconflow_generate_image
+
+                image_bytes = siliconflow_generate_image(prompt, cfg.negative_prompt, cfg.size)
+            else:
                 raise ValueError(f"Unsupported text_image provider: {provider}")
-
-            from .providers.siliconflow_image_provider import siliconflow_generate_image
-
-            image_bytes = siliconflow_generate_image(prompt, cfg.negative_prompt, cfg.size)
 
             workdir = Path(cfg.workdir or ".").expanduser().resolve()
             block_id = cfg.target_name or wb.block_id or wb.id

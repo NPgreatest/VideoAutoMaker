@@ -18,7 +18,6 @@ from moviepy import (
 from moviepy.audio.fx import AudioFadeOut
 
 from wiki2video.methods.moviepy_animation.base_template import (
-    TemplateMetadata,
     VideoTemplate,
     clamp,
     coerce_number,
@@ -41,10 +40,12 @@ class SlidePortraitConfig:
     sound_effect: Optional[str]
     appear: bool
     image_mode: str
+    width: int
+    height: int
+    fps: int
 
 
 class SlidePortrait(VideoTemplate):
-    metadata = TemplateMetadata(width=1080, height=1920, fps=30)
     Config = SlidePortraitConfig
 
     @classmethod
@@ -65,6 +66,18 @@ class SlidePortrait(VideoTemplate):
             or (config.get("data") or {}).get("titleStartTime")
         )
 
+        video_size = config.get("video_size", "1080x1920")
+        if isinstance(video_size, str) and "x" in video_size:
+            w, h = video_size.split("x")
+            width = int(w)
+            height = int(h)
+        elif isinstance(video_size, (tuple, list)) and len(video_size) == 2:
+            width, height = int(video_size[0]), int(video_size[1])
+        else:
+            width, height = 1080, 1920
+
+        fps = config.get("fps", 30)
+
         return SlidePortraitConfig(
             title=str(pick_field(config, ("title",), "")),
             description=str(pick_field(config, ("description",), "")),
@@ -75,13 +88,16 @@ class SlidePortrait(VideoTemplate):
             sound_effect=str(pick_field(config, ("sound_effect", "soundEffect"), "")) or None,
             appear=bool(pick_field(config, ("appear",), False)),
             image_mode=str(pick_field(config, ("image_mode", "imageMode"), "top")),
+            width=width,
+            height=height,
+            fps=fps,
         )
 
     # -------------------------------
     # Timing utilities
     # -------------------------------
     def _compute_timing(self) -> Dict[str, float]:
-        fps = self.metadata.fps
+        fps = self.fps()
         total_frames = int(self.config.duration * fps)
 
         if self.config.title_start_time is not None:
@@ -151,8 +167,8 @@ class SlidePortrait(VideoTemplate):
         if not animate:
             return img.with_position(position)
 
-        fade_end = 25 / self.metadata.fps
-        spring_start = 10 / self.metadata.fps
+        fade_end = 25 / self.fps()
+        spring_start = 10 / self.fps()
         spring_duration = 1.0
 
         def opacity(t: float) -> float:
@@ -275,7 +291,7 @@ class SlidePortrait(VideoTemplate):
 
         # Audio
         if self.config.sound_effect and os.path.exists(self.config.sound_effect):
-            start = 10 / self.metadata.fps
+            start = 10 / self.fps()
             sfx = (AudioFileClip(self.config.sound_effect).with_start(start)
                    .with_effects([afx.AudioLoop(duration=duration), AudioFadeOut(duration=0.3)]))
 
