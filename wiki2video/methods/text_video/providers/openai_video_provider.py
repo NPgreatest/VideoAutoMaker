@@ -7,7 +7,7 @@ from wiki2video.config.config_manager import config
 from .status_adapter import normalize_status
 
 
-client = OpenAI(api_key=config.get_api_key("openai"))
+client = OpenAI(api_key=config.get("openai", "api_key"))
 
 
 def openai_submit_video(prompt: str, size: str) -> str | None:

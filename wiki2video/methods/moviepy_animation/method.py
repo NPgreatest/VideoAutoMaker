@@ -20,7 +20,6 @@ from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.moviepy_animation.renderer import MoviePyRenderer
 from wiki2video.methods.moviepy_animation.template_registry import TEMPLATE_REGISTRY
 from wiki2video.methods.registry import register_method
-from wiki2video.core.utils import get_character_info
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.methods.text_video.constants import FORMATS
 from wiki2video.schema.action_spec import ActionSpec
@@ -265,7 +264,7 @@ class MoviePyAnimationMethod(BaseMethod):
             project_dir = workdir / "project" / project_id
             copied_assets: list[Path] = []
 
-            assets: Dict[str, Optional[str | Path]] = {"video": None, "image": None, "character": None}
+            assets: Dict[str, Optional[str | Path]] = {"video": None, "image": None}
 
             image_ref = (
                 config_dict.get("image_filename")
@@ -277,19 +276,6 @@ class MoviePyAnimationMethod(BaseMethod):
                 assets["image"] = image_asset.path
                 if image_asset.copied:
                     copied_assets.append(image_asset.path)
-
-            character_name = config_dict.get("character")
-            if character_name:
-                char_info = get_character_info(character_name) or {}
-                char_image_path = char_info.get("image_path")
-                if char_image_path:
-                    char_asset = self._copy_asset(char_image_path, assets_dir, project_dir)
-                    assets["character"] = char_asset.path
-                    if char_asset.copied:
-                        copied_assets.append(char_asset.path)
-
-            if assets["character"] is None and assets["image"]:
-                assets["character"] = assets["image"]
 
             if video_path:
                 video_asset = self._copy_asset(

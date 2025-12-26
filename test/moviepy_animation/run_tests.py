@@ -131,7 +131,7 @@ def render_all():
                 "appear_from": "right",
             },
             "assets": {
-                "character": assets["character_video"],  # mp4 to trigger video overlay path
+                "image": assets["character_video"],  # mp4 to trigger video overlay path
                 "video": assets["video"],
             },
         },

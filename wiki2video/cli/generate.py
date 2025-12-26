@@ -32,7 +32,6 @@ def _locate_final_video(project_name: str) -> Optional[Path]:
 def generate(
     url_or_topic: str = typer.Argument(..., help="Wikipedia URL or topic"),
     size: str = typer.Option("tiktok", "--size", "-s"),
-    character: Optional[str] = typer.Option("young_man_english", "--character", "-c"),
     bgm: Optional[str] = typer.Option(None, "--bgm"),
     bg_video: Optional[str] = typer.Option(None, "--bg-video"),
     burn_subtitle: bool = typer.Option(False, "--burn/--no-burn"),
@@ -50,7 +49,6 @@ def generate(
             wiki_input=url_or_topic,
             project_name=project_name,
             size=size,
-            character=character,
             bgm=bgm,
             bg_video=bg_video,
             burn=burn_subtitle,

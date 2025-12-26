@@ -9,25 +9,29 @@ from wiki2video.config.config_manager import SUPPORTED_PLATFORMS, config
 def _load_config_values():
     cfg = config.to_dict()
     platforms = cfg.get("platforms", {})
-    api_keys = cfg.get("api_keys", {})
     global_cfg = cfg.get("global_config", {})
+    
+    # Get platform-specific configs
+    llm_platform = platforms.get("llm")
+    llm_default_model = config.get(llm_platform, "default_model") if llm_platform else None
+    
     return [
         platforms.get("llm"),
         platforms.get("tts"),
         platforms.get("text_to_video"),
         platforms.get("image"),
-        api_keys.get("openai_api_key"),
-        api_keys.get("deepseek_api_key"),
-        api_keys.get("siliconflow_api_key"),
-        api_keys.get("runway_api_key"),
-        api_keys.get("fal_api_key"),
-        api_keys.get("replicate_api_key"),
-        api_keys.get("gpt_sovits_api_key"),
-        api_keys.get("coqui_tts_api_key"),
-        api_keys.get("text_audio_api_key"),
-        api_keys.get("google_api_key"),
-        api_keys.get("google_cx_key"),
-        cfg.get("llm_default_model"),
+        config.get("openai", "api_key"),
+        config.get("deepseek", "api_key"),
+        config.get("siliconflow", "api_key"),
+        config.get("runway", "api_key"),
+        config.get("fal", "api_key"),
+        config.get("replicate", "api_key"),
+        config.get("gpt_sovits", "api_key"),
+        config.get("coqui", "api_key"),
+        config.get("text_audio", "api_key"),
+        config.get("google", "api_key"),
+        config.get("google", "cx_key"),
+        llm_default_model,
         cfg.get("backoff_max_tries"),
         cfg.get("backoff_max_time"),
         global_cfg.get("font_path"),
@@ -67,19 +71,23 @@ def _save_config_values(
         config.set("platforms", "text_to_video", value=text_to_video_platform or None)
         config.set("platforms", "image", value=image_platform or None)
 
-        config.set("api_keys", "openai_api_key", value=openai_key or None)
-        config.set("api_keys", "deepseek_api_key", value=deepseek_key or None)
-        config.set("api_keys", "siliconflow_api_key", value=silicon_key or None)
-        config.set("api_keys", "runway_api_key", value=runway_key or None)
-        config.set("api_keys", "fal_api_key", value=fal_key or None)
-        config.set("api_keys", "replicate_api_key", value=replicate_key or None)
-        config.set("api_keys", "gpt_sovits_api_key", value=gpt_sovits_key or None)
-        config.set("api_keys", "coqui_tts_api_key", value=coqui_key or None)
-        config.set("api_keys", "text_audio_api_key", value=text_audio_key or None)
-        config.set("api_keys", "google_api_key", value=google_key or None)
-        config.set("api_keys", "google_cx_key", value=google_cx_key or None)
+        # Save platform-specific API keys
+        config.set("openai", "api_key", value=openai_key or None)
+        config.set("deepseek", "api_key", value=deepseek_key or None)
+        config.set("siliconflow", "api_key", value=silicon_key or None)
+        config.set("runway", "api_key", value=runway_key or None)
+        config.set("fal", "api_key", value=fal_key or None)
+        config.set("replicate", "api_key", value=replicate_key or None)
+        config.set("gpt_sovits", "api_key", value=gpt_sovits_key or None)
+        config.set("coqui", "api_key", value=coqui_key or None)
+        config.set("text_audio", "api_key", value=text_audio_key or None)
+        config.set("google", "api_key", value=google_key or None)
+        config.set("google", "cx_key", value=google_cx_key or None)
 
-        config.set("llm_default_model", value=llm_default_model or None)
+        # Save LLM default model to the selected LLM platform
+        if llm_platform and llm_default_model:
+            config.set(llm_platform, "default_model", value=llm_default_model)
+        
         config.set("backoff_max_tries", value=backoff_max_tries)
         config.set("backoff_max_time", value=backoff_max_time)
 
@@ -138,7 +146,10 @@ def build_config_page() -> None:
             google_cx_key = gr.Textbox(label="Google CX Key", type="password")
 
         with gr.Row():
-            llm_default_model = gr.Textbox(label="LLM Default Model", placeholder="e.g. gpt-4.1")
+            llm_default_model = gr.Textbox(
+                label="LLM Default Model (for selected LLM platform)", 
+                placeholder="e.g. gpt-4.1 or deepseek-ai/DeepSeek-V3.1-Terminus"
+            )
             backoff_max_tries = gr.Number(label="BACKOFF_MAX_TRIES", precision=0)
             backoff_max_time = gr.Number(label="BACKOFF_MAX_TIME (seconds)", precision=0)
 

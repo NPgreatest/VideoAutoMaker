@@ -4,14 +4,13 @@ import requests
 
 from openai import OpenAI
 
+from wiki2video.config.config_manager import config
 from wiki2video.config.config_vars import (
     BACKOFF_MAX_TRIES,
     BACKOFF_MAX_TIME,
-    TEXT_AUDIO_API_KEY,
-OPENAI_CHARACTER
 )
 
-client = OpenAI(api_key=TEXT_AUDIO_API_KEY)
+client = OpenAI(api_key=config.get("openai","api_key"))
 
 
 # -------------------------------
@@ -24,24 +23,18 @@ client = OpenAI(api_key=TEXT_AUDIO_API_KEY)
     max_time=BACKOFF_MAX_TIME,
     jitter=backoff.random_jitter,
 )
-def openai_tts(text: str, out_path: Path, model_id: str) -> bytes:
-    """
-    使用 OpenAI TTS，将文本转语音，并返回音频 bytes。
-    - text: 输入文本
-    - out_path: 输出 mp3 路径
-    - model_id: 用作 voice（如 coral / alloy / shimmer）
-    """
+def openai_tts(text: str, out_path: Path) -> bytes:
 
     out_path.parent.mkdir(parents=True, exist_ok=True)
     audio_buffer = bytearray()
 
     with client.audio.speech.with_streaming_response.create(
-            model="gpt-4o-mini-tts",
-            voice=OPENAI_CHARACTER,
+            model=config.get("openai","tts_model"),
+            voice=config.get("openai","tts_character"),
             input=text,
-            instructions="Speak naturally, with normal intonation.",
+            instructions=config.get("openai","tts_instructions"),
             response_format="mp3",
-            speed=1.4,
+            speed=config.get("openai","tts_speed"),
     ) as response:
         # 流式写入文件
         with open(out_path, "wb") as f:

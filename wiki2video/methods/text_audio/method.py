@@ -11,17 +11,16 @@ from typing import List
 from dacite import from_dict, Config
 from pydub import AudioSegment
 
-from wiki2video.config.config_manager import config
+from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.registry import register_method
 from wiki2video.methods.text_audio.api_router import tts_router
-from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
-from wiki2video.core.utils import get_character_info
-from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
+
 
 # -------------------------------
 # 环境变量和 Text Audio 初始化
@@ -97,15 +96,6 @@ class TextAudioMethod(BaseMethod):
             if not text or not text.strip():
                 raise Exception("Text cannot be empty")
 
-            # Get model_id from character if available
-            model_id = None
-            character = config_dict.get("character")
-            if character:
-                character_info = get_character_info(character)
-                if character_info and "model_id" in character_info:
-                    model_id = character_info["model_id"]
-                    print(f"[TextAudio] Using model_id from character '{character}': {model_id}")
-
             # Split text into phrases
             phrases = _split_text_into_phrases(text)
             if not phrases:
@@ -133,7 +123,7 @@ class TextAudioMethod(BaseMethod):
             for idx, phrase in enumerate(phrases):
                 segment_path = action_dir / f"seg{idx+1}.wav"
                 try:
-                    segment_bytes = tts_router(phrase, segment_path, model_id)
+                    segment_bytes = tts_router(phrase, segment_path)
                     if not segment_bytes:
                         continue
                     

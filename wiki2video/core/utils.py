@@ -21,41 +21,6 @@ def write_json(path: Path, data: Dict[str, Any]) -> None:
         json.dump(data, f, ensure_ascii=False, indent=2)
     tmp_path.replace(path)
 
-def load_character_config() -> Dict[str, Any]:
-    """
-    从 config/character_config.json 读取角色配置。
-    返回格式: {character_name: {name, model_id, image_path}}
-    """
-    cfg_path = Path("config/character_config.json")
-    if not cfg_path.exists():
-        return {}
-    try:
-        return read_json(cfg_path)
-    except Exception as e:
-        print(f"[character_config] ⚠️ Failed to load character config: {e}")
-        return {}
-
-def get_character_info(character: str) -> Optional[Dict[str, Any]]:
-    if not character:
-        return None
-    
-    config = load_character_config()
-    
-    # 直接匹配
-    if character in config:
-        return config[character]
-    
-    # 尝试映射：常见缩写映射
-    mapping = {
-        "hu": "huchenfeng",
-    }
-    
-    mapped_character = mapping.get(character)
-    if mapped_character and mapped_character in config:
-        return config[mapped_character]
-    
-    return None
-
 def get_project_status(raw: Dict[str, Any]) -> ProjectStatus:
     """Get project status from JSON data, default to CREATED if not set."""
     status_str = raw.get("project_status")

@@ -12,7 +12,6 @@ def script_command(
 
     project_name: Optional[str] = typer.Option(None, "--name", "-n"),
     size: str = typer.Option("tiktok", "--size", "-s"),
-    character: str = typer.Option("young_man_english", "--character", "-c"),
     bgm: Optional[str] = typer.Option(None, "--bgm"),
     bg_video: Optional[str] = typer.Option(None, "--bg-video"),
     burn: bool = typer.Option(True, "--burn/--no-burn"),
@@ -25,7 +24,6 @@ def script_command(
             wiki_input=wiki,
             project_name=project_name,
             size=size,
-            character=character,
             bgm=bgm,
             bg_video=bg_video,
             burn=burn,

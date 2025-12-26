@@ -14,7 +14,6 @@ from wiki2video.ui.shared import (
     PROJECT_ROOT,
     get_background_video_choices,
     get_bgm_choices,
-    get_character_choices,
 )
 
 # NEW orchestrator
@@ -173,7 +172,6 @@ def _reset_project_blocks(project_id: str):
 def build_project_ui(
     project_id,
     size,
-    default_character,
     global_context,
     show_character_overlay,
     script_text,
@@ -191,7 +189,6 @@ def build_project_ui(
             script_text,
             project_id,
             size=size,
-            character=default_character,
             global_context=global_context,
             show_overlay=show_character_overlay,
             bgm=bgm_path,
@@ -210,8 +207,6 @@ def build_project_ui(
 # ============================================================
 
 def build_create_project_page():
-    character_choices = get_character_choices()
-    default_character_value = character_choices[0][1] if character_choices else ""
     bgm_choices = get_bgm_choices()
     bg_video_choices = get_background_video_choices()
 
@@ -261,11 +256,6 @@ def build_create_project_page():
             label="Video Format",
             choices=["landscape", "tiktok"],
             value="tiktok",
-        )
-        default_character = gr.Dropdown(
-            label="Default Character",
-            choices=character_choices,
-            value=default_character_value,
         )
         bgm_dropdown = gr.Dropdown(label="Background Music", choices=bgm_choices)
         bg_video_dropdown = gr.Dropdown(label="Background Video", choices=bg_video_choices)
@@ -352,7 +342,6 @@ def build_create_project_page():
         inputs=[
             project_id,
             size,
-            default_character,
             global_context,
             show_character_overlay,
             script_text,

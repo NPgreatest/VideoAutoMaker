@@ -17,18 +17,8 @@ from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.project_schema import ScriptBlock
 
 
-def _extract_character_key(raw: str) -> str:
-    if not raw:
-        return raw
-    match = re.search(r"\(([^)]+)\)", raw)
-    if match:
-        return match.group(1).strip()
-    return raw.strip()
-
-
 def parse_script_lines(
     script_text: str,
-    default_character: str,
     size: str = "tiktok",
     background_video: str = None,
     show_character_overlay: bool = True,
@@ -40,10 +30,6 @@ def parse_script_lines(
 
     line_index = 1
     lines = script_text.splitlines()
-
-    prev_character = None
-    character_sides: Dict[str, str] = {}
-    default_character_key = _extract_character_key(default_character)
 
     for raw in lines:
         line = raw.strip()
@@ -124,11 +110,9 @@ def parse_script_lines(
         # 2️⃣ Normal text (dialogue)
         # ====================================================
         text = line_clean
-        character = default_character_key
 
         match_new = re.match(r'^"([^"]+)":\s*(.+)$', line_clean)
         if match_new:
-            character = _extract_character_key(match_new.group(1).strip())
             text = match_new.group(2).strip()
             if text.startswith('"') and text.endswith('"'):
                 text = text[1:-1]
@@ -136,7 +120,6 @@ def parse_script_lines(
             if ":" in line_clean and not line_clean.startswith("http"):
                 prefix, rest = line_clean.split(":", 1)
                 if prefix.strip():
-                    character = _extract_character_key(prefix.strip())
                     text = rest.strip()
 
         # ============================================
@@ -153,7 +136,6 @@ def parse_script_lines(
             type="text_audio",
             config={
                 "text": text,
-                "character": character,
                 "target_name": sb.id,
                 "workdir": ".",
             }
@@ -199,23 +181,9 @@ def parse_script_lines(
 
             picture_config = {
                 "template": slide_template,
-                "character": character,
                 "target_name": sb.id,
                 "workdir": ".",
             }
-
-            if character not in character_sides:
-                if len(character_sides) == 0:
-                    character_sides[character] = "left"
-                elif len(character_sides) == 1:
-                    character_sides[character] = "right"
-                else:
-                    character_sides[character] = "left"
-
-            picture_config["appear_from"] = character_sides[character]
-
-            if prev_character == character:
-                picture_config["appear"] = True
 
             if custom_image_mode:
                 picture_config["imageMode"] = custom_image_mode
@@ -226,7 +194,6 @@ def parse_script_lines(
             ))
 
         script_blocks.append(sb)
-        prev_character = character
         line_index += 1
 
     return script_blocks

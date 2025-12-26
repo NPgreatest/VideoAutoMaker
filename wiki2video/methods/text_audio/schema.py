@@ -17,7 +17,6 @@ class TextAudioSchema:
         project_id: Project id (optional, will be set by PipelineBuilder)
         workdir: Working directory path
         global_context: Global theme/context for the video
-        character: Character name for TTS (optional)
         speed: Speech speed multiplier (default: 1.2)
     """
     text: str
@@ -25,7 +24,6 @@ class TextAudioSchema:
     project_id: Optional[str] = None  # Will be set by PipelineBuilder
     workdir: str = "."
     global_context: Optional[str] = None
-    character: Optional[str] = None
     speed: float = 1.2
 
 

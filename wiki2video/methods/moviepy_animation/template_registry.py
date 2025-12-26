@@ -4,8 +4,6 @@ from typing import Dict, Type
 
 from wiki2video.methods.moviepy_animation.base_template import VideoTemplate
 from wiki2video.methods.moviepy_animation.templates import (
-    CharacterOverlayLandscape,
-    CharacterOverlayPortrait,
     ElasticClip,
     SlideLandscape,
     SlidePortrait,
@@ -13,8 +11,6 @@ from wiki2video.methods.moviepy_animation.templates import (
 
 TEMPLATE_REGISTRY: Dict[str, Type[VideoTemplate]] = {
     "ElasticClip": ElasticClip,
-    "CharacterOverlay-Landscape": CharacterOverlayLandscape,
-    "CharacterOverlay-Portrait": CharacterOverlayPortrait,
     "Slide-Landscape": SlideLandscape,
     "Slide-Portrait": SlidePortrait,
 }

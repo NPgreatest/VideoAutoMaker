@@ -13,7 +13,7 @@ class TextImageConfig(BaseModel):
     text: Optional[str] = None
     negative_prompt: Optional[str] = None
     size: str = None
-    provider: str = "siliconflow"
+    provider: str = None
     workdir: str = "."
     target_name: Optional[str] = None
     project_id: Optional[str] = None

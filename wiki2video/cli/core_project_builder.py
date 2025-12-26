@@ -50,7 +50,6 @@ def build_project_from_wiki(
     *,
     project_name: Optional[str],
     size: str,
-    character: str,
     bgm: Optional[str],
     bg_video: Optional[str],
     burn: bool,
@@ -65,7 +64,6 @@ def build_project_from_wiki(
 
     blocks = parse_script_lines(
         script_text,
-        character,
         size,
         bg_video,
         show_overlay,
@@ -111,7 +109,6 @@ def build_project_from_script(
     project_name: Optional[str],
     *,
     size: str,
-    character: str,
     bgm: Optional[str],
     bg_video: Optional[str],
     burn: bool,
@@ -121,7 +118,6 @@ def build_project_from_script(
 
     blocks = parse_script_lines(
         script_text,
-        character,
         size,
         bg_video,
         show_overlay,

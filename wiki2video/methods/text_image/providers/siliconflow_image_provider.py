@@ -7,7 +7,6 @@ from typing import Optional
 import requests
 
 from wiki2video.config.config_manager import config
-from wiki2video.config.config_vars import TEXT_TO_IMAGE_MODEL
 
 API_URL = "https://api.siliconflow.cn/v1/images/generations"
 REQUEST_TIMEOUT = 60
@@ -22,17 +21,14 @@ def siliconflow_generate_image(
     Call SiliconFlow's image generation endpoint and return the raw image bytes.
     """
 
-    token = (
-        config.get_api_key("siliconflow")
-        or config.get("api_keys", "siliconflow_api_key")
-    )
+    token = config.get("siliconflow", "api_key")
     if not token:
         raise ValueError(
-            "Missing SiliconFlow API key in config.json (api_keys.siliconflow_api_key)."
+            "Missing SiliconFlow API key in config.json (siliconflow.api_key)."
         )
 
     payload = {
-        "model": TEXT_TO_IMAGE_MODEL,
+        "model": config.get("siliconflow", "text_image_model"),
         "prompt": prompt,
         "image_size": size or "1024x1024",
         "batch_size": 1,

@@ -105,15 +105,15 @@ class ConfigManager:
             self._write_file(self.data)
 
     def get_api_key(self, platform_name: Optional[str]) -> Optional[str]:
-        """Get API key based on selected platform."""
+        """
+        Get API key based on selected platform.
+        Uses new config structure: config.get(platform, "api_key")
+        """
         if not platform_name:
             return None
 
-        # User config holds API-key mappings
-        api_keys = self.data.get("api_keys", {})
-
-        key_name = f"{platform_name}_api_key"
-        return api_keys.get(key_name)
+        # Use new platform-specific config structure
+        return self.get(platform_name, "api_key")
 
     def to_dict(self):
         with self._lock:
