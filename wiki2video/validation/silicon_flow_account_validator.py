@@ -114,7 +114,7 @@ class SiliconFlowAccountValidator(BaseValidator):
     def _get_api_token(self) -> Optional[str]:
         """Get SiliconFlow API token from environment variables."""
         platform = config.get("platforms", "text_to_video")
-        token = config.get_api_key(platform) or config.get("api_keys", "siliconflow_api_key")
+        token = config.get(platform, "api_key") if platform else None
         return token
     
     def _fetch_account_info(self, api_token: str) -> Optional[Dict[str, Any]]:

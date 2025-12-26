@@ -15,6 +15,7 @@ from .settings import (
 from jinja2 import Template
 # 🔥 引入模板加载器（你项目已有）
 from wiki2video.llm_engine.markdown_loader import MarkdownPromptLoader
+from wiki2video.config.config_manager import config
 
 
 class LLMEngine:
@@ -39,10 +40,18 @@ class LLMEngine:
         resolved_api_key = api_key or provider_cfg["api_key"]
         resolved_default_model = default_model or provider_cfg["default_model"]
 
-        if not resolved_api_key:
+        # Special handling for Google platform which uses project_id instead of api_key
+        if provider_cfg["name"] == "google":
+            project_id = config.get("google", "project_id")
+            if not project_id:
+                raise LLMConfigError(
+                    f"Missing project_id for LLM platform 'google'. "
+                    f"Set google.project_id in config.json."
+                )
+        elif not resolved_api_key:
             raise LLMConfigError(
                 f"Missing API key for LLM platform '{provider_cfg['name']}'. "
-                "Set the corresponding api_keys entry or pass api_key explicitly."
+                f"Set {provider_cfg['name']}.api_key in config.json or pass api_key explicitly."
             )
 
         self.default_model = resolved_default_model

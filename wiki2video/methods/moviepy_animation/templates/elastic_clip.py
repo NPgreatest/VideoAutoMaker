@@ -140,7 +140,6 @@ class ElasticClip(VideoTemplate):
 
         clip = VideoFileClip(self.config.video_path)
 
-        # ✅ 关键：彻底移除音频
         clip = clip.without_audio()
 
         clip = clip.with_speed_scaled(factor=playback_rate)

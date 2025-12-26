@@ -15,13 +15,17 @@ from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 
 from .schema import TextImageConfig
-
+from ...config.config_manager import config
 
 FORMATS = {
     "landscape": "1280x720",
     "tiktok": "720x1280",
 }
 
+OPENAI_FORMATS = {
+    "landscape": "1536x1024",
+    "tiktok": "1024x1536",
+}
 
 @register_method
 class TextImageMethod(BaseMethod):
@@ -83,13 +87,6 @@ class TextImageMethod(BaseMethod):
             project_id = cfg.project_id or wb.project_id or "default"
             project_cfg_path = Path(config_dict.get("workdir", ".")) / "project" / project_id / f"{project_id}.json"
 
-            image_size = "1280x720"
-            if project_cfg_path.exists():
-                with open(project_cfg_path) as f:
-                    pj = json.load(f)
-                    fmt = pj.get("size", "landscape")
-                    image_size = FORMATS.get(fmt, "1280x720")
-            cfg.size = image_size
 
             prompt = (cfg.prompt or "").strip()
             if not prompt:
@@ -100,21 +97,24 @@ class TextImageMethod(BaseMethod):
                 config_dict["prompt"] = prompt
                 cfg.prompt = prompt
 
-            provider = (cfg.provider or "siliconflow").lower()
+            provider = config.get("platforms", "tts")
+            image_size = "1024x1024"
+            if project_cfg_path.exists():
+                with open(project_cfg_path) as f:
+                    pj = json.load(f)
+                    fmt = pj.get("size", "landscape")
+                    FORMAT = OPENAI_FORMATS if provider == "openai" else FORMATS
+                    image_size = FORMAT.get(fmt, "1280x720")
+            cfg.size = image_size
 
             if provider == "openai":
                 from .providers.openai_image_provider import openai_generate_image
-
-                resp = openai_generate_image(prompt, cfg.negative_prompt, cfg.size)
-                raise RuntimeError(resp.get("reason", "OpenAI text_image provider not implemented"))
-
-            if provider == "google":
+                image_bytes = openai_generate_image(prompt, cfg.negative_prompt, cfg.size)
+            elif provider == "google":
                 from .providers.google_image_provider import google_generate_image
-
                 image_bytes = google_generate_image(prompt, cfg.negative_prompt, cfg.size)
             elif provider == "siliconflow":
                 from .providers.siliconflow_image_provider import siliconflow_generate_image
-
                 image_bytes = siliconflow_generate_image(prompt, cfg.negative_prompt, cfg.size)
             else:
                 raise ValueError(f"Unsupported text_image provider: {provider}")
@@ -125,7 +125,7 @@ class TextImageMethod(BaseMethod):
             action_dir.mkdir(parents=True, exist_ok=True)
             output_path = get_output_file_path(action_dir, block_id, "png")
             output_path.write_bytes(image_bytes)
-
+            print(f"[TextImage] ✅Image generated successfully: {output_path}")
             wb.config_json = json.dumps(config_dict)
 
             wb.status = WorkingBlockStatus.SUCCESS

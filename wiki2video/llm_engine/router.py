@@ -11,8 +11,8 @@ def get_llm_provider_config():
     if platform not in PROVIDER_REGISTRY:
         raise LLMConfigError(f"Unsupported LLM platform: {platform}")
 
-    api_key = config.get_api_key(platform)
-    model = config.get("llm_default_model")
+    api_key = config.get(platform, "api_key")
+    model = config.get(platform, "llm_model")
 
     provider_cls = PROVIDER_REGISTRY[platform]
 

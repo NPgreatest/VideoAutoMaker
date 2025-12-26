@@ -52,7 +52,7 @@ ERRORS = {STATUS_FAILED, STATUS_ERROR}
 
 def get_api_token() -> str | None:
     platform = config.get("platforms", "text_to_video")
-    return config.get_api_key(platform)
+    return config.get(platform, "api_key") if platform else None
 
 
 def build_headers() -> dict[str, str]:

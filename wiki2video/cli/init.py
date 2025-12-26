@@ -12,7 +12,7 @@ import typer
 
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.core.parse_script import parse_script_lines
-from wiki2video.core.utils import load_character_config, write_json
+from wiki2video.core.utils import write_json
 from wiki2video.schema.project_schema import ProjectStatus
 
 app = typer.Typer(
@@ -20,15 +20,6 @@ app = typer.Typer(
     invoke_without_command=True,
     no_args_is_help=True,
 )
-
-
-def _default_character(character: Optional[str]) -> str:
-    if character:
-        return character
-    cfg = load_character_config()
-    if cfg:
-        return sorted(cfg.keys())[0]
-    return "narrator"
 
 
 def _reset_working_blocks(project_name: str) -> None:
@@ -46,9 +37,6 @@ def _sanitize_project_name(name: str) -> str:
 def main(
     ctx: typer.Context,
     project_name: str = typer.Argument(..., help="Name for ./project/<project_name>/"),
-    character: Optional[str] = typer.Option(
-        None, "--character", "-c", help="Default speaker when no prefix is provided."
-    ),
     size: str = typer.Option(
         "tiktok",
         "--size",
@@ -94,10 +82,8 @@ def main(
         typer.secho("❌ No script text provided.", fg="red", err=True)
         raise typer.Exit(code=1)
 
-    default_character = _default_character(character)
     blocks = parse_script_lines(
         script_text,
-        default_character,
         size=size,
         background_video=background_video,
         show_character_overlay=show_character_overlay,

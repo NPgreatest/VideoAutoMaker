@@ -159,10 +159,10 @@ def _ensure_output_dir() -> Path:
 
 
 def _require_api_key():
-    key = config.get_api_key("siliconflow") or config.get("api_keys", "siliconflow_api_key")
+    key = config.get("siliconflow", "api_key")
     if not key:
         raise RuntimeError(
-            "SiliconFlow API key missing. Please set api_keys.siliconflow_api_key in config.json."
+            "SiliconFlow API key missing. Please set siliconflow.api_key in config.json."
         )
     return key
 

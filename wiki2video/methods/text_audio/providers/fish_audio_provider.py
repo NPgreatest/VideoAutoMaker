@@ -5,6 +5,7 @@ import requests
 from fish_audio_sdk import Session, TTSRequest, Prosody
 
 from wiki2video.config.config_vars import TEXT_AUDIO_API_KEY, BACKOFF_MAX_TRIES, BACKOFF_MAX_TIME
+from wiki2video.config.config_manager import config
 
 
 # -------------------------------
@@ -22,8 +23,9 @@ def fish_tts(text: str, out_path: Path, model_id: str) -> bytes:
     session = Session(TEXT_AUDIO_API_KEY)
     request = TTSRequest(
         text=text,
-        reference_id=model_id,
-        prosody=Prosody(volume=-4.0, speed=1.2)
+        reference_id=config.get("fish_audio","model_id"),
+        prosody=Prosody(volume=config.get("fish_audio","volume"),
+                        speed=config.get("fish_audio","speed"))
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     audio_buffer = bytearray()

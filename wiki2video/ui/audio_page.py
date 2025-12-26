@@ -67,9 +67,7 @@ def _collect_audio_data(project_id: str):
             (a for a in block["actions"] if a.get("type") == "text_audio"),
             {}
         )
-        character = audio_action.get("config", {}).get("character", "")
-
-        dropdown.append((f"{block_id} · {character}", block_id))
+        dropdown.append((block_id, block_id))
 
         wb = audio_blocks.get(block_id)
         status = "⏳ 待生成"
@@ -102,7 +100,6 @@ def _collect_audio_data(project_id: str):
 
         rows.append({
             "Block ID": block_id,
-            "Character": character,
             "Text": format_text_preview(text),
             "Duration(s)": duration or "—",
             "状态": status,
@@ -112,7 +109,7 @@ def _collect_audio_data(project_id: str):
         if output_path and Path(output_path).exists():
             audio_items.append({
                 "path": sanitize_path(output_path),
-                "label": f"{block_id} · {character} ({duration}s)" if duration else block_id,
+                "label": f"{block_id} ({duration}s)" if duration else block_id,
             })
 
     df = pd.DataFrame(rows)

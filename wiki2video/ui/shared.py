@@ -6,13 +6,13 @@ import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
 from wiki2video.config.config_vars import WORKING_DIR
-from wiki2video.core.utils import load_character_config, read_json
+from wiki2video.core.utils import read_json
 
 PROJECT_ROOT = WORKING_DIR
 BGM_ROOT = Path("assets/bgm")
 BACKGROUND_VIDEO_ROOT = Path("assets/background_videos")
 
-AUDIO_TABLE_COLUMNS = ["Block ID", "Character", "Text", "Duration(s)", "状态", "输出文件"]
+AUDIO_TABLE_COLUMNS = ["Block ID", "Text", "Duration(s)", "状态", "输出文件"]
 VIDEO_TABLE_COLUMNS = ["Block ID", "Method", "状态", "输出文件"]
 
 AUDIO_POLL_SECONDS = 10.0
@@ -48,17 +48,6 @@ def load_project_raw(project_id: str) -> Optional[Dict[str, Any]]:
         return read_json(json_path)
     except FileNotFoundError:
         return None
-
-
-def get_character_choices() -> List[Tuple[str, str]]:
-    config = load_character_config()
-    choices: List[Tuple[str, str]] = []
-    for key, value in config.items():
-        display_name = value.get("name") or key
-        label = f"{display_name} ({key})" if display_name != key else key
-        choices.append((label, key))
-    choices.sort(key=lambda x: x[0])
-    return choices
 
 
 def _resolve_paths(root: Path, patterns: List[str]) -> List[Path]:
