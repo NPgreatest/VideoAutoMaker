@@ -147,12 +147,14 @@ class TextImageMethod(BaseMethod):
 
         except Exception as exc:
             wb.status = WorkingBlockStatus.ERROR
-            wb.result_json = json.dumps({"status": "error", "error": str(exc)})
+            print(f"[TextImage] ❌Error generating image: {exc}, retry...")
+            wb.error_count+=1
+
             return GenerationResult(
-                status=WorkingBlockStatus.ERROR,
+                status=WorkingBlockStatus.PENDING,
                 output_path=None,
                 duration_sec=None,
-                error=str(exc),
+                error=None,
             )
 
 

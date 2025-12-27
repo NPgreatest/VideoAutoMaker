@@ -7,10 +7,9 @@ from wiki2video.config.config_manager import config
 from .status_adapter import normalize_status
 
 
-client = OpenAI(api_key=config.get("openai", "api_key"))
-
 
 def openai_submit_video(prompt: str, size: str) -> str | None:
+    client = OpenAI(api_key=config.get("openai", "api_key"))
     try:
         video = client.videos.create(
             model="sora-2",

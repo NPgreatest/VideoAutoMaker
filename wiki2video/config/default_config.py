@@ -6,12 +6,6 @@ from typing import Dict, Any
 # ======================================================================
 def _default_config() -> Dict[str, Any]:
     return {
-        "api_keys": {
-            "fish_audio_api_key": None,
-            "openai_api_key": None,
-            "runway_api_key": None,
-            "siliconflow_api_key": None,
-        },
         "openai": {
             "api_key": None,
             "tts_character": "alloy",
