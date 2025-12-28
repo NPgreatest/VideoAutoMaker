@@ -111,7 +111,9 @@ class TextImageMethod(BaseMethod):
                 from .providers.openai_image_provider import openai_generate_image
                 image_bytes = openai_generate_image(prompt, cfg.negative_prompt, cfg.size)
             elif provider == "google":
+                print("google voice")
                 from .providers.google_image_provider import google_generate_image
+                print("google voice2")
                 image_bytes = google_generate_image(prompt, cfg.negative_prompt, cfg.size)
             elif provider == "siliconflow":
                 from .providers.siliconflow_image_provider import siliconflow_generate_image

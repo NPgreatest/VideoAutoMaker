@@ -35,7 +35,7 @@ def _default_config() -> Dict[str, Any]:
             "tts_language_code": "en-US",
             "tts_voice_name": None,
             "tts_gender": "NEUTRAL",
-            "tts_speed": 1.0,
+            "tts_speed": 1.3,
             "tts_audio_encoding": "MP3",
         },
         "fish_audio": {

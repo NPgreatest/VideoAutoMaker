@@ -34,21 +34,6 @@ def google_generate_image(
     negative_prompt: str | None,
     size: str,
 ) -> bytes:
-    """
-    使用 Google Vertex AI Imagen 生成图片并返回原始图片字节。
-    
-    Args:
-        prompt: 图片生成提示词
-        negative_prompt: 负面提示词（Google Imagen 可能不支持，会被忽略）
-        size: 图片尺寸，如 "1280x720" 或 "1024x1024"
-    
-    Returns:
-        图片的原始字节数据
-    
-    Raises:
-        ValueError: 如果配置缺失或生成失败
-        RuntimeError: 如果生成过程中出现错误
-    """
     project_id = config.get("google", "project_id")
     if not project_id:
         raise ValueError("Missing google.project_id in config.json")
@@ -58,11 +43,12 @@ def google_generate_image(
     
     # 构建配置
     # 注意：Google Imagen 可能不支持 negative_prompt，所以暂时不包含
-    config_obj = GenerateImagesConfig(
-        aspect_ratio= image_size, #"16:9" or 0:16
-        image_size="2K",
-    )
-    
+    config_obj = {
+    "aspect_ratio": image_size,
+    "image_size": "2K",
+    }
+
+    print(f"Generating image with config_obj: {config_obj}")
     try:
         # 调用 Google Imagen API
         image_response = client.models.generate_images(

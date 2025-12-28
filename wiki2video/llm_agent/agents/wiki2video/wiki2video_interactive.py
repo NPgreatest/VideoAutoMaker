@@ -56,7 +56,7 @@ class Wiki2VideoInteractiveOrchestrator:
                 "WIKI_JSON": json.dumps(cleaned["sections"], ensure_ascii=False)
             },
             temperature=0.3,
-            max_tokens=1200,
+            max_tokens=20000,
         )
         print(direction_raw)
         direction_obj = extract_json(direction_raw)
@@ -75,7 +75,7 @@ class Wiki2VideoInteractiveOrchestrator:
                 "CLEANED_TEXT": cleaned["clean_text"],
             },
             temperature=0.35,
-            max_tokens=2400,
+            max_tokens=20000,
         )
         print(script_raw)
         print("✓ Script draft generated")
@@ -91,7 +91,7 @@ class Wiki2VideoInteractiveOrchestrator:
                 "IMAGE_SUMMARY": json.dumps(cleaned["images"], ensure_ascii=False),
             },
             temperature=0.2,
-            max_tokens=2000,
+            max_tokens=20000,
         )
         print(script_final)
         print("✓ Images inserted")
