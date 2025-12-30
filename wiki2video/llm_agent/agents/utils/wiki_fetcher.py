@@ -6,8 +6,30 @@ from pathlib import Path
 import requests
 import time
 
+from ....core.paths import get_project_dir
 from ....llm_engine.client import get_engine
-from ..utils.svg_converter import sanitize_filename, ensure_non_svg
+from ..utils.svg_converter import sanitize_filename
+
+# 尝试导入 cairosvg，如果失败则认为不支持 SVG 转换
+SVG_SUPPORTED = False
+
+# 默认占位函数，直接返回原路径
+def _ensure_non_svg_fallback(path: Path) -> Path:
+    """占位函数，当 CairoSVG 不可用时使用"""
+    return path
+
+ensure_non_svg = _ensure_non_svg_fallback
+
+try:
+    import cairosvg
+    # 验证 cairosvg 是否真的可用（某些系统可能导入成功但运行时失败）
+    _ = cairosvg.svg2png
+    from ..utils.svg_converter import ensure_non_svg
+    SVG_SUPPORTED = True
+except (ImportError, OSError, AttributeError) as e:
+    print(f"⚠️  CairoSVG not available: {e}")
+    print("⚠️  SVG images will be skipped")
+    # ensure_non_svg 已经设置为占位函数，无需修改
 
 
 class WikiFetcherAndCleanerWorker:
@@ -148,7 +170,7 @@ class WikiFetcherAndCleanerWorker:
         all_images = []
         all_text = []
 
-        img_dir = Path(f"./project/{project_name}/images")
+        img_dir =  get_project_dir(project_name) / "images"
         img_dir.mkdir(parents=True, exist_ok=True)
         print(f"🟡 Image directory: {img_dir}")
 
@@ -178,6 +200,12 @@ class WikiFetcherAndCleanerWorker:
 
             for img in imgs:
                 file_name = sanitize_filename(img["file_name"])
+                
+                # 检查是否为 SVG 且不支持转换
+                if file_name.lower().endswith('.svg') and not SVG_SUPPORTED:
+                    print(f"    ⚠️  Skip SVG image (CairoSVG not available): {file_name}")
+                    continue
+                
                 url = self.get_real_url(file_name)
                 if not url:
                     print("🔴 Skip (no URL)")
@@ -186,14 +214,15 @@ class WikiFetcherAndCleanerWorker:
                 local_path = img_dir / file_name
                 self.download_image(url, local_path)
 
-                # ⭐ 自动 SVG → PNG
-                final_path = ensure_non_svg(local_path)
+                final_path = local_path
+                if SVG_SUPPORTED:
+                    final_path = ensure_non_svg(local_path)
 
                 obj = {
                     "file_name": final_path.name,
                     "caption": self.deep_clean_text(img["caption"]),
                     "url": url,
-                    "local_path": str(final_path),   # ⭐ 永远是 PNG
+                    "local_path": str(final_path),
                     "section": heading
                 }
 

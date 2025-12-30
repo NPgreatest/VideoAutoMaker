@@ -6,7 +6,7 @@ import time
 from typing import TYPE_CHECKING, Optional, Set
 
 from wiki2video.config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX, WORKINGBLOCK_POLLING_INTERVAL, \
-    WORKINGBLOCK_ERROR_COUNT_MAX
+    WORKINGBLOCK_ERROR_COUNT_MAX, ENSURE_OUTPUT
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.methods.registry import create_method
 from wiki2video.core.working_block import WorkingBlockStatus, WorkingBlock
@@ -40,6 +40,10 @@ class Worker:
 
             if prev_block.status != WorkingBlockStatus.SUCCESS:
                 return False
+
+            if ENSURE_OUTPUT and prev_block.status == WorkingBlockStatus.ERROR:
+                # 允许错误依赖继续（后面用 placeholder）
+                continue
 
             # check file correctness
             try:

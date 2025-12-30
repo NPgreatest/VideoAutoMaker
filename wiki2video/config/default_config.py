@@ -67,6 +67,7 @@ def _default_config() -> Dict[str, Any]:
             "tts": "openai",
             "text_image": "openai"
         },
+        "ensure_output": True,
         "working_dir": "project",
         "story_mode": "long_cine",
     }

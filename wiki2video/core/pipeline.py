@@ -7,7 +7,7 @@ from typing import Optional
 
 from dacite import from_dict
 
-from wiki2video.config.config_vars import WORKING_DIR, WORKINGBLOCK_ERROR_COUNT_MAX
+from wiki2video.config.config_vars import WORKING_DIR, WORKINGBLOCK_ERROR_COUNT_MAX, ENSURE_OUTPUT
 from wiki2video.core.concat import concat_pipeline
 from wiki2video.core.utils import read_json, set_project_status, parse_project
 from wiki2video.core.worker import Worker
@@ -300,7 +300,7 @@ def run_video_pipeline(project_id : str):
 
         error_count = max(error_counts) if error_counts else 0
 
-    if error_count:
+    if error_count and not ENSURE_OUTPUT:
         set_project_status(project_id, ProjectStatus.FAILED)
         print("[Video Pipeline] ❌ Status -> FAILED")
         return

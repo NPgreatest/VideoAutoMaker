@@ -15,6 +15,19 @@ app = typer.Typer(
     no_args_is_help=False,
 )
 
+def _check_ffmpeg_placeholder_pipeline() -> Tuple[str, str]:
+    """
+    Run ffmpeg + placeholder concat self-check.
+    """
+    try:
+        from wiki2video.core.tests.test_concat_video import run_concat_self_check
+        run_concat_self_check()
+        return "ok", "placeholder mux / normalize / concat OK"
+    except ImportError as e:
+        return "error", f"test module not found: {e}"
+    except Exception as e:
+        return "error", str(e)
+
 
 def _run_version(cmd: List[str]) -> Tuple[str, str]:
     try:
@@ -55,6 +68,35 @@ def _check_moviepy() -> Tuple[str, str]:
         )
 
     return "ok", f"moviepy {version}"
+
+def _check_ffprobe() -> Tuple[str, str]:
+    return _run_version(["ffprobe", "-version"])
+
+
+def _check_ffmpeg_encoder(name: str) -> Tuple[str, str]:
+    try:
+        out = subprocess.check_output(["ffmpeg", "-hide_banner", "-encoders"], text=True)
+        return ("ok", "available") if name in out else ("error", f"{name} encoder not found")
+    except Exception as e:
+        return "error", str(e)
+
+
+def _check_ffmpeg_filter(name: str) -> Tuple[str, str]:
+    try:
+        out = subprocess.check_output(["ffmpeg", "-hide_banner", "-filters"], text=True)
+        return ("ok", "available") if name in out else ("error", f"{name} filter not found")
+    except Exception as e:
+        return "error", str(e)
+
+def _check_pipeline_smoke_test():
+    try:
+        from wiki2video.core.tests.doctor_pipeline_test import run_pipeline_smoke_test
+        run_pipeline_smoke_test()
+        return "ok", "end-to-end pipeline OK"
+    except Exception as e:
+        return "error", str(e)
+
+
 
 def _check_platform_config(platform_name: str, subsystem: str) -> List[Tuple[str, str, str]]:
     """
@@ -180,12 +222,36 @@ def _print_result(name: str, status: str, detail: str) -> None:
 
 
 @app.callback()
-def main(ctx: typer.Context) -> None:
+def main(
+    ctx: typer.Context,
+    pipeline: bool = typer.Option(
+        False,
+        "--pipeline",
+        help="Run full pipeline smoke test (slow)."
+    )
+):
     if ctx.invoked_subcommand:
         return
 
     _print_result("ffmpeg", *_check_ffmpeg())
     _print_result("moviepy", *_check_moviepy())
+    _print_result("ffmpeg", *_check_ffmpeg())
+    _print_result("ffprobe", *_check_ffprobe())
+    _print_result("ffmpeg:libx264", *_check_ffmpeg_encoder("libx264"))
+    _print_result("ffmpeg:aac", *_check_ffmpeg_encoder("aac"))
+    _print_result("ffmpeg:amix", *_check_ffmpeg_filter("amix"))
+    _print_result("ffmpeg:concat", *_check_ffmpeg_filter("concat"))
+    _print_result("moviepy", *_check_moviepy())
+    _print_result(
+        "ffmpeg placeholder pipeline",
+        *_check_ffmpeg_placeholder_pipeline(),
+    )
+
+    if pipeline:
+        _print_result(
+            "pipeline smoke test",
+            *_check_pipeline_smoke_test(),
+        )
 
     for name, status, detail in _check_keys():
         _print_result(name, status, detail)

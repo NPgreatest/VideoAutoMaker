@@ -1,0 +1,82 @@
+{
+  "project_name": "__doctor_pipeline_test__",
+  "size": "tiktok",
+  "script": [
+    {
+      "id": "L1",
+      "text": "This is a smoke test, In the cold, pitchdark depths, why does size become a survival trick for the ocean's giants",
+      "actions": [
+        {
+          "type": "text_audio",
+          "config": {
+            "text": "In the cold, pitchdark depths, why does size become a survival trick for the ocean's giants",
+            "target_name": "L1",
+            "workdir": "."
+          }
+        },
+        {
+          "type": "text_image",
+          "config": {
+            "text": "In the cold, pitchdark depths, why does size become a survival trick for the ocean's giants",
+            "target_name": "L1",
+            "workdir": "."
+          }
+        },
+        {
+          "type": "moviepy_animation",
+          "config": {
+            "template": "ElasticClip",
+            "workdir": ".",
+            "target_name": "L1"
+          }
+        }
+      ]
+    },
+    {
+      "id": "L2",
+      "text": "Deepsea gigantism is the tendency for deepdwelling species to exceed the size of shallow relatives across many groups.",
+      "actions": [
+        {
+          "type": "text_audio",
+          "config": {
+            "text": "Deepsea gigantism is the tendency for deepdwelling species to exceed the size of shallow relatives across many groups.",
+            "target_name": "L2",
+            "workdir": "."
+          }
+        },
+        {
+          "type": "text_image",
+          "config": {
+            "text": "Deepsea gigantism is the tendency for deepdwelling species to exceed the size of shallow relatives across many groups.",
+            "target_name": "L2",
+            "workdir": "."
+          }
+        },
+        {
+          "type": "moviepy_animation",
+          "config": {
+            "template": "ElasticClip",
+            "workdir": ".",
+            "target_name": "L2"
+          }
+        },
+        {
+          "type": "moviepy_animation",
+          "config": {
+            "template": "Slide-Portrait",
+            "image_filename": "NOWHERE.jpg",
+            "title": "",
+            "target_name": "L2",
+            "workdir": "."
+          }
+        }
+      ]
+    }
+  ],
+  "global_context": "Core topic and era: contemporary study of deep-sea gigantism; visual identity: moody, underwater exploration aesthetic with a cold, blue palette and towering silhouettes of giant sea creatures. Recurring motifs: size as survival, scarcity, and oxygen dynamics; keep visuals anchored to deep-sea life with an emphasis on extreme scale and the interplay of darkness and bioluminescence to maintain a cohesive, on-theme look.",
+  "show_character_overlay": false,
+  "bgm_path": null,
+  "background_video": null,
+  "burn_subtitle": false,
+  "source": "https://en.wikipedia.org/wiki/Deep-sea_gigantism"
+}
