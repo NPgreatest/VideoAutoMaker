@@ -13,6 +13,7 @@ from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.registry import register_method
 from wiki2video.methods.extract_background_segment.schema import ExtractBackgroundSegmentSchema
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.paths import get_project_json_path
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
@@ -131,10 +132,7 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
             
             # Get project info (still need project.json for background_video path)
             project_id = wb.project_id
-            workdir = Path(config_dict.get("workdir", "."))
-            project_root = workdir.resolve()
-            project_dir = project_root / "project" / project_id
-            project_json_path = project_dir / f"{project_id}.json"
+            project_json_path = get_project_json_path(project_id)
 
             if not project_json_path.exists():
                 raise FileNotFoundError(f"Project {project_id} not found")
@@ -197,20 +195,16 @@ class ExtractBackgroundSegmentMethod(BaseMethod):
                     print(f"[extract] → Adjusted to {start_time_sec:.2f}s-{end_time_sec:.2f}s")
             
             # Get action output directory using new path structure
-            workdir = Path(config_dict.get("workdir", "."))
-            project_root = workdir.resolve()
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
             action_dir = get_action_output_dir(
-                project_root=project_root,
                 project_id=project_id,
                 block_id=block_id,
                 method_name=wb.method_name,
                 working_block_id=wb.id
             )
-            action_dir.mkdir(parents=True, exist_ok=True)
             
             # Get output file path
-            output_path = get_output_file_path(action_dir, "mp4")
+            output_path = get_output_file_path(action_dir, block_id, "mp4")
             
             # Extract segment using ffmpeg
             # Use -ss before -i for faster seeking (input seeking)

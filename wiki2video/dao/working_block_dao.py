@@ -4,22 +4,13 @@ import threading
 from pathlib import Path
 from typing import List, Optional
 
+from wiki2video.db.init_db import init_database_if_needed
+from wiki2video.core.paths import get_db_path
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 
 DB_PATH = Path("db/working_blocks.db")
 
-
 class WorkingBlockDAO:
-    """
-    A professional-grade DAO layer for SQLite operations on WorkingBlock entities.
-
-    Features:
-    - Full CRUD
-    - JSON safe encoding/decoding
-    - Strong typing with WorkingBlock dataclass
-    - Thread-safe write operations
-    - Optimized read queries matching schema indexes
-    """
 
     _lock = threading.Lock()
 
@@ -31,9 +22,10 @@ class WorkingBlockDAO:
         "create_time, last_scheduled_at"
     )
 
-    def __init__(self, db_path: Path = None):
-        self.db_path = Path(db_path) if db_path else DB_PATH
-        self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+    def __init__(self, db_path: Path | None = None):
+        init_database_if_needed()
+        self.db_path = db_path or get_db_path()
 
     # ---------------------------------------------------------
     # Internal util: row → WorkingBlock

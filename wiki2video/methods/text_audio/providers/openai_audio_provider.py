@@ -2,8 +2,6 @@ from pathlib import Path
 import backoff
 import requests
 
-from openai import OpenAI
-
 from wiki2video.config.config_manager import config
 from wiki2video.config.config_vars import (
     BACKOFF_MAX_TRIES,
@@ -23,6 +21,15 @@ from wiki2video.config.config_vars import (
     jitter=backoff.random_jitter,
 )
 def openai_tts(text: str, out_path: Path) -> bytes:
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError(
+            "OpenAI support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[openai]'"
+        )
+
     client = OpenAI(api_key=config.get("openai", "api_key"))
 
     out_path.parent.mkdir(parents=True, exist_ok=True)

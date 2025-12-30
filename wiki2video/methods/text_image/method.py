@@ -7,6 +7,7 @@ from datetime import datetime, UTC
 from pathlib import Path
 
 from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
+from wiki2video.core.paths import get_projects_root, get_project_json_path
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
 from wiki2video.llm_engine import get_engine
 from wiki2video.methods.base import BaseMethod
@@ -59,7 +60,6 @@ class TextImageMethod(BaseMethod):
     def run(self, spec: ActionSpec) -> WorkingBlock:
         spec.config = spec.config or {}
         spec.config.setdefault("project_id", "default")
-        spec.config.setdefault("workdir", ".")
 
         # Validate config structure early
         TextImageConfig(**spec.config)
@@ -85,7 +85,7 @@ class TextImageMethod(BaseMethod):
             cfg = TextImageConfig(**config_dict)
 
             project_id = cfg.project_id or wb.project_id or "default"
-            project_cfg_path = Path(config_dict.get("workdir", ".")) / "project" / project_id / f"{project_id}.json"
+            project_cfg_path = get_project_json_path(project_id)
 
 
             prompt = (cfg.prompt or "").strip()
@@ -121,10 +121,8 @@ class TextImageMethod(BaseMethod):
             else:
                 raise ValueError(f"Unsupported text_image provider: {provider}")
 
-            workdir = Path(cfg.workdir or ".").expanduser().resolve()
             block_id = cfg.target_name or wb.block_id or wb.id
-            action_dir = get_action_output_dir(workdir, project_id, block_id, wb.method_name, wb.id)
-            action_dir.mkdir(parents=True, exist_ok=True)
+            action_dir = get_action_output_dir(project_id, block_id, wb.method_name, wb.id)
             output_path = get_output_file_path(action_dir, block_id, "png")
             output_path.write_bytes(image_bytes)
             print(f"[TextImage] ✅Image generated successfully: {output_path}")

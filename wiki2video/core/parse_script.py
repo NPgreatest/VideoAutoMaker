@@ -64,7 +64,6 @@ def parse_script_lines(
                 "title": title,
                 "image_filename": "",
                 "target_name": last_sb.id,
-                "workdir": ".",
             }
 
             if custom_image_mode:
@@ -92,7 +91,6 @@ def parse_script_lines(
                 "image_filename": picture_filename,
                 "title": picture_title,
                 "target_name": last_sb.id,
-                "workdir": ".",
             }
 
             if custom_image_mode:
@@ -137,7 +135,6 @@ def parse_script_lines(
             config={
                 "text": text,
                 "target_name": sb.id,
-                "workdir": ".",
             }
         ))
 
@@ -148,7 +145,6 @@ def parse_script_lines(
                 config={
                     "background_video": background_video,
                     "target_name": sb.id,
-                    "workdir": ".",
                 }
             ))
         else:
@@ -158,14 +154,12 @@ def parse_script_lines(
                     config={
                         "text": text,
                         "target_name": sb.id,
-                        "workdir": ".",
                     }
                 ))
                 sb.actions.append(ActionSpec(
                     type="moviepy_animation",
                     config={
                     "template": "ElasticClip",
-                    "workdir": ".",
                     "target_name": sb.id,
                     }
                 ))
@@ -182,7 +176,6 @@ def parse_script_lines(
             picture_config = {
                 "template": slide_template,
                 "target_name": sb.id,
-                "workdir": ".",
             }
 
             if custom_image_mode:

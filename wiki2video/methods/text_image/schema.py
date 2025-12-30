@@ -14,7 +14,6 @@ class TextImageConfig(BaseModel):
     negative_prompt: Optional[str] = None
     size: str = None
     provider: str = None
-    workdir: str = "."
     target_name: Optional[str] = None
     project_id: Optional[str] = None
     global_context: Optional[str] = None

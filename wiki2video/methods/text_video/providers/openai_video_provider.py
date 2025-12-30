@@ -1,7 +1,6 @@
 # text_video/providers/openai_video_provider.py
 from __future__ import annotations
 from pathlib import Path
-from openai import OpenAI
 
 from wiki2video.config.config_manager import config
 from .status_adapter import normalize_status
@@ -9,6 +8,15 @@ from .status_adapter import normalize_status
 
 
 def openai_submit_video(prompt: str, size: str) -> str | None:
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError(
+            "OpenAI support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[openai]'"
+        )
+
     client = OpenAI(api_key=config.get("openai", "api_key"))
     try:
         video = client.videos.create(
@@ -25,6 +33,16 @@ def openai_submit_video(prompt: str, size: str) -> str | None:
 
 def openai_check_status(video_id: str) -> dict:
     try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError(
+            "OpenAI support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[openai]'"
+        )
+
+    client = OpenAI(api_key=config.get("openai", "api_key"))
+    try:
         video = client.videos.retrieve(video_id)
         raw_status = video.status
         return {
@@ -40,6 +58,16 @@ def openai_extract_url(operation):
 
 
 def openai_download_video(video_id: str, output_path: Path):
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError(
+            "OpenAI support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[openai]'"
+        )
+
+    client = OpenAI(api_key=config.get("openai", "api_key"))
     output_path.parent.mkdir(parents=True, exist_ok=True)
 
     content = client.videos.download_content(video_id, variant="video")

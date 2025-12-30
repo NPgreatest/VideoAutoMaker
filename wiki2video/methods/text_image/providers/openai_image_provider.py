@@ -2,8 +2,6 @@
 from __future__ import annotations
 
 import base64
-from openai import OpenAI
-
 from wiki2video.config.config_manager import config
 
 REQUEST_TIMEOUT = 300
@@ -14,9 +12,16 @@ def openai_generate_image(
     negative_prompt: str | None,
     size: str,
 ) -> bytes:
-    """
-    Call OpenAI Image API and return raw image bytes (base64 decoded).
-    """
+
+    try:
+        from openai import OpenAI
+    except ImportError:
+        raise RuntimeError(
+            "OpenAI support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[openai]'"
+        )
+
     token = config.get("openai", "api_key")
     if not token:
         raise ValueError("Missing OpenAI API key in config.json (openai.api_key).")

@@ -10,6 +10,7 @@ import typer
 
 from wiki2video.cli.core_project_builder import ScriptBuildResult, build_project_from_wiki
 from wiki2video.core.pipeline import  run_video_pipeline
+from wiki2video.core.paths import get_project_dir
 
 app = typer.Typer(
     help="Generate a video from a Wikipedia topic.",
@@ -17,7 +18,7 @@ app = typer.Typer(
 
 
 def _locate_final_video(project_name: str) -> Optional[Path]:
-    base = Path("project") / project_name
+    base = get_project_dir(project_name)
     for path in [
         base / f"{project_name}.mp4",
         base / f"{project_name}_nobgm.mp4",

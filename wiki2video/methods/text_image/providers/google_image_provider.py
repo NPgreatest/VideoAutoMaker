@@ -1,15 +1,7 @@
 #!/usr/bin/env python3
 from __future__ import annotations
 
-from google import genai
-from google.genai.types import GenerateImagesConfig
-
 from wiki2video.config.config_manager import config
-
-client = genai.Client(
-    vertexai=True,
-    project=config.get("google", "project_id"),
-)
 
 
 def _map_size_to_google_format(size: str) -> str:
@@ -34,9 +26,23 @@ def google_generate_image(
     negative_prompt: str | None,
     size: str,
 ) -> bytes:
+    try:
+        from google import genai
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
     project_id = config.get("google", "project_id")
     if not project_id:
         raise ValueError("Missing google.project_id in config.json")
+
+    client = genai.Client(
+        vertexai=True,
+        project=project_id,
+    )
     
     # 映射尺寸格式
     image_size = _map_size_to_google_format(size)

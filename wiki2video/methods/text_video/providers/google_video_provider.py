@@ -3,17 +3,27 @@ from __future__ import annotations
 from pathlib import Path
 from typing import Optional
 
-from google import genai
-from google.genai.types import GenerateVideosConfig, GenerateVideosOperation, GenerateVideosResponse
-
 from wiki2video.config.config_manager import config
 
-client = genai.Client(
-    vertexai=True,
-    project=config.get("google", "project_id"),
-)
-
 def google_submit_video(prompt: str, size: str) -> Optional[str]:
+    try:
+        from google import genai
+        from google.genai.types import GenerateVideosConfig
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
+    project_id = config.get("google", "project_id")
+    if not project_id:
+        raise ValueError("Missing google.project_id in config.json")
+
+    client = genai.Client(
+        vertexai=True,
+        project=project_id,
+    )
 
     try:
         output_gcs_uri = config.get("google", "output_gcs_uri")
@@ -40,6 +50,25 @@ def google_submit_video(prompt: str, size: str) -> Optional[str]:
         return None
 
 def google_check_status(operation_name: str) -> dict:
+    try:
+        from google import genai
+        from google.genai.types import GenerateVideosOperation
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
+    project_id = config.get("google", "project_id")
+    if not project_id:
+        raise ValueError("Missing google.project_id in config.json")
+
+    client = genai.Client(
+        vertexai=True,
+        project=project_id,
+    )
+
     stub = GenerateVideosOperation.model_construct(name=operation_name)
     op = client.operations.get(stub)
     print(f"[Google] , op {op}")
@@ -56,10 +85,19 @@ def google_check_status(operation_name: str) -> dict:
 
 
 
-def google_extract_url(op: GenerateVideosOperation) -> Optional[str]:
+def google_extract_url(op) -> Optional[str]:
     """
     从 completed operation 中提取 GCS 视频路径
     """
+    try:
+        from google.genai.types import GenerateVideosResponse
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
     try:
         result: GenerateVideosResponse = op.result
         if not result or not result.generated_videos:
@@ -74,13 +112,19 @@ def google_extract_url(op: GenerateVideosOperation) -> Optional[str]:
 
 
 
-from google.cloud import storage
-from pathlib import Path
-
 def google_download_video(gcs_uri: str, output_path: Path):
     """
     使用 google-cloud-storage SDK 下载视频
     """
+    try:
+        from google.cloud import storage
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
     assert gcs_uri.startswith("gs://")
 
     _, _, bucket_name, *blob_parts = gcs_uri.split("/")

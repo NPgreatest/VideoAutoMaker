@@ -15,14 +15,12 @@ class ExtractBackgroundSegmentSchema:
         end_time: End time in seconds (optional, can use duration_ms instead)
         project_id: Project id
         target_name: Target video file name
-        workdir: Working directory path
         duration_ms: Duration in milliseconds (optional, can use end_time instead)
     """
     start_time: float = 0.0
     end_time: float = None
     project_id: str = None
     target_name: str = None
-    workdir: str = "."
     duration_ms: float = None
 
 

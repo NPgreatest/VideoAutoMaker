@@ -12,6 +12,7 @@ import typer
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.core.pipeline import run_video_pipeline
 from wiki2video.core.utils import read_json
+from wiki2video.core.paths import get_project_dir, get_project_json_path
 
 app = typer.Typer(
     help="Render a video from a prepared script JSON file.",
@@ -27,7 +28,7 @@ def _reset_working_blocks(project_name: str) -> None:
 
 
 def _locate_final_video(project_name: str) -> Optional[Path]:
-    base = Path("project") / project_name
+    base = get_project_dir(project_name)
     candidates = [
         base / f"{project_name}.mp4",
         base / f"{project_name}_nobgm.mp4",
@@ -40,9 +41,7 @@ def _locate_final_video(project_name: str) -> Optional[Path]:
 
 
 def _mirror_to_project_dir(src: Path, project_name: str) -> Path:
-    project_dir = Path("project") / project_name
-    project_dir.mkdir(parents=True, exist_ok=True)
-    target = project_dir / f"{project_name}.json"
+    target = get_project_json_path(project_name)
     if src.resolve() != target.resolve():
         shutil.copy2(src, target)
     return target

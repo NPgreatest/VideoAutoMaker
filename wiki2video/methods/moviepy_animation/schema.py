@@ -13,7 +13,6 @@ class MoviepyAnimationSchema:
     """
     project_id: str = None
     target_name: str = None
-    workdir: str = "."
     template: str = None
     duration_ms: float = None
     data: Dict[str, Any] = None

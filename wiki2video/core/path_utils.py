@@ -6,9 +6,10 @@ All file I/O paths should use these utilities to ensure consistency.
 """
 from pathlib import Path
 
+from wiki2video.core.paths import get_projects_root
+
 
 def get_action_output_dir(
-    project_root: Path,
     project_id: str,
     block_id: str,
     method_name: str,
@@ -16,11 +17,10 @@ def get_action_output_dir(
 ) -> Path:
     """
     Get the deterministic working directory for a working block under:
-    {project_root}/project/{project_name}/blocks/{block_id}/{method_name}/{working_block_id}/
+    {projects_root}/{project_id}/blocks/{block_id}/{method_name}/{working_block_id}/
     
     Args:
-        project_root: Root directory (usually workdir)
-        project_id: Project identifier under /project/
+        project_id: Project identifier
         block_id: ScriptBlock.id (e.g., "L1")
         method_name: BaseMethod.NAME (e.g., "text_audio", "remotion_picture")
         working_block_id: WorkingBlock.id (unique UUID)
@@ -28,15 +28,16 @@ def get_action_output_dir(
     Returns:
         Path to the working block output directory
     """
+    projects_root = get_projects_root()
     action_dir = (
-        project_root
-        / "project"
+        projects_root
         / project_id
         / "blocks"
         / block_id
         / method_name
         / working_block_id
     )
+    action_dir.mkdir(parents=True, exist_ok=True)
     return action_dir
 
 

@@ -2,7 +2,6 @@
 from __future__ import annotations
 import backoff
 import requests
-from openai import OpenAI
 
 from .base_provider import BaseLLMProvider
 from ...config.config_vars import BACKOFF_MAX_TRIES, BACKOFF_MAX_TIME
@@ -34,6 +33,15 @@ class OpenAILLMProvider(BaseLLMProvider):
         stream=False,
         extra=None,
     ):
+        try:
+            from openai import OpenAI
+        except ImportError:
+            raise RuntimeError(
+                "OpenAI support is not installed.\n"
+                "Install it with:\n\n"
+                "  pip install 'wiki2video[openai]'"
+            )
+
         client = OpenAI(api_key=self.api_key)
         completion = client.chat.completions.create(
             model=model,

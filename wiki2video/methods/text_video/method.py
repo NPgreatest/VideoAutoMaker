@@ -13,6 +13,7 @@ from wiki2video.methods.text_video.constants import FORMATS
 from .api_router import get_provider
 from wiki2video.llm_engine import get_engine
 from wiki2video.core.working_block import WorkingBlock, WorkingBlockStatus
+from wiki2video.core.paths import get_project_json_path
 from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
@@ -99,10 +100,8 @@ class TextVideo(BaseMethod):
                     config_dict["prompt"] = config.prompt
 
                 # 解析项目 video 格式
-                workdir = Path(config_dict.get("workdir", "."))
-                project_root = workdir.resolve()
                 project_id = wb.project_id
-                project_cfg_path = workdir / "project" / project_id / f"{project_id}.json"
+                project_cfg_path = get_project_json_path(project_id)
 
                 image_size = "1280x720"
                 if project_cfg_path.exists():
@@ -174,11 +173,9 @@ class TextVideo(BaseMethod):
                         error="No video URL",
                     )
 
-                workdir = Path(config_dict.get("workdir", "."))
-                project_root = workdir.resolve()
                 block_id = wb.block_id or config_dict.get("target_name", wb.id)
                 action_dir = get_action_output_dir(
-                    project_root, wb.project_id, block_id, wb.method_name, wb.id
+                    wb.project_id, block_id, wb.method_name, wb.id
                 )
                 output_path = get_output_file_path(action_dir, block_id, "mp4")
 

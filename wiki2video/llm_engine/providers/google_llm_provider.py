@@ -5,9 +5,6 @@ import backoff
 import requests
 from typing import List, Dict, Optional
 
-from google import genai
-from google.genai.types import GenerateContentConfig
-
 from .base_provider import BaseLLMProvider
 from ...config.config_vars import BACKOFF_MAX_TRIES, BACKOFF_MAX_TIME
 from ...config.config_manager import config
@@ -31,6 +28,15 @@ class GoogleLLMProvider(BaseLLMProvider):
             api_url=api_url or self.DEFAULT_API_URL,
             **kwargs,
         )
+
+        try:
+            from google import genai
+        except ImportError:
+            raise RuntimeError(
+                "Google support is not installed.\n"
+                "Install it with:\n\n"
+                "  pip install 'wiki2video[google]'"
+            )
 
         project_id = config.get("google", "project_id")
         if not project_id:
@@ -95,6 +101,15 @@ class GoogleLLMProvider(BaseLLMProvider):
 
         if not prompt:
             raise ValueError("Empty prompt after flattening messages.")
+
+        try:
+            from google.genai.types import GenerateContentConfig
+        except ImportError:
+            raise RuntimeError(
+                "Google support is not installed.\n"
+                "Install it with:\n\n"
+                "  pip install 'wiki2video[google]'"
+            )
 
         generation_config = GenerateContentConfig(
             temperature=temperature,

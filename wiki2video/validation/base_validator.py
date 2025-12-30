@@ -12,6 +12,8 @@ from abc import ABC, abstractmethod
 from typing import Dict, Any, List, Optional
 from pathlib import Path
 
+from wiki2video.core.paths import get_project_dir
+
 
 class BaseValidator(ABC):
     """Base class for all validators in the videogen system."""
@@ -129,7 +131,7 @@ def validate_project(project_name: str, validator_names: Optional[List[str]] = N
     Returns:
         Dict containing validation results
     """
-    project_path = Path("project") / project_name
+    project_path = get_project_dir(project_name)
     if not project_path.exists():
         return {
             "valid": False,
@@ -147,7 +149,7 @@ def main():
     import argparse
 
     parser = argparse.ArgumentParser(description="Validate a wiki2video project.")
-    parser.add_argument("project_name", help="Name of the project under ./project/")
+    parser.add_argument("project_name", help="Name of the project")
     args = parser.parse_args()
     project_name = args.project_name
     

@@ -1,19 +1,81 @@
 [build-system]
-requires = ["setuptools", "wheel"]
+requires = ["setuptools>=68", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
 name = "wiki2video"
-version = "0.1.0"
-description = "wiki2video command line interface"
+version = "0.0.1a1"
+description = "Wiki2Video: turn Wikipedia articles into short documentary-style videos"
+readme = "README.md"
 requires-python = ">=3.9"
+license = { text = "MIT" }
+
+authors = [
+    { name = "NP_123", email = "np123greatest@gmail.com" }
+]
+
+keywords = [
+    "ai",
+    "video",
+    "llm",
+    "wikipedia",
+    "cli",
+    "generative-ai"
+]
+
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Environment :: Console",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+]
+
+dependencies = [
+    "backoff>=2.2,<3",
+    "dacite>=1.9,<2",
+    "fish-audio-sdk>=1.1,<2",
+    "gradio>=6.0,<7",
+    "Jinja2>=3.1,<4",
+    "moviepy>=2.2,<3",
+    "mwclient>=0.11,<1",
+    "mwparserfromhell>=0.7,<1",
+    "numpy>=1.26,<3",
+    "opencv-python>=4.12,<5",
+    "pandas>=2.3,<3",
+    "pillow>=10,<12",
+    "pydub>=0.25,<1",
+    "PyYAML>=6.0,<7",
+    "requests>=2.31,<3",
+    "rich>=13,<15",
+    "typer>=0.9,<1",
+    "CairoSVG>=2.8,<3",
+]
+
+[project.optional-dependencies]
+openai = [
+    "openai>=1.0,<2",
+]
+
+google = [
+    "google-genai>=0.5,<1",
+]
 
 [project.scripts]
 wiki2video = "wiki2video.cli.main:app"
 
-
 [tool.setuptools]
-package-dir = {"" = "."}
+package-dir = { "" = "." }
+include-package-data = true
 
 [tool.setuptools.packages.find]
 include = ["wiki2video*"]
+
+[tool.setuptools.package-data]
+wiki2video = [
+    "llm_engine/prompts/**",
+    "db/schema/*.sql"
+]

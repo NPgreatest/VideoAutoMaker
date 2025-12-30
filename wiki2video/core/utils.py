@@ -4,7 +4,7 @@ from typing import Any, Dict, Optional
 
 from dacite import from_dict
 
-from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.core.paths import get_project_json_path
 from wiki2video.schema.project_schema import ProjectStatus, ProjectJSON
 
 
@@ -33,13 +33,15 @@ def get_project_status(raw: Dict[str, Any]) -> ProjectStatus:
 
 def set_project_status(project_id: str, status: ProjectStatus) -> None:
     """Update project status in JSON file."""
-    raw = read_json(WORKING_DIR / project_id / f"{project_id}.json")
+    json_path = get_project_json_path(project_id)
+    raw = read_json(json_path)
     raw["project_status"] = status.value
-    write_json(WORKING_DIR / project_id / f"{project_id}.json", raw)
+    write_json(json_path, raw)
 
 
 def parse_project(project_id: str) -> ProjectJSON:
-    raw = read_json(WORKING_DIR / project_id / f"{project_id}.json")
+    json_path = get_project_json_path(project_id)
+    raw = read_json(json_path)
     project_name = raw.get("project_name")
     if not project_name:
         raise RuntimeError("Missing project_name in JSON")

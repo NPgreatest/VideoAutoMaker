@@ -8,6 +8,8 @@ from pathlib import Path
 
 import typer
 
+from wiki2video.core.paths import get_project_json_path
+
 app = typer.Typer(
     help="Estimate cost based on text_to_video actions inside project JSON.",
     invoke_without_command=True,
@@ -28,7 +30,7 @@ def main(
     # ------------------------------
     # Load project JSON
     # ------------------------------
-    json_path = Path("project") / project_name / f"{project_name}.json"
+    json_path = get_project_json_path(project_name)
     if not json_path.exists():
         typer.secho(f"❌ {json_path} not found", fg="red", err=True)
         raise typer.Exit(code=1)

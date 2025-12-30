@@ -102,18 +102,14 @@ class TextAudioMethod(BaseMethod):
                 phrases = [text]
             
             # Get action output directory using new path structure
-            workdir = Path(config_dict.get("workdir", "."))
-            project_root = workdir.resolve()
             project_id = wb.project_id or config_dict.get("project_id", "default")
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
             action_dir = get_action_output_dir(
-                project_root=project_root,
                 project_id=project_id,
                 block_id=block_id,
                 method_name=wb.method_name,
                 working_block_id=wb.id
             )
-            action_dir.mkdir(parents=True, exist_ok=True)
             
             # Generate audio segments
             segments_meta = []

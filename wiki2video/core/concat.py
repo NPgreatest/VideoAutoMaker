@@ -9,6 +9,7 @@ from dacite import from_dict
 from wiki2video.config.config_manager import config
 from wiki2video.core.utils import read_json
 from wiki2video.core.gen_cover import gen_cover
+from wiki2video.core.paths import get_project_dir, get_project_json_path
 from wiki2video.schema.project_schema import ScriptBlock
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.core.working_block import WorkingBlockStatus
@@ -320,10 +321,13 @@ def concat_videos(files: List[Path], out: Path)->bool:
 
 # ========== 主函数 ==========
 def concat_pipeline(project_id: str):
-    project_dir=Path(f"project/{project_id}")
-    work=project_dir/"_work"; work.mkdir(exist_ok=True)
-    muxed_dir=work/"muxed"; muxed_dir.mkdir(exist_ok=True)
-    norm_dir=work/"norm"; norm_dir.mkdir(exist_ok=True)
+    project_dir = get_project_dir(project_id)
+    work = project_dir / "_work"
+    work.mkdir(exist_ok=True)
+    muxed_dir = work / "muxed"
+    muxed_dir.mkdir(exist_ok=True)
+    norm_dir = work / "norm"
+    norm_dir.mkdir(exist_ok=True)
 
     # Get working blocks from DAO
     dao = WorkingBlockDAO()
@@ -350,7 +354,7 @@ def concat_pipeline(project_id: str):
 
     # Try to get project config for choose_target
     project_config = None
-    project_json_path = project_dir / f"{project_id}.json"
+    project_json_path = get_project_json_path(project_id)
     if project_json_path.exists():
         try:
             project_config = read_json(project_json_path)
@@ -402,6 +406,7 @@ def concat_pipeline(project_id: str):
 
     # Check if subtitle burning is enabled
     burn_subtitle = True
+    project_json_path = get_project_json_path(project_id)
     if project_json_path.exists():
         try:
             raw = read_json(project_json_path)
@@ -490,6 +495,7 @@ def concat_pipeline(project_id: str):
     
     # Get BGM path from JSON, fallback to environment variable if not set
     bgm_path_str = None
+    project_json_path = get_project_json_path(project_id)
     if project_json_path.exists():
         try:
             raw = read_json(project_json_path)
@@ -569,6 +575,7 @@ def concat_pipeline(project_id: str):
     # Try to get project JSON for gen_cover
     raw = {}
     blocks = []
+    project_json_path = get_project_json_path(project_id)
     if project_json_path.exists():
         try:
             raw = read_json(project_json_path)
@@ -590,7 +597,7 @@ if __name__=="__main__":
     import argparse
 
     parser = argparse.ArgumentParser(description="Concat stage runner.")
-    parser.add_argument("project_id", help="Project id under ./project/")
+    parser.add_argument("project_id", help="Project id")
     args = parser.parse_args()
     name = args.project_id
     concat_pipeline(name)

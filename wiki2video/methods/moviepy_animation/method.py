@@ -16,6 +16,7 @@ from typing import Any, Dict, Optional, Tuple
 from dacite import from_dict
 
 from wiki2video.config.config_manager import config
+from wiki2video.core.paths import get_projects_root, get_project_dir, get_project_json_path
 from wiki2video.methods.base import BaseMethod
 from wiki2video.methods.moviepy_animation.renderer import MoviePyRenderer
 from wiki2video.methods.moviepy_animation.template_registry import TEMPLATE_REGISTRY
@@ -245,23 +246,20 @@ class MoviePyAnimationMethod(BaseMethod):
                             video_path = prev_path
                             continue
 
-            workdir = Path(config_dict.get("workdir", ".")).resolve()
             project_id = wb.project_id or config_dict.get("project_id", "default")
             block_id = wb.block_id or config_dict.get("target_name", wb.id)
 
             action_dir = get_action_output_dir(
-                project_root=workdir,
                 project_id=project_id,
                 block_id=block_id,
                 method_name=wb.method_name,
                 working_block_id=wb.id,
             )
-            action_dir.mkdir(parents=True, exist_ok=True)
 
             assets_dir = action_dir / "assets"
             assets_dir.mkdir(parents=True, exist_ok=True)
 
-            project_dir = workdir / "project" / project_id
+            project_dir = get_project_dir(project_id)
             copied_assets: list[Path] = []
 
             assets: Dict[str, Optional[str | Path]] = {"video": None, "image": None}
@@ -309,7 +307,7 @@ class MoviePyAnimationMethod(BaseMethod):
             render_config.setdefault("env_defaults", self._env_defaults())
 
             video_size = "1280x720"
-            project_cfg_path = workdir / "project" / project_id / f"{project_id}.json"
+            project_cfg_path = get_project_json_path(project_id)
             if project_cfg_path.exists():
                 with open(project_cfg_path) as f:
                     pj = json.load(f)

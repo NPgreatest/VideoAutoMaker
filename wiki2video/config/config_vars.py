@@ -13,8 +13,10 @@ BACKOFF_MAX_TRIES = int(config.get("backoff_max_tries") or 5)
 BACKOFF_MAX_TIME = int(config.get("backoff_max_time") or 30)
 
 
-WORKING_DIR = Path(config.get("working_dir") or "project").expanduser()
-WORKING_DIR.mkdir(parents=True, exist_ok=True)
+# WORKING_DIR is deprecated - use wiki2video.core.paths.get_projects_root() instead
+# This is kept for backward compatibility but should not be used in new code
+from wiki2video.core.paths import get_projects_root
+WORKING_DIR = get_projects_root()
 
 GENERATE_MODE = config.get("generate_mode")
 

@@ -2,7 +2,7 @@
 .venv
 .idea
 _test_out
-db
+wiki2video/db
 project
 log
 

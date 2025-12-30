@@ -7,7 +7,7 @@ from pathlib import Path
 from dataclasses import dataclass, asdict
 from typing import Any, Dict, List, Optional
 
-from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.core.paths import get_projects_root, get_project_dir, get_project_json_path
 from wiki2video.core.parse_script import parse_script_lines
 from wiki2video.core.utils import write_json
 from wiki2video.schema.project_schema import ScriptBlock, ProjectStatus
@@ -26,7 +26,7 @@ def _resolve_project_name(topic: str, override: Optional[str]) -> str:
     suffix = time.strftime("%Y%m%d-%H%M%S") if not override else ""
     candidate = f"{base}-{suffix}" if suffix else base or "wiki2video"
 
-    project_root = WORKING_DIR
+    project_root = get_projects_root()
     idx = 1
     while (project_root / candidate).exists():
         idx += 1
@@ -71,8 +71,7 @@ def build_project_from_wiki(
     if not blocks:
         raise RuntimeError("Failed to parse script into blocks.")
 
-    project_dir = WORKING_DIR / project_name
-    project_dir.mkdir(parents=True, exist_ok=True)
+    project_dir = get_project_dir(project_name)
 
     # save script.txt
     (project_dir / "script.txt").write_text(script_text, encoding="utf-8")
@@ -91,7 +90,7 @@ def build_project_from_wiki(
         "source": wiki_input,
     }
 
-    json_path = project_dir / f"{project_name}.json"
+    json_path = get_project_json_path(project_name)
     write_json(json_path, payload)
 
     return ScriptBuildResult(
@@ -125,8 +124,7 @@ def build_project_from_script(
     if not blocks:
         raise RuntimeError("Failed to parse script into blocks.")
 
-    project_dir = WORKING_DIR / project_name
-    project_dir.mkdir(parents=True, exist_ok=True)
+    project_dir = get_project_dir(project_name)
 
     # save script.txt
     (project_dir / "script.txt").write_text(script_text, encoding="utf-8")
@@ -144,7 +142,7 @@ def build_project_from_script(
         "burn_subtitle": bool(burn),
     }
 
-    json_path = project_dir / f"{project_name}.json"
+    json_path = get_project_json_path(project_name)
     write_json(json_path, payload)
 
     return ScriptBuildResult(

@@ -5,8 +5,6 @@ from pathlib import Path
 import backoff
 import requests
 
-from google.cloud import texttospeech
-
 from wiki2video.config.config_manager import config
 from wiki2video.config.config_vars import (
     BACKOFF_MAX_TRIES,
@@ -42,6 +40,15 @@ def google_tts(text: str, out_path: Path) -> bytes:
         ValueError: 如果配置缺失
         RuntimeError: 如果生成过程中出现错误
     """
+    try:
+        from google.cloud import texttospeech
+    except ImportError:
+        raise RuntimeError(
+            "Google support is not installed.\n"
+            "Install it with:\n\n"
+            "  pip install 'wiki2video[google]'"
+        )
+
     client = texttospeech.TextToSpeechClient()
     project_id = config.get("google", "project_id")
     if not project_id:

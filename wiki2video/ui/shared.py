@@ -5,10 +5,10 @@ from pathlib import Path
 import threading
 from typing import Any, Callable, Dict, List, Optional, Tuple
 
-from wiki2video.config.config_vars import WORKING_DIR
+from wiki2video.core.paths import get_projects_root
 from wiki2video.core.utils import read_json
 
-PROJECT_ROOT = WORKING_DIR
+PROJECT_ROOT = get_projects_root()
 BGM_ROOT = Path("assets/bgm")
 BACKGROUND_VIDEO_ROOT = Path("assets/background_videos")
 
@@ -35,7 +35,8 @@ def list_projects() -> List[str]:
 
 
 def project_json_path(project_id: str) -> Path:
-    return PROJECT_ROOT / project_id / f"{project_id}.json"
+    from wiki2video.core.paths import get_project_json_path
+    return get_project_json_path(project_id)
 
 
 def load_project_raw(project_id: str) -> Optional[Dict[str, Any]]:

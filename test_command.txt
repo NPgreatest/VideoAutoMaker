@@ -1,0 +1,29 @@
+# 在项目根目录
+deactivate 2>/dev/null || true
+
+rm -rf dist build *.egg-info
+
+python -m build
+
+python -m venv /tmp/w2v-test
+source /tmp/w2v-test/bin/activate
+pip install -U pip
+
+pip install dist/wiki2video-0.0.1a1-py3-none-any.whl
+
+
+wiki2video --help
+wiki2video doctor
+
+
+pip install "wiki2video[openai]"
+
+python - <<EOF
+import openai
+print("openai OK")
+EOF
+
+wiki2video generate https://en.wikipedia.org/wiki/Deep-sea_gigantism
+
+
+
