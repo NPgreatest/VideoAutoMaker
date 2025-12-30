@@ -585,11 +585,11 @@ def concat_pipeline(project_id: str):
     gen_cover(project_dir, project_id, raw, blocks)
 
     # ====== 阶段 9：清理临时目录 ======
-    # try:
-    #     shutil.rmtree(work, ignore_errors=True)
-    #     print(f"[clean] 🧹 Removed work directory: {work}")
-    # except Exception as e:
-    #     print(f"[clean] ⚠️ Failed to remove work directory {work}: {e}")
+    try:
+        shutil.rmtree(work, ignore_errors=True)
+        print(f"[clean] 🧹 Removed work directory: {work}")
+    except Exception as e:
+        print(f"[clean] ⚠️ Failed to remove work directory {work}: {e}")
 
 
 # ========== 入口 ==========

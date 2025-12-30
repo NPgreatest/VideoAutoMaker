@@ -74,13 +74,20 @@ def generate(
         typer.secho("⚠️ Could not find final video output.", fg="yellow")
         raise typer.Exit(code=1)
 
-    # Step 4 — Copy to output
-    out_dir = Path("out")
-    out_dir.mkdir(parents=True, exist_ok=True)
-    target = output or out_dir / f"{script_result.project_name}.mp4"
-    shutil.copy2(final_video, target)
+    # Step 4 — Copy to user-visible location (CWD by default)
+    cwd = Path.cwd()
 
-    typer.secho(f"🎬 Final video saved: {target}", fg="green")
+    if output:
+        # --out can be either a file or a directory
+        if output.is_dir() or output.suffix == "":
+            target = output / f"{script_result.project_name}.mp4"
+        else:
+            target = output
+    else:
+        target = cwd / f"{script_result.project_name}.mp4"
+
+    shutil.copy2(final_video, target)
+    typer.secho(f"🎬 Final video saved to: {target}", fg="green")
 
 
 __all__ = ["app"]
