@@ -109,7 +109,22 @@ class Worker:
         wb, have_job = self.get_next_runnable(allowed_methods=allowed_methods)
         if not have_job:
             return False
+
         if have_job and not wb:
+            if ENSURE_OUTPUT:
+                # 强制跳过一个 pending block，避免活锁
+                pending = self.dao.get_pending(self.project_id)
+                if pending:
+                    skip_wb = pending[0]
+                    print(
+                        f"[Worker] ⚠️ ENSURE_OUTPUT: skipping blocked block "
+                        f"{skip_wb.id} ({skip_wb.method_name})"
+                    )
+                    skip_wb.status = WorkingBlockStatus.ERROR
+                    skip_wb.error_count += 1
+                    self.dao.update(skip_wb)
+                    return True
+
             print("⏳ All job are waiting, polling every 2 minutes")
             time.sleep(120)
             return True
