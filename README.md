@@ -80,7 +80,7 @@ wiki2video generate <wikipedia_url>
   <img src="example/picture/W2V.png" width="80"/>
 </p>
 
-Copyright 2025 NPgreatest
+Copyright 2025 NP_123
 
 Distributed under the terms of the MIT license.
 
