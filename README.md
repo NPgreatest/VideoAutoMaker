@@ -1,4 +1,8 @@
 # 📚➡️🎬 Wiki2Video
+---
+![Python](https://img.shields.io/pypi/pyversions/wiki2video)
+![PyPI version](https://img.shields.io/pypi/v/wiki2video)
+![License](https://img.shields.io/github/license/NPgreatest/wiki2video)
 
 > **From Wikipedia to TikTok/Shorts in One Command.**
 
@@ -38,10 +42,10 @@ Wiki2Video will automatically:
 
 ## 🛠️ Installation
 
-> ⚠️ Wiki2Video is currently in **alpha** and published on **TestPyPI**.
+The preferred way to install wiki2video is via pip
 
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple wiki2video
+pip install wiki2video
 ```
 
 ### OpenAI Backend (Recommended)
@@ -49,7 +53,7 @@ pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/
 Install Wiki2Video with OpenAI support:
 
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple wiki2video[openai]
+pip install wiki2video[openai]
 ```
 
 ---

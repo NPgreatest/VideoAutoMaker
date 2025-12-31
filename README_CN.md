@@ -51,16 +51,15 @@ Wiki2Video 会自动完成以下步骤：
 
 ## 🛠️ 安装
 
-> ⚠️ 当前版本为 **Alpha**，发布于 **TestPyPI**
 
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple wiki2video
+pip install wiki2video
 ```
 
 ### 使用 OpenAI 后端（推荐）
 
 ```bash
-pip install -i https://test.pypi.org/simple/ --extra-index-url https://pypi.org/simple wiki2video[openai]
+pip install wiki2video[openai]
 ```
 
 ---
