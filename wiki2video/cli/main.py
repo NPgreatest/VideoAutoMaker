@@ -57,13 +57,13 @@ def config_command(
 
 
 # Top-level commands
-app.command("script")(script_command)
+# app.command("script")(script_command)
 app.command("generate")(generate)
 
 # Other multi-command groups
-app.add_typer(render.app, name="render")
+# app.add_typer(render.app, name="render")
 app.add_typer(doctor.app, name="doctor")
-app.add_typer(cost.app, name="cost")
+# app.add_typer(cost.app, name="cost")
 app.add_typer(init.app, name="init")
 
 
