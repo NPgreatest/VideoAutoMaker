@@ -3,6 +3,7 @@
 ![Python](https://img.shields.io/pypi/pyversions/wiki2video)
 ![PyPI version](https://img.shields.io/pypi/v/wiki2video)
 ![License](https://img.shields.io/github/license/NPgreatest/wiki2video)
+[![Open In Colab](https://colab.research.google.com/assets/colab-badge.svg)](...)
 
 > **From Wikipedia to TikTok/Shorts in One Command.**
 
@@ -72,15 +73,33 @@ Generate your first video:
 wiki2video generate <wikipedia_url>
 ```
 
+---
+
+## 🧪 Try it Live (Google Colab)
+
+Run Wiki2Video end-to-end in your browser — **no local setup required**.
+
+
+<p>
+  <a href="https://colab.research.google.com/drive/1Xwvyk7YJlr6y_Kjr6uN34itBPHB1zAxD?usp=sharing">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+</p>
+
+**The only thing you need:** an **OpenAI API key**.
+
+This Colab notebook demonstrates:
+- Full `wiki2video init `, `wiki2video generate` pipeline
+- Script → TTS → Scene generation → Subtitles generation
+- Final MP4 rendering
+
 
 ---
 
-# License
+## License
+
+MIT License © 2025 NP_123
+
 <p>
   <img src="example/picture/W2V.png" width="80"/>
 </p>
-
-Copyright 2025 NPgreatest
-
-Distributed under the terms of the MIT license.
-

@@ -78,6 +78,25 @@ wiki2video init
 wiki2video generate <wikipedia_url>
 ```
 
+## 🧪 在线尝试 (Google Colab)
+
+在浏览器里使用 Wiki2Video — **不需要安装任何本地依赖**.
+
+
+<p>
+  <a href="https://colab.research.google.com/drive/1Xwvyk7YJlr6y_Kjr6uN34itBPHB1zAxD?usp=sharing">
+    <img src="https://colab.research.google.com/assets/colab-badge.svg" alt="Open In Colab"/>
+  </a>
+</p>
+
+**您只需要:** 一个 **OpenAI API key**.
+
+这个 Colab notebook 展示了:
+- 完整的 `wiki2video init `, `wiki2video generate` 流水线
+- 剧本 → TTS → 生成画面 → 生成字幕
+- 最后 MP4 渲染
+
+
 ---
 
 ## 📄 许可证
