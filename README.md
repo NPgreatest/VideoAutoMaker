@@ -15,7 +15,7 @@ No manual editing.**
 Just one command:
 
 ```bash
-wiki2video generate https://en.wikipedia.org/wiki/Rongorongo
+wiki2video generate https://en.wikipedia.org/wiki/Fermi_paradox
 ```
 
 Wiki2Video will automatically:
