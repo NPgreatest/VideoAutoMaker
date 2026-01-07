@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import json
+import re
 import shutil
 import subprocess
 from collections import Counter
@@ -37,6 +38,17 @@ def run(cmd: List[str]) -> bool:
         print(proc.stderr.decode("utf-8", errors="ignore")[-400:])
         return False
     return True
+
+def block_id_sort_key(block_id: str):
+    """
+    Sort keys like L1, L2, L10 correctly.
+    Fallback to string if no number found.
+    """
+    m = re.match(r"([a-zA-Z_]*)(\d+)", block_id)
+    if not m:
+        return (block_id, 0)
+    prefix, num = m.groups()
+    return (prefix, int(num))
 
 
 def ffprobe(path: Path) -> Dict:
@@ -224,6 +236,131 @@ def concat_videos(files: List[Path], out: Path) -> bool:
     ])
 
 
+
+def generate_srt_from_blocks(
+    dao: WorkingBlockDAO,
+    project_id: str,
+    block_ids: List[str],
+    srt_path: Path,
+) -> bool:
+    """
+    从 text_audio working blocks 生成 SRT 字幕文件（绝对时间轴）
+
+    设计原则：
+    - 字幕时间轴 = concat 顺序线性累加
+    - 不依赖 accumulated_duration_sec（不可靠）
+    - segments 内时间视为 block 内相对时间
+    """
+
+    from wiki2video.core.beautify_srt import format_timing
+
+    # 1. 取出所有成功的 text_audio blocks
+    audio_blocks = [
+        wb
+        for wb in dao.get_all(project_id)
+        if wb.method_name == "text_audio"
+        and wb.status == WorkingBlockStatus.SUCCESS
+        and wb.block_id in block_ids
+    ]
+
+    if not audio_blocks:
+        print("[srt] ⚠️ No text_audio blocks found, skipping SRT generation")
+        return False
+
+    # 2. 严格按 concat 顺序排序
+    audio_blocks.sort(
+        key=lambda wb: (
+            block_ids.index(wb.block_id),
+            wb.action_index or 0,
+        )
+    )
+
+    srt_entries: List[Tuple[str, str, str]] = []
+    entry_idx = 1
+
+    current_time = 0.0
+
+    # 3. 线性重建字幕时间轴
+    for wb in audio_blocks:
+        try:
+            result_json = json.loads(wb.result_json or "{}")
+            segments = result_json.get("segments", [])
+            block_duration = float(result_json.get("duration_sec", 0.0))
+
+            if not segments or block_duration <= 0:
+                current_time += max(block_duration, 0)
+                continue
+
+            for seg in segments:
+                text = (seg.get("text") or "").strip()
+                if not text:
+                    continue
+
+                start_rel = float(seg.get("start", 0.0))
+                end_rel   = float(seg.get("end", 0.0))
+
+                start_abs = current_time + start_rel
+                end_abs   = current_time + end_rel
+
+                # ---- 防御式修正 ----
+                start_abs = max(0.0, start_abs)
+                end_abs   = max(start_abs + 0.01, end_abs)
+
+                timing = format_timing(start_abs, end_abs)
+                srt_entries.append((str(entry_idx), timing, text))
+                entry_idx += 1
+
+            # ⭐️ 推进全局时间轴
+            current_time += block_duration
+
+        except Exception as e:
+            print(f"[srt] ⚠️ Error processing block {wb.id}: {e}")
+            continue
+
+    if not srt_entries:
+        print("[srt] ⚠️ No subtitle entries generated")
+        return False
+
+    # 4. 写入 SRT 文件
+    lines: List[str] = []
+    for idx, timing, text in srt_entries:
+        lines.append(idx)
+        lines.append(timing)
+        lines.append(text)
+        lines.append("")
+
+    srt_path.write_text("\n".join(lines).rstrip() + "\n", encoding="utf-8")
+    print(f"[srt] ✅ Generated SRT file: {srt_path} ({len(srt_entries)} entries)")
+
+    return True
+
+
+
+def burn_subtitles(video_path: Path, srt_path: Path, output_path: Path, w: int, h: int) -> bool:
+    """使用 ffmpeg 将字幕烧录到视频中"""
+    # 使用 subtitles filter 烧录字幕
+    # 字幕位置：底部居中，留一些边距
+    # 使用 force_style 设置字幕样式
+    # 转义路径中的特殊字符（单引号、冒号、反斜杠等）
+    srt_path_str = str(srt_path.resolve())
+    # 转义单引号、冒号、反斜杠
+    srt_path_escaped = srt_path_str.replace("\\", "\\\\").replace("'", "\\'").replace(":", "\\:")
+    font_size = max(16, h // 40)
+    margin_v = h // 10
+    # 使用单引号包裹整个路径，force_style 也用单引号包裹
+    subtitle_filter = f"subtitles='{srt_path_escaped}':force_style='FontSize={font_size},PrimaryColour=&Hffffff,OutlineColour=&H000000,Outline=2,Alignment=2,MarginV={margin_v}'"
+    
+    return run([
+        "ffmpeg", "-y",
+        "-i", str(video_path),
+        "-vf", subtitle_filter,
+        "-c:v", "libx264", "-preset", PRESET, "-crf", CRF,
+        "-c:a", "copy",
+        "-pix_fmt", PIX_FMT,
+        str(output_path),
+    ])
+
+
 # ========== 主 pipeline ==========
 def concat_pipeline(project_id: str):
     project_dir = get_project_dir(project_id)
@@ -231,7 +368,10 @@ def concat_pipeline(project_id: str):
     work.mkdir(exist_ok=True)
 
     dao = WorkingBlockDAO()
-    block_ids = sorted({wb.block_id for wb in dao.get_all(project_id) if wb.block_id})
+    block_ids = sorted(
+        {wb.block_id for wb in dao.get_all(project_id) if wb.block_id},
+        key=block_id_sort_key,
+    )
 
     muxed = []
     for bid in block_ids:
@@ -256,22 +396,41 @@ def concat_pipeline(project_id: str):
     final = work / "final.mp4"
     concat_videos(norm, final)
 
-    out = project_dir / f"{project_id}.mp4"
-    shutil.copy2(final, out)
-
-    print(f"✅ Final video written to {out}")
-
-
-
-    # SRT + cover
-    # from wiki2video.core.beautify_srt import beautify_srt_at_path
-    # srt = project_dir / f"{project_id}.srt"
-    # generate_srt_from_blocks(dao, project_id, block_ids, norm, srt)
-    # beautify_srt_at_path(srt, srt)
-
-    # raw = read_json(get_project_json_path(project_id)) if get_project_json_path(project_id).exists() else {}
-    # blocks = [from_dict(ScriptBlock, b) for b in raw.get("script", [])]
-    # gen_cover(project_dir, project_id, raw, blocks)
+    # 检查是否需要烧录字幕
+    burn_subtitle = cfg.get("burn_subtitle", False)
+    
+    if burn_subtitle:
+        print("[subtitle] 🔥 Burn subtitle enabled, generating and burning subtitles...")
+        from wiki2video.core.beautify_srt import beautify_srt_at_path
+        
+        # 生成原始 SRT
+        srt_raw = work / f"{project_id}_raw.srt"
+        if generate_srt_from_blocks(dao, project_id, block_ids, srt_raw):
+            # 美化 SRT
+            srt = project_dir / f"{project_id}.srt"
+            beautify_srt_at_path(srt_raw, srt)
+            
+            # 烧录字幕到视频
+            final_with_subtitle = work / "final_with_subtitle.mp4"
+            if burn_subtitles(final, srt, final_with_subtitle, w, h):
+                # 替换最终输出
+                out = project_dir / f"{project_id}.mp4"
+                shutil.copy2(final_with_subtitle, out)
+                print(f"✅ Final video with subtitles written to {out}")
+            else:
+                print("[subtitle] ⚠️ Failed to burn subtitles, using video without subtitles")
+                out = project_dir / f"{project_id}.mp4"
+                shutil.copy2(final, out)
+                print(f"✅ Final video written to {out}")
+        else:
+            print("[subtitle] ⚠️ Failed to generate SRT, skipping subtitle burning")
+            out = project_dir / f"{project_id}.mp4"
+            shutil.copy2(final, out)
+            print(f"✅ Final video written to {out}")
+    else:
+        out = project_dir / f"{project_id}.mp4"
+        shutil.copy2(final, out)
+        print(f"✅ Final video written to {out}")
 
     print("✅ pipeline complete")
 

@@ -23,9 +23,7 @@ def fish_tts(text: str, out_path: Path) -> bytes:
         from fish_audio_sdk import Session, TTSRequest, Prosody
     except ImportError:
         raise RuntimeError(
-            "Fish Audio support is not installed.\n"
-            "Install it with:\n\n"
-            "  pip install 'wiki2video[fish_audio]'"
+            "Fish Audio support is not installed."
         )
 
     session = Session(TEXT_AUDIO_API_KEY)

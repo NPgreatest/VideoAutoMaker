@@ -17,6 +17,7 @@ from wiki2video.schema.generation_result_schema import GenerationResult
 
 from .schema import TextImageConfig
 from ...config.config_manager import config
+from ...config.config_vars import STORY_MODE
 
 FORMATS = {
     "landscape": "1280x720",
@@ -43,9 +44,15 @@ class TextImageMethod(BaseMethod):
 
         engine = get_engine()
         context_block = (global_context or "").strip() or (project_id or "")
+        
+        # Select prompt template based on story_mode
+        if STORY_MODE == "ghibli":
+            template_ref = "text_image.ghibli_frame_prompt"
+        else:
+            template_ref = "text_image.film_frame_prompt"
 
         content = engine.ask_template(
-            template_ref="text_image.film_frame_prompt",
+            template_ref=template_ref,
             variables={
                 "SCRIPT_TEXT": source_text,
                 "GLOBAL_CONTEXT_BLOCK": context_block,
@@ -97,7 +104,7 @@ class TextImageMethod(BaseMethod):
                 config_dict["prompt"] = prompt
                 cfg.prompt = prompt
 
-            provider = config.get("platforms", "tts")
+            provider = config.get("platforms", "text_image")
             image_size = "1024x1024"
             if project_cfg_path.exists():
                 with open(project_cfg_path) as f:

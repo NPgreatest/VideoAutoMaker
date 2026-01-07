@@ -33,9 +33,9 @@ def _resolve_project_name(topic: str, override: Optional[str]) -> str:
         candidate = f"{base}-{suffix}-{idx}" if suffix else f"{base}-{idx}"
     return candidate
 
-async def _generate_script_and_context(wiki_input: str, project_name: str):
+async def _generate_script_and_context(wiki_input: str, project_name: str, language: str = "en", duration: float = 1.0):
     oc = Wiki2VideoInteractiveOrchestrator()
-    return await oc.run_full(wiki_input, project_name)
+    return await oc.run_full(wiki_input, project_name, language=language, duration=duration)
 
 @dataclass
 class ScriptBuildResult:
@@ -54,12 +54,14 @@ def build_project_from_wiki(
     bg_video: Optional[str],
     burn: bool,
     show_overlay: bool,
+    language: str = "en",
+    duration: float = 1.0,
 ) -> ScriptBuildResult:
 
     project_name = _resolve_project_name(wiki_input, project_name)
 
     script_text, global_context = asyncio.run(
-        _generate_script_and_context(wiki_input, project_name)
+        _generate_script_and_context(wiki_input, project_name, language=language, duration=duration)
     )
 
     blocks = parse_script_lines(
@@ -88,6 +90,8 @@ def build_project_from_wiki(
         "background_video": bg_video,
         "burn_subtitle": bool(burn),
         "source": wiki_input,
+        "language": language,
+        "duration": duration,
     }
 
     json_path = get_project_json_path(project_name)

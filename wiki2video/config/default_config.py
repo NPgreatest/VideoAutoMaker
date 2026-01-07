@@ -69,5 +69,5 @@ def _default_config() -> Dict[str, Any]:
         },
         "ensure_output": True,
         "working_dir": "project",
-        "story_mode": "long_cine",
+        "story_mode": "cinematic",
     }

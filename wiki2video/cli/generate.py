@@ -39,8 +39,20 @@ def generate(
     overlay: bool = typer.Option(False, "--overlay/--no-overlay"),
     project_name: Optional[str] = typer.Option(None, "--name", "-n"),
     output: Optional[Path] = typer.Option(None, "--out", "-o"),
+    language: str = typer.Option("en", "--language", "-l", help="Language: zh or en"),
+    duration: float = typer.Option(1.0, "--duration", "-d", help="Video duration in minutes"),
 ):
     """Generate script + project.json and render final video."""
+
+    # Validate language parameter
+    if language not in ("zh", "en"):
+        typer.secho(f"❌ Invalid language: {language}. Must be 'zh' or 'en'", fg="red", err=True)
+        raise typer.Exit(code=1)
+    
+    # Validate duration parameter
+    if duration <= 0:
+        typer.secho(f"❌ Invalid duration: {duration}. Must be greater than 0", fg="red", err=True)
+        raise typer.Exit(code=1)
 
     typer.secho("🚀 Starting Wiki → Video full pipeline...", fg="cyan")
 
@@ -54,6 +66,8 @@ def generate(
             bg_video=bg_video,
             burn=burn_subtitle,
             show_overlay=overlay,
+            language=language,
+            duration=duration,
         )
     except Exception as exc:
         typer.secho(f"❌ Script generation failed: {exc}", fg="red", err=True)

@@ -49,8 +49,8 @@ class AutoScriptAgent:
         prompt2_key: str | None = None,
         project_name: str | None = None,
     ) -> AutoScriptAgentResult:
-        topic = topic.strip()
-        style = style.strip()
+        topic = topic.strip() if topic else ""
+        style = style.strip() if style else ""
 
         if not topic:
             raise ValueError("AutoScriptAgent.run: topic 不能为空")

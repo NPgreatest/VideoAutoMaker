@@ -22,6 +22,8 @@ WORKING_DIR = get_projects_root()
 
 GENERATE_MODE = config.get("generate_mode")
 
+STORY_MODE = config.get("story_mode") or "cinematic"
+
 WORKINGBLOCK_POLLING_INTERVAL = int(config.get("workingblock_polling_interval") or 2)
 WORKINGBLOCK_POLLING_COUNT_MAX = int(config.get("workingblock_polling_count_max") or 20)
 WORKINGBLOCK_ERROR_COUNT_MAX = int(config.get("workingblock_error_count_max") or 3)

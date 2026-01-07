@@ -18,7 +18,7 @@ from wiki2video.schema.action_spec import ActionSpec
 from wiki2video.schema.generation_result_schema import GenerationResult
 from wiki2video.schema.schema_registry import get_schema
 from wiki2video.core.path_utils import get_action_output_dir, get_output_file_path
-from ...config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX
+from ...config.config_vars import WORKINGBLOCK_POLLING_COUNT_MAX, STORY_MODE
 
 
 @register_method
@@ -39,9 +39,15 @@ class TextVideo(BaseMethod):
             if global_context
             else project_id
         )
+        
+        # Select prompt template based on story_mode
+        if STORY_MODE == "ghibli":
+            template_ref = "text_video.ghibli_prompt"
+        else:
+            template_ref = "text_video.cinematic_prompt"
 
         content = engine.ask_template(
-            template_ref="text_video.cinematic_prompt",
+            template_ref=template_ref,
             variables={
                 "SCRIPT_TEXT": text.strip(),
                 "GLOBAL_CONTEXT_BLOCK": context_block,
