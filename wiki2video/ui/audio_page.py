@@ -7,6 +7,7 @@ from typing import Any, Dict, List, Tuple
 import gradio as gr
 import pandas as pd
 
+from wiki2video.core.paths import get_app_data_dir, get_projects_root
 from wiki2video.dao.working_block_dao import WorkingBlockDAO
 from wiki2video.core.pipeline import run_audio_pipeline
 from wiki2video.core.working_block import WorkingBlockStatus
@@ -33,6 +34,19 @@ def sanitize_path(p: str) -> str:
         return p.as_posix()
     except:
         return p.replace("\\", "/")
+
+def get_gradio_allowed_paths() -> list[str]:
+    """
+    Paths that Gradio is allowed to serve files from.
+    Must be absolute paths.
+    """
+    paths = [
+        get_app_data_dir(),
+        get_projects_root(),
+    ]
+
+    # 转成 str，并确保是 resolved 的绝对路径
+    return [str(p.resolve()) for p in paths]
 
 
 # ----------------------------------------
@@ -121,7 +135,7 @@ def _collect_audio_data(project_id: str):
 # ----------------------------------------
 # Pagination helper
 # ----------------------------------------
-ITEMS_PER_PAGE = 2
+ITEMS_PER_PAGE = 20
 
 
 def _paginate_audio(audio_items: List[Dict], page: int):
@@ -245,7 +259,7 @@ def build_audio_page() -> None:
 
         # ------------- Audio players (10 slots) -------------
         audio_players = [
-            gr.Audio(label=f"Audio {i+1}", type="filepath", visible=False)
+            gr.Audio(label=f"Audio {i+1}", type="filepath", visible=True)
             for i in range(audio_slots)
         ]
 

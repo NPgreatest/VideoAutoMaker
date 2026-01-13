@@ -5,7 +5,7 @@ import warnings
 
 import gradio as gr
 
-from wiki2video.ui.audio_page import build_audio_page
+from wiki2video.ui.audio_page import build_audio_page, get_gradio_allowed_paths
 from wiki2video.ui.config_page import build_config_page
 from wiki2video.ui.create_project_page import build_create_project_page
 from wiki2video.ui.video_page import build_video_page
@@ -48,7 +48,10 @@ def build_interface() -> gr.Blocks:
 
 def main() -> None:
     demo = build_interface()
-    demo.queue().launch()
+    demo.queue().launch(
+        allowed_paths=get_gradio_allowed_paths(),
+    )
+
 
 
 if __name__ == "__main__":

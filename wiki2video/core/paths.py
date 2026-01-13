@@ -4,14 +4,22 @@ import os
 
 
 def get_app_data_dir() -> Path:
+    """
+    Cross-platform application data directory for wiki2video.
+    """
     system = platform.system()
 
     if system == "Darwin":
-        return Path.home() / "Library" / "Application Support" / "wiki2video"
+        base = Path.home() / "Library" / "Application Support"
     elif system == "Windows":
-        return Path(os.environ["APPDATA"]) / "wiki2video"
+        base = Path(os.environ.get("APPDATA", Path.home() / "AppData" / "Roaming"))
     else:
-        return Path.home() / ".local" / "share" / "wiki2video"
+        # Linux / other unix
+        base = Path(os.environ.get("XDG_DATA_HOME", Path.home() / ".local" / "share"))
+
+    path = (base / "wiki2video").expanduser().resolve()
+    path.mkdir(parents=True, exist_ok=True)
+    return path
 
 
 def get_db_path() -> Path:
