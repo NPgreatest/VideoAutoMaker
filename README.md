@@ -95,6 +95,16 @@ This Colab notebook demonstrates:
 
 ---
 
+## 🧩 Architecture Overview
+
+Wiki2Video is designed as a **modular, fully automated generation pipeline**, where each stage produces explicit, inspectable artifacts.
+
+<p align="center">
+  <img src="example/picture/diagram.png" width="720"/>
+</p>
+
+---
+
 ## License
 
 MIT License © 2025 NP_123
